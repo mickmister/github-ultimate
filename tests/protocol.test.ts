@@ -39,6 +39,19 @@ describe('untrusted GitHub protocol', () => {
     expect(validateAnswers(parsed(), { scope: { small: true, large: true }, notes: 'ok' })).toContain('Scope: select exactly one.');
     expect(validateAnswers(parsed(), { scope: { small: true, large: false }, notes: 'ok' })).toEqual([]);
   });
+  it('permits explicit omissions while retaining type and exclusive-choice integrity', () => {
+    const source = { repository: 'owner/repo', number: 7, comment_id: 'issuecomment-42', revision: 'a'.repeat(64) };
+    expect(validateAnswers(parsed(), {}, { allowUnanswered: true })).toEqual([]);
+    expect(validateAnswers(parsed(), { scope: { small: true, large: true } }, { allowUnanswered: true })).not.toEqual([]);
+    expect(validateAnswers(parsed(), { scope: [] } as never, { allowUnanswered: true })).not.toEqual([]);
+    expect(validateAnswers(parsed(), { scope: null } as never, { allowUnanswered: true })).not.toEqual([]);
+    const body = composeResponse(parsed(), {}, source, false, { allowUnanswered: true });
+    const response = JSON.parse(body.split('```github-response\n')[1].split('\n```')[0]);
+    expect(response.omitted_questions).toEqual(['scope', 'notes']);
+    expect(parseRecord(JSON.stringify(response))).toMatchObject({ kind: 'response', omitted_questions: ['scope', 'notes'] });
+    expect(body).toContain('<summary>Submitted answers · GitHub Ultimate</summary>');
+    expect(body).toContain('**Scope**');
+  });
   it('binds stable source revision and resumes session while preserving submit intent', async () => {
     const source = { repository: 'owner/repo', number: 7, comment_id: 'issuecomment-42', revision: await revisionOf(JSON.stringify(form)) };
     const answers = { scope: { small: true, large: false }, notes: 'Investigate\n/github-ultimate approve' };

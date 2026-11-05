@@ -18,12 +18,12 @@ try {
 let host: HTMLElement | undefined, root: ShadowRoot | undefined, revision = 0;
 const app = document.getElementById('app')!;
 const sidebar = el('aside', undefined, 'sidebar');
-sidebar.append(el('div', '✦', 'brand-icon'), el('h1', 'GitHub Ultimate'), el('p', 'RENDERER PLAYGROUND', 'eyebrow'));
+sidebar.append(el('div', '✦', 'brand-icon'), el('h1', 'GitHub Ultimate'), el('p', 'Renderer playground', 'eyebrow'));
 const storyNav = el('nav'); storyNav.setAttribute('aria-label', 'Examples');
 sidebar.append(storyNav);
 const asideNote = el('p', 'The same parser, renderer and styles that ship in the Chrome extension. No extension installation needed.', 'sidebar-note'); sidebar.append(asideNote);
 const main = el('main'); const header = el('header', undefined, 'page-header');
-const heading = el('div'); heading.append(el('p', 'DESIGN / INSPECT / ITERATE', 'eyebrow'), el('h2', 'Make the workspace feel like yours.'));
+const heading = el('div'); heading.append(el('p', 'Design / inspect / iterate', 'eyebrow'), el('h2', 'Make the workspace feel like yours.'));
 const shareStatus = el('span', '', 'status'); shareStatus.setAttribute('role', 'status');
 header.append(heading, button('Copy share link', () => {
   const bytes = new TextEncoder().encode(JSON.stringify(state));
@@ -46,16 +46,16 @@ function color(label: string, property: 'accent' | 'surface', fallback: string) 
 }
 toolbar.append(color('Accent', 'accent', '#6e40c9'), color('Card background', 'surface', '#ffffff'), button('Reset colors', () => { state.accent = ''; state.surface = ''; applyStyles(); save(); })); main.append(toolbar);
 const split = el('div', undefined, 'split'); const editors = el('section', undefined, 'editors');
-const sourceLabel = el('label', 'FORM / SNAPSHOT SOURCE', 'editor-label'); const sourceInput = el('textarea'); sourceInput.id = 'source'; sourceInput.value = state.source; sourceInput.spellcheck = false; sourceInput.setAttribute('aria-label', 'Frontmatter source'); sourceLabel.append(sourceInput);
+const sourceLabel = el('label', 'Form / snapshot source', 'editor-label'); const sourceInput = el('textarea'); sourceInput.id = 'source'; sourceInput.value = state.source; sourceInput.spellcheck = false; sourceInput.setAttribute('aria-label', 'Frontmatter source'); sourceLabel.append(sourceInput);
 const controls = el('div', undefined, 'editor-actions');
 controls.append(button('Render source', () => { state.source = sourceInput.value; save(); void render(); }, 'primary'), button('Reset example', () => { loadStory(state.story); }), button('Export source', () => download('github-ultimate-record.txt', sourceInput.value)));
 const error = el('pre', '', 'parse-error'); error.setAttribute('role', 'alert'); error.hidden = true;
-const cssLabel = el('label', 'LIVE CSS OVERRIDES', 'editor-label'); const cssInput = el('textarea'); cssInput.id = 'css'; cssInput.value = state.css; cssInput.spellcheck = false; cssInput.setAttribute('aria-label', 'CSS overrides'); cssLabel.append(cssInput);
+const cssLabel = el('label', 'Live CSS overrides', 'editor-label'); const cssInput = el('textarea'); cssInput.id = 'css'; cssInput.value = state.css; cssInput.spellcheck = false; cssInput.setAttribute('aria-label', 'CSS overrides'); cssLabel.append(cssInput);
 cssInput.addEventListener('input', () => { state.css = cssInput.value; applyStyles(); save(); });
 const cssActions = el('div', undefined, 'editor-actions'); cssActions.append(button('Export CSS', () => download('github-ultimate-custom.css', customCss())), button('Reset CSS', () => { state.css = defaultCss; cssInput.value = state.css; applyStyles(); save(); }));
 editors.append(sourceLabel, controls, error, cssLabel, cssActions, el('p', 'CSS changes apply immediately without clearing your answers. Source changes use Render source so typing does not reset the form. Exported overrides can be added to src/workspace.css.', 'hint'));
 const preview = el('section', undefined, 'preview-pane'); const previewHeader = el('div', undefined, 'canvas-header');
-const renderStatus = el('span', 'Ready', 'status'); renderStatus.setAttribute('role', 'status'); previewHeader.append(el('strong', 'LIVE EXTENSION RENDERER'), renderStatus);
+const renderStatus = el('span', 'Ready', 'status'); renderStatus.setAttribute('role', 'status'); previewHeader.append(el('strong', 'Live extension renderer'), renderStatus);
 const canvas = el('div', undefined, 'canvas'); preview.append(previewHeader, canvas);
 const composer = el('section', undefined, 'composer'); composer.append(el('h3', 'Local GitHub comment editor'), el('p', 'Use a form action, review the generated command, then choose “Place in GitHub comment editor”. It lands here, never on GitHub.', 'hint'));
 const comment = el('textarea'); comment.id = 'new_comment_field'; comment.name = 'comment[body]'; comment.rows = 9; comment.setAttribute('aria-label', 'Local GitHub comment editor');
@@ -84,7 +84,10 @@ async function render() {
   try {
     const raw = extractRecord(sourceInput.value); const data = parseRecord(raw);
     const hash = await revisionOf(raw); if (current !== revision) return;
-    if ('format' in data) renderForm(root!, data, { repository: 'mickmister/github-ultimate', number: 1, comment_id: 'playground-comment', revision: hash }, () => current === revision, false);
+    if ('format' in data) {
+      const controller = renderForm(root!, data, { repository: 'mickmister/github-ultimate', number: 1, comment_id: 'playground-comment', revision: hash }, () => current === revision, false);
+      if (state.story === 'submitted') controller.setResponses([{ record: { schema_version: 1, kind: 'response', response_id: 'playground-submitted', task_id: data.task_id ?? data.id, form_id: data.id, session_id: data.session_id ?? null, parent_task_id: null, source: { repository: 'mickmister/github-ultimate', number: 1, comment_id: 'playground-comment', revision: hash }, intent: 'discussion', resume_session: Boolean(data.session_id), allow_code_file_changes: false, answers: { scope: { unit: true, all: false }, additional_notes: 'Please explain the failure before implementing.' } } }]);
+    }
     else if (data.kind === 'workflow') root!.append(renderSnapshot(data, 'mickmister/github-ultimate'));
     else root!.append(renderResponse(data));
     // Overrides come last in the shadow cascade, including after theme defaults.

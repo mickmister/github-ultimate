@@ -15,9 +15,12 @@ For updates, replace the extracted files and click **Reload** on the extension c
 ## What works
 
 - **Forms in comments:** BeadsForm-style textareas and checkbox choices, exclusive groups, recommendations, assumptions, pros/cons, contextual notes and Next Instruction.
+- **Focused questions:** multi-question forms have a question index, Previous/Next navigation and a final review. Browse or skip questions freely; unanswered requested questions are listed and recorded. Global notes stay outside the step count.
+- **Zen view:** open the same form in a centered overlay without losing answers or position. Escape closes it and restores focus. Offscreen pending forms have a sticky **Go to form** control, with a selector when several need input; zen never opens automatically.
+- **Submitted answers:** matching posted responses collapse the form into a read-only summary. Expand the answer history or choose **Submit another response** for a separate submission with a new ID.
 - **Explicit intent:** “Continue discussion” generates `/github-ultimate discuss`; “Approved for next steps” generates `/github-ultimate approve`. Both include readable structured answers, source-comment SHA-256 and task/session references.
 - **Native submission:** review the generated comment, copy it or insert it into GitHub's existing editor without replacing your draft, then click GitHub's Comment button. Nothing auto-submits.
-- **Draft recovery:** form values and notes survive reloads in local Chrome storage. Changes to the source record start a separate revision-bound draft.
+- **Draft recovery:** form values, notes and wizard position survive reloads in local Chrome storage. Changes to the source record start a separate revision-bound draft.
 - **PR workspace:** forms, saved responses, attention counts, latest task state, complete loaded run history, bead progress and private Tailscale dashboard links.
 - **SPA-safe UI:** initial load, navigation, edited comments, lazy-loaded records, light/dark themes, native fallback and settings.
 
@@ -29,7 +32,9 @@ Paste these complete comment bodies into any GitHub PR or issue conversation:
 2. [Follow-up question — YAML frontmatter](docs/examples/yaml-comment.md)
 3. [Saved workflow and beads — JSON](docs/examples/workflow-comment.md)
 
-Comment records are manually authored for now. The extension can render and compose responses before workflow handlers exist. After posting a generated response and loading that comment, the form is marked answered in the workspace. You may still edit the form and send another explicit response.
+Comment records can be authored manually or published with the CLI below. The extension can render and compose responses before workflow handlers exist. After posting a generated response and loading that comment, the form is marked submitted and collapsed. Posted submissions are immutable in the extension; **Submit another response** starts a separate answer rather than editing history. Previewing, copying or inserting a comment does not mark the form submitted.
+
+The CLI publishes readable questions alongside the structured form, and generated responses include a readable answer summary. Both use native GitHub disclosure sections so comments remain useful without the extension. Contextual notes use compact comment icons with accessible labels, and keyboard input within the extension stays isolated from GitHub shortcuts.
 
 Only comments loaded in the GitHub page are included. Use GitHub's **Load more** controls to include older records. **Rescan** reindexes the loaded DOM; it does not contact workflow APIs. Snapshot timestamps show freshness rather than pretending a stopped runner is live. The extension also works on issue conversations for easy testing.
 
@@ -76,8 +81,9 @@ then click **Render source**. Theme/width controls and live CSS overrides let yo
 iterate without clearing form answers. Try the local GitHub comment editor to
 inspect generated slash commands without posting anything.
 
-Examples cover decisions, YAML follow-ups, saved workflow/bead snapshots,
-responses, superseded forms, long content and validation failures. Source/style
+Examples cover decisions, a multi-question wizard, collapsed submitted forms,
+YAML follow-ups, saved workflow/bead snapshots, responses, superseded forms,
+long content and validation failures. Source/style
 edits are saved in your browser. **Export CSS/source** produces files to use in
 a fork or contribution; preview edits do not modify repository files. **Copy
 share link** includes your current source/styles in its URL fragment, so only
@@ -104,7 +110,7 @@ npm run package
 
 Load `dist/` unpacked for development. `release/` contains the ZIP and checksum. Packaging is deterministic with a fixed archive timestamp and a locked dependency graph. Each extension ZIP contains MIT project licensing and complete runtime dependency licenses.
 
-Playwright loads the **actual built extension** in an isolated Chromium profile against controlled GitHub-shaped pages, covering native draft composition/no auto-submit, intent and session serialization, drafts/notes, progress/dashboard links, SPA cleanup and malicious records. This is complemented by a public-GitHub DOM smoke check during release preparation; authenticated native-editor behavior still merits checking in your own account when GitHub changes its DOM.
+Playwright loads the **actual built extension** in an isolated Chromium profile against controlled GitHub-shaped pages, covering native draft composition/no auto-submit, intent and session serialization, drafts/notes/wizard position, immutable submissions and revision matching, zen focus/Escape, multiple pending forms, capture-phase keyboard isolation, progress/dashboard links, SPA cleanup and malicious records. This is complemented by a public-GitHub DOM smoke check during release preparation; authenticated native-editor behavior still merits checking in your own account when GitHub changes its DOM.
 
 CI runs type checks, protocol tests, packaged browser tests and creates the ZIP. Pushing a matching `v<package version>` tag publishes that CI artifact as a GitHub Release asset **only after verification succeeds**. CI uses its own repository-scoped release token; no deployment secret is required.
 

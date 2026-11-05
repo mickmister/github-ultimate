@@ -53,3 +53,39 @@ test('source and style overrides export for a fork or upstream contribution', as
   await page.getByRole('button', { name: 'Export CSS', exact: true }).click();
   expect((await cssDownload).suggestedFilename()).toBe('github-ultimate-custom.css');
 });
+
+test('wizard supports browsing, notes, zen and explicit unanswered questions', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Question wizard/ }).click();
+  await expect(page.getByText('Question 1 of 3', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Add note about A small focused change', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Add note about A small focused change', exact: true }).fill('Consider a small scope.');
+  await page.getByRole('button', { name: '2. What context matters?', exact: true }).click();
+  await page.getByRole('textbox', { name: 'What context matters?', exact: true }).fill('Typing m stays in this field.');
+  await page.getByRole('button', { name: 'Open in zen', exact: true }).click();
+  const zen = page.getByRole('dialog', { name: 'Plan the next change' });
+  await expect(zen).toBeVisible();
+  await expect(zen.getByRole('textbox', { name: 'What context matters?', exact: true })).toHaveValue('Typing m stays in this field.');
+  await page.keyboard.press('Escape');
+  await expect(zen).toBeHidden();
+  await page.getByRole('button', { name: 'Review answers', exact: true }).click();
+  await expect(page.getByText(/1 requested question is unanswered/)).toBeVisible();
+  await page.getByRole('button', { name: 'Continue discussion — don’t implement yet', exact: true }).click();
+  const preview = page.getByRole('textbox', { name: 'Generated comment preview' });
+  await expect(preview).toHaveValue(/"omitted_questions": \[\s*"approach"\s*\]/);
+  await expect(preview).toHaveValue(/Consider a small scope/);
+  await page.getByRole('button', { name: 'Place in GitHub comment editor' }).click();
+  await expect(page.getByRole('textbox', { name: 'Local GitHub comment editor' })).toHaveValue(/Submitted answers · GitHub Ultimate/);
+});
+
+test('submitted story starts collapsed and permits a distinct new response', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Submitted form/ }).click();
+  await expect(page.getByRole('checkbox', { name: 'Only failing unit tests' })).toBeHidden();
+  await page.getByRole('button', { name: 'View submitted answers', exact: true }).click();
+  await expect(page.locator('.saved-answers').getByText('Please explain the failure before implementing.', { exact: true })).toBeVisible();
+  await expect(page.locator('.saved-answers').getByRole('textbox')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Submit another response', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Only failing unit tests' })).not.toBeChecked();
+  await expect(page.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveValue('');
+});

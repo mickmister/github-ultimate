@@ -1,5 +1,6 @@
 import { spawnSync } from 'node:child_process';
 import { parseRecord, type TaskForm } from '../src/protocol.ts';
+import { formMarkdown, inlineText } from '../src/comment-markdown.ts';
 
 export type Gh = (args: string[], input?: string) => string;
 export type Target = { repository: string; number: number; url: string };
@@ -94,7 +95,7 @@ export function resolveTarget(options: PublishOptions, env: Environment, event: 
 
 export function formComment(form: TaskForm, key?: string): string {
   const marker = `<!-- github-ultimate:form:${form.id}${key ? `;submission:${submissionId(key)}` : ''} -->`;
-  const body = `${marker}\n\n\`\`\`github-task\n${JSON.stringify(form, null, 2)}\n\`\`\``;
+  const body = `${marker}\n\n<details open>\n<summary>Form: ${inlineText(form.title)}</summary>\n\n${formMarkdown(form)}\n### Structured form data\n\n\`\`\`github-task\n${JSON.stringify(form, null, 2)}\n\`\`\`\n\n</details>`;
   if (body.length > 65000) throw new Error('Rendered form exceeds the GitHub comment limit. Shorten the form before publishing.');
   return body;
 }

@@ -8,7 +8,7 @@
   "content_scripts": [{
     "matches": ["https://github.com/*"],
     "js": ["content.js"],
-    "run_at": "document_idle"
+    "run_at": "document_start"
   }],
   "action": { "default_popup": "popup.html", "default_title": "GitHub Ultimate settings" },
   "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }

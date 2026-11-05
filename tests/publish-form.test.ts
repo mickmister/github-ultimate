@@ -25,6 +25,8 @@ describe('gh-backed form publisher', () => {
     const post = gh.mock.calls.find(([args]) => args.includes('POST'))!;
     expect(post[0]).toEqual(['api', '--method', 'POST', 'repos/owner/repo/issues/2/comments', '--input', '-']);
     expect(JSON.parse(post[1]!).body).toContain('"version": 1');
+    expect(JSON.parse(post[1]!).body).toContain('<summary>Form: Choose next steps</summary>');
+    expect(JSON.parse(post[1]!).body).toContain('#### 1. Notes');
   });
   it('fails invalid DSL before any GitHub call, and rejects nonform records', () => {
     const gh = mockGh();

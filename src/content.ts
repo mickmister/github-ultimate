@@ -1,13 +1,19 @@
 import { parseRecord, revisionOf, type RecordData, type TaskForm, type Snapshot, type ResponseRecord } from './protocol';
 import { defaults, settings, type Settings } from './storage';
-import { el, button, shadow, renderForm, renderSnapshot, renderResponse } from './ui';
+import { el, button, shadow, renderForm, renderSnapshot, renderResponse, type FormController } from './ui';
+import { isolateExtensionKeyboard } from './keyboard';
 
-type Mounted = { code: HTMLElement; raw: string; host: HTMLElement; data?: RecordData; error?: string; sourceId: string; revision?: string };
+isolateExtensionKeyboard();
+
+type Mounted = { code: HTMLElement; presentation: HTMLElement; originallyHidden: boolean; raw: string; host: HTMLElement; data?: RecordData; error?: string; sourceId: string; revision?: string; controller?: FormController };
 let config: Settings = { ...defaults };
 let route = '', mounted = new Map<HTMLElement, Mounted>();
 let shell: HTMLElement | undefined, shellRoot: ShadowRoot | undefined, panel: HTMLElement | undefined, body: HTMLElement | undefined;
 let selected = 'overview', panelOpen = false, busy = false, rerun = false;
 let scanTimer: ReturnType<typeof setTimeout>;
+let pendingForms: Mounted[] = [], pendingNavigation: HTMLElement | undefined, pendingSelect: HTMLSelectElement | undefined;
+let selectedPending = '';
+const pendingKey = (item: Mounted) => `${item.sourceId}:${'format' in (item.data ?? {}) ? (item.data as TaskForm).id : ''}`;
 
 export function context(path = location.pathname) {
   const match = /^\/([^/]+)\/([^/]+)\/(pull|issues)\/(\d+)(?:\/|$)/.exec(path);
@@ -19,11 +25,11 @@ function theme(host: HTMLElement) {
   host.dataset.theme = mode === 'dark' || (mode === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches) ? 'dark' : 'light';
 }
 function dispose(item: Mounted) {
-  item.host.dispatchEvent(new Event('gu-dispose')); item.host.remove(); item.code.hidden = false;
+  item.host.dispatchEvent(new Event('gu-dispose')); item.host.remove(); item.presentation.hidden = item.originallyHidden;
 }
 function cleanup() {
   for (const item of mounted.values()) dispose(item);
-  mounted.clear(); shell?.remove(); shell = undefined; shellRoot = undefined; body = undefined; panel = undefined;
+  mounted.clear(); shell?.remove(); shell = undefined; shellRoot = undefined; body = undefined; panel = undefined; pendingForms = []; pendingNavigation = undefined;
 }
 function sourceId(code: HTMLElement): string {
   const comment = code.closest<HTMLElement>('[id^="issuecomment-"], [id^="discussion_r"], [id^="pullrequestreview-"], .timeline-comment, [data-comment-id]');
@@ -44,13 +50,42 @@ function isRecord(block: HTMLElement, raw: string) {
   const hint = `${block.className} ${block.parentElement?.className ?? ''} ${block.querySelector('code')?.className ?? ''}`;
   return /github-task|github-workflow|github-response/.test(hint) || /["']?format["']?\s*:\s*["']?standard\b/.test(raw) || /["']?kind["']?\s*:\s*["']?(workflow|response)\b/.test(raw);
 }
+function presentationFor(code: HTMLElement): HTMLElement {
+  const details = code.closest('details');
+  const label = details?.querySelector(':scope > summary')?.textContent ?? '';
+  return details && (label.startsWith('Form: ') || label === 'Submitted answers · GitHub Ultimate') ? details : code;
+}
+function ensureController(item: Mounted) {
+  if (item.controller || !item.data || !('format' in item.data)) return;
+  const current = context(); if (!current) return;
+  const key = route;
+  const root = item.host.shadowRoot!;
+  root.querySelector('.inline-disabled')?.remove();
+  item.controller = renderForm(root, item.data, { repository: current.repository, number: current.number, comment_id: item.sourceId, revision: item.revision! }, () => item.code.isConnected && item.code.textContent === item.raw && sourceId(item.code) === item.sourceId && route === key && `${context()?.repository}/${context()?.type}/${context()?.number}` === key, config.rememberDrafts);
+}
+function openForm(item: Mounted, zen = true) {
+  ensureController(item);
+  if (zen) item.controller?.openZen(); else item.host.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  if (panel) panel.hidden = true; panelOpen = false; updatePendingNavigation();
+}
+function updatePendingNavigation() {
+  if (!pendingNavigation || !pendingSelect) return;
+  if (!pendingForms.some(item => pendingKey(item) === selectedPending)) selectedPending = pendingForms[0] ? pendingKey(pendingForms[0]) : '';
+  const target = pendingForms.find(item => pendingKey(item) === selectedPending);
+  if (!target) { pendingNavigation.hidden = true; return; }
+  const rect = target.host.getBoundingClientRect();
+  const inView = rect.height > 0 && rect.top < innerHeight - 60 && rect.bottom > 80;
+  pendingNavigation.hidden = inView || Boolean(target.host.shadowRoot?.querySelector('dialog')?.open);
+  pendingSelect.hidden = pendingForms.length < 2;
+  pendingNavigation.querySelector('.pending-count')!.textContent = `${pendingForms.length} form${pendingForms.length === 1 ? '' : 's'} need${pendingForms.length === 1 ? 's' : ''} input`;
+}
 function makeShell() {
   shell = el('div'); shell.id = 'github-ultimate-workspace'; theme(shell); document.body.append(shell); shellRoot = shadow(shell);
   const launch = button('✦ PR workspace', () => { panelOpen = !panelOpen; panel!.hidden = !panelOpen; if (panelOpen) panel!.querySelector<HTMLButtonElement>('.panel-close')?.focus(); }, 'launcher');
   launch.setAttribute('aria-label', 'Open GitHub Ultimate workspace'); shellRoot.append(launch);
   panel = el('aside', undefined, 'panel'); panel.hidden = !panelOpen; panel.setAttribute('aria-label', 'GitHub Ultimate PR workspace');
   const header = el('header', undefined, 'panel-header');
-  header.append(button('Close', () => { panelOpen = false; panel!.hidden = true; launch.focus(); }, 'panel-close'), el('div', 'GITHUB ULTIMATE', 'eyebrow'), el('h2', 'Your PR workspace'));
+  header.append(button('Close', () => { panelOpen = false; panel!.hidden = true; launch.focus(); }, 'panel-close'), el('div', 'GitHub Ultimate', 'eyebrow'), el('h2', 'Your PR workspace'));
   header.append(el('p', `${context()!.repository} #${context()!.number}`, 'muted'));
   const tabs = el('nav', undefined, 'tabs'); tabs.setAttribute('aria-label', 'Workspace views');
   for (const [id, label] of [['overview', 'Overview'], ['forms', 'Forms'], ['runs', 'Runs & beads']]) {
@@ -58,6 +93,14 @@ function makeShell() {
   }
   header.append(tabs); body = el('div', undefined, 'panel-body'); panel.append(header, body); shellRoot.append(panel);
   panel.addEventListener('keydown', event => { if (event.key === 'Escape') { panelOpen = false; panel!.hidden = true; launch.focus(); } });
+  shell.addEventListener('gu-key', event => { if ((event as CustomEvent<KeyboardEvent>).detail.key === 'Escape' && panelOpen) { panelOpen = false; panel!.hidden = true; launch.focus(); } });
+  pendingNavigation = el('section', undefined, 'pending-navigation'); pendingNavigation.hidden = true;
+  pendingNavigation.setAttribute('aria-label', 'Pending forms');
+  const count = el('span', '', 'pending-count'); count.setAttribute('role', 'status');
+  pendingSelect = el('select'); pendingSelect.setAttribute('aria-label', 'Choose pending form');
+  pendingSelect.addEventListener('change', () => { selectedPending = pendingSelect!.value; updatePendingNavigation(); });
+  pendingNavigation.append(count, pendingSelect, button('Go to form', () => { const item = pendingForms.find(item => pendingKey(item) === selectedPending); if (item) openForm(item); }, 'primary'));
+  shellRoot.append(pendingNavigation);
 }
 function updatePanel() {
   if (!body || !context()) return;
@@ -67,21 +110,18 @@ function updatePanel() {
   const forms = all.filter((item): item is Mounted & { data: TaskForm } => Boolean(item.data && 'format' in item.data));
   const runs = all.filter((item): item is Mounted & { data: Snapshot } => Boolean(item.data && 'kind' in item.data && item.data.kind === 'workflow'));
   const responses = all.filter((item): item is Mounted & { data: ResponseRecord } => Boolean(item.data && 'kind' in item.data && item.data.kind === 'response'));
-  const answer = (item: Mounted & { data: TaskForm }) => responses.filter(r => r.data.form_id === item.data.id && r.data.source.comment_id === item.sourceId && r.data.source.revision === item.revision && r.data.source.repository === context()!.repository && r.data.source.number === context()!.number).at(-1);
-  const answered = (item: Mounted & { data: TaskForm }) => Boolean(answer(item));
+  const answers = (item: Mounted & { data: TaskForm }) => responses.filter(r => r.data.form_id === item.data.id && r.data.source.comment_id === item.sourceId && r.data.source.revision === item.revision && r.data.source.repository === context()!.repository && r.data.source.number === context()!.number);
+  const answered = (item: Mounted & { data: TaskForm }) => answers(item).length > 0;
   for (const item of forms) {
-    const root = item.host.shadowRoot!;
-    root.querySelector('.answered-notice')?.remove();
-    const saved = answer(item);
-    if (saved && !item.data.invalidatedAt) {
-      const note = el('div', undefined, 'notice answered-notice'); note.append(el('p', 'An answer to this form is saved in the loaded comments.'));
-      note.append(button('Load saved answers to edit', () => item.host.dispatchEvent(new CustomEvent('gu-load-answers', { detail: saved.data.answers }))));
-      root.querySelector('.form-card')?.prepend(note);
-    }
+    if (!item.data.invalidatedAt) item.controller?.setResponses(answers(item).map(entry => ({ record: entry.data, url: `https://github.com/${context()!.repository}/pull/${context()!.number}#${entry.sourceId}` })));
   }
   const latest = new Map<string, typeof runs[number]>();
   for (const item of runs) if (!latest.has(item.data.task_id) || Date.parse(item.data.updated_at) > Date.parse(latest.get(item.data.task_id)!.data.updated_at)) latest.set(item.data.task_id, item);
   const pending = forms.filter(item => !item.data.invalidatedAt && !answered(item));
+  pendingForms = pending;
+  pendingSelect?.replaceChildren(...pending.map(item => { const option = el('option', item.data.title); option.value = pendingKey(item); return option; }));
+  if (pendingSelect && pending.some(item => pendingKey(item) === selectedPending)) pendingSelect.value = selectedPending;
+  updatePendingNavigation();
   const grid = el('div', undefined, 'summary-grid');
   for (const [count, title] of [[pending.length, 'awaiting answers'], [[...latest.values()].filter(item => item.data.status === 'running').length, 'running'], [[...latest.values()].filter(item => item.data.status === 'failed' || item.data.status === 'needs-input').length, 'need attention']]) {
     const metric = el('div', undefined, 'metric'); metric.append(el('strong', String(count)), String(title)); grid.append(metric);
@@ -90,13 +130,11 @@ function updatePanel() {
   const toolbar = el('div', undefined, 'toolbar'); toolbar.append(el('span', `${all.length} records in loaded comments`, 'muted'), button('Rescan', schedule)); body.append(toolbar);
   body.append(el('p', 'Load older comments in GitHub to include them. This view reads saved comment records, not live workflow APIs.', 'tab-hint'));
   function jump(item: Mounted) {
-    item.host.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    if (!config.inlineForms) { config.inlineForms = true; rebuildInline(); }
-    panelOpen = false; panel!.hidden = true;
+    openForm(item, Boolean(item.data && 'format' in item.data && !answered(item as Mounted & { data: TaskForm })));
   }
   if (selected !== 'runs') {
     body.append(el('h3', 'Forms & decisions'));
-    for (const item of forms) body.append(button(`${item.data.invalidatedAt ? 'Superseded · ' : answered(item) ? 'Answered · ' : 'Needs input · '}${item.data.title}${item.data.session_id ? ' · continued session' : ''}`, () => jump(item), 'record-link'));
+    for (const item of forms) body.append(button(`${item.data.invalidatedAt ? 'Superseded · ' : answered(item) ? 'Submitted · ' : 'Needs input · '}${item.data.title}${item.data.session_id ? ' · continued session' : ''}`, () => jump(item), 'record-link'));
     if (!forms.length) body.append(el('p', 'No forms yet. Add a github-task JSON or YAML comment using the examples in the project guide.', 'empty'));
     for (const item of responses) body.append(renderResponse(item.data));
   }
@@ -127,7 +165,8 @@ async function scan() {
       const raw = code.textContent ?? '';
       if (mounted.has(code) || !isRecord(code, raw)) continue;
       const host = el('div'); host.className = 'github-ultimate-record'; theme(host);
-      const item: Mounted = { code, raw, host, sourceId: sourceId(code) };
+      const presentation = presentationFor(code);
+      const item: Mounted = { code, presentation, originallyHidden: presentation.hidden, raw, host, sourceId: sourceId(code) };
       const root = shadow(host);
       try {
         item.data = parseRecord(raw);
@@ -135,28 +174,33 @@ async function scan() {
         item.revision = revision;
         if (key !== (context() ? `${context()!.repository}/${context()!.type}/${context()!.number}` : '') || !code.isConnected || code.textContent !== raw) { rerun = true; continue; }
         if ('format' in item.data) {
-          if (config.inlineForms) renderForm(root, item.data, { repository: current!.repository, number: current!.number, comment_id: item.sourceId, revision }, () => code.isConnected && code.textContent === raw && sourceId(code) === item.sourceId && route === key && `${context()?.repository}/${context()?.type}/${context()?.number}` === key, config.rememberDrafts);
-          else root.append(el('p', `Form: ${item.data.title} · enable inline forms in extension settings`, 'notice'));
+          if (config.inlineForms) ensureController(item);
+          else root.append(el('p', `Form: ${item.data.title} · open from the PR workspace`, 'notice inline-disabled'));
         } else if (item.data.kind === 'workflow') root.append(renderSnapshot(item.data, current!.repository));
         else root.append(renderResponse(item.data));
       } catch (e) { item.error = (e as Error).message.slice(0, 1000); root.append(el('p', `GitHub Ultimate could not render this record: ${item.error}`, 'error')); }
       if (!item.error) {
-        code.hidden = true;
-        root.append(button('Show / hide original record', () => { code.hidden = !code.hidden; }, 'raw-toggle'));
+        presentation.hidden = true;
+        root.append(button('Show / hide original record', () => { presentation.hidden = !presentation.hidden; }, 'raw-toggle'));
       }
-      code.insertAdjacentElement('afterend', host); mounted.set(code, item); changed = true;
+      presentation.insertAdjacentElement('afterend', host); mounted.set(code, item); changed = true;
     }
     if (changed || !body?.childElementCount) updatePanel();
     theme(shell!); for (const item of mounted.values()) theme(item.host);
+    updatePendingNavigation();
   } finally { busy = false; if (rerun) { rerun = false; schedule(); } }
 }
 
 async function boot() {
+  if (!document.body) await new Promise<void>(resolve => document.addEventListener('DOMContentLoaded', () => resolve(), { once: true }));
   config = await settings();
   new MutationObserver(schedule).observe(document.body, { childList: true, subtree: true });
   new MutationObserver(schedule).observe(document.documentElement, { attributes: true, attributeFilter: ['data-color-mode', 'data-dark-theme', 'data-light-theme'] });
   for (const event of ['turbo:load', 'turbo:render', 'pjax:end', 'popstate']) window.addEventListener(event, schedule);
   matchMedia('(prefers-color-scheme: dark)').addEventListener('change', schedule);
+  window.addEventListener('scroll', updatePendingNavigation, { passive: true });
+  window.addEventListener('resize', updatePendingNavigation);
+  window.addEventListener('gu-view-change', updatePendingNavigation);
   chrome.storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) { void settings().then(value => { config = value; rebuildInline(); }); }
   });

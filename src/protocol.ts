@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { parseDocument } from 'yaml';
+import { answersMarkdown, inlineText } from './comment-markdown.ts';
 
 const id = z.string().regex(/^[A-Za-z][\w-]{0,99}$/);
 // Runtime references are not DOM/answer-field identifiers. Beads uses dotted
@@ -66,6 +67,7 @@ const responseSchema = z.object({
   task_id: reference, form_id: id, session_id: reference.nullable(), parent_task_id: reference.nullable(),
   source: sourceSchema, intent: z.enum(['discussion', 'approved-next-steps']),
   resume_session: z.boolean(), allow_code_file_changes: z.boolean(),
+  omitted_questions: z.array(id).max(60).optional(),
   answers: z.record(z.string().max(250), z.union([text, z.boolean(), z.record(id, z.boolean())])).refine(value => Object.keys(value).length <= 400, 'Too many answer fields'),
 }).strict().refine(value => value.allow_code_file_changes === (value.intent === 'approved-next-steps'), 'Response intent and permission must agree');
 export type ResponseRecord = z.infer<typeof responseSchema>;
@@ -95,7 +97,16 @@ export function parseRecord(raw: string): RecordData {
   return record;
 }
 
-export function validateAnswers(form: TaskForm, answers: Answers): string[] {
+export function omittedQuestions(form: TaskForm, answers: Answers): string[] {
+  return form.questions.filter(q => {
+    const value = answers[q.id];
+    if (q.type !== 'choices') return q.required && (typeof value !== 'string' || !value.trim());
+    const selected = value && typeof value === 'object' ? value : {};
+    return (q.required && !Object.values(selected).some(Boolean)) || q.choiceGroups?.some(g => g.mode === 'exactlyOne' && !g.choiceIds.some(id => selected[id]));
+  }).map(q => q.id);
+}
+
+export function validateAnswers(form: TaskForm, answers: Answers, options: { allowUnanswered?: boolean } = {}): string[] {
   const errors: string[] = [];
   const allowed = new Set(['additional_notes', 'next_instruction']);
   for (const q of form.questions) {
@@ -111,15 +122,15 @@ export function validateAnswers(form: TaskForm, answers: Answers): string[] {
   for (const q of form.questions) {
     const value = answers[q.id];
     if (q.type !== 'choices') {
-      if (q.required && (typeof value !== 'string' || !value.trim())) errors.push(`${q.title}: enter an answer.`);
+      if (!options.allowUnanswered && q.required && (typeof value !== 'string' || !value.trim())) errors.push(`${q.title}: enter an answer.`);
       continue;
     }
     const selected = value && typeof value === 'object' ? value : {};
-    if (value !== undefined && (typeof value !== 'object' || Object.entries(selected).some(([name, selected]) => !q.choices.some(c => c.id === name) || typeof selected !== 'boolean'))) errors.push(`${q.title}: invalid choice answer.`);
-    if (q.required && !Object.values(selected).some(Boolean)) errors.push(`${q.title}: select an option.`);
+    if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value) || Object.entries(selected).some(([name, selected]) => !q.choices.some(c => c.id === name) || typeof selected !== 'boolean'))) errors.push(`${q.title}: invalid choice answer.`);
+    if (!options.allowUnanswered && q.required && !Object.values(selected).some(Boolean)) errors.push(`${q.title}: select an option.`);
     for (const g of q.choiceGroups ?? []) {
       const count = g.choiceIds.filter(name => selected[name]).length;
-      if ((g.mode === 'exactlyOne' && count !== 1) || (g.mode === 'atMostOne' && count > 1)) errors.push(`${g.title ?? q.title}: ${g.mode === 'exactlyOne' ? 'select exactly one' : 'select at most one'}.`);
+      if ((g.mode === 'exactlyOne' && (count > 1 || (!options.allowUnanswered && count !== 1))) || (g.mode === 'atMostOne' && count > 1)) errors.push(`${g.title ?? q.title}: ${g.mode === 'exactlyOne' ? 'select exactly one' : 'select at most one'}.`);
     }
   }
   return errors;
@@ -130,8 +141,8 @@ export async function revisionOf(raw: string): Promise<string> {
   return [...new Uint8Array(digest)].map(n => n.toString(16).padStart(2, '0')).join('');
 }
 
-export function composeResponse(form: TaskForm, answers: Answers, source: { repository: string; number: number; comment_id: string; revision: string }, approved: boolean): string {
-  const errors = validateAnswers(form, answers);
+export function composeResponse(form: TaskForm, answers: Answers, source: { repository: string; number: number; comment_id: string; revision: string }, approved: boolean, options: { allowUnanswered?: boolean } = {}): string {
+  const errors = validateAnswers(form, answers, options);
   if (errors.length) throw new Error(errors.join('\n'));
   const allow = form.allowCodeFileChanges === false ? false : approved;
   const payload = {
@@ -140,9 +151,10 @@ export function composeResponse(form: TaskForm, answers: Answers, source: { repo
     parent_task_id: form.parent_task_id ?? null, source,
     intent: allow ? 'approved-next-steps' : 'discussion', resume_session: Boolean(form.session_id),
     allow_code_file_changes: allow, answers,
+    ...(omittedQuestions(form, answers).length ? { omitted_questions: omittedQuestions(form, answers) } : {}),
   };
-  const title = form.title.replace(/\s+/g, ' ').replaceAll('`', '');
-  const comment = `/github-ultimate ${allow ? 'approve' : 'discuss'}\n\n${allow ? 'Approved for next steps' : 'Continue discussion — do not implement yet'}: ${title}\n\n\`\`\`github-response\n${JSON.stringify(payload, null, 2)}\n\`\`\``;
+  const title = inlineText(form.title);
+  const comment = `/github-ultimate ${allow ? 'approve' : 'discuss'}\n\n${allow ? 'Approved for next steps' : 'Continue discussion — do not implement yet'}: ${title}\n\n<details>\n<summary>Submitted answers · GitHub Ultimate</summary>\n\n${answersMarkdown(form, answers)}\n### Structured response\n\n\`\`\`github-response\n${JSON.stringify(payload, null, 2)}\n\`\`\`\n\n</details>`;
   if (comment.length > 65000) throw new Error('Response is too large for a GitHub comment. Shorten your answers or notes.');
   return comment;
 }

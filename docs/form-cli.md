@@ -37,6 +37,12 @@ records, multiple forms and invalid schemas are rejected. The publisher does not
 invent questions or modify submit intent. It posts normalized, readable JSON
 including schema defaults and any Markdown instructions from frontmatter.
 
+Published comments contain a native GitHub `<details open>` section with a
+readable question/choice summary and the structured form. They remain useful
+without the extension. With the extension enabled, its form replaces that
+section; **Show / hide original record** reveals the complete native version.
+The combined comment must fit within 65,000 characters.
+
 `--dry-run` resolves the PR but performs no write. `--print` needs no GitHub
 access. `--json` returns the repository, PR number/URL, form ID, exact posted body,
 comment ID/URL and whether an existing submission was reused. Errors exit nonzero.
