@@ -1,0 +1,12 @@
+import { readFile, readdir, mkdir, writeFile } from 'node:fs/promises';
+import { zipSync } from 'fflate';
+import { createHash } from 'node:crypto';
+const { version } = JSON.parse(await readFile('package.json', 'utf8'));
+const files = {};
+for (const name of (await readdir('dist')).sort()) files[name] = [new Uint8Array(await readFile(`dist/${name}`)), { mtime: new Date(2026, 0, 1, 0, 0, 0) }];
+await mkdir('release', { recursive: true });
+const archive = zipSync(files, { level: 9 });
+const name = `github-ultimate-chrome-${version}.zip`;
+await writeFile(`release/${name}`, archive);
+await writeFile(`release/${name}.sha256`, `${createHash('sha256').update(archive).digest('hex')}  ${name}\n`);
+console.log(`Packaged release/${name} (${archive.length} bytes)`);

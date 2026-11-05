@@ -1,0 +1,19 @@
+{
+  "format": "standard",
+  "version": 1,
+  "id": "form_publisher_demo",
+  "task_id": "task-h1i.37",
+  "title": "Form published by the CLI",
+  "goal": "Verify form DSL can be posted without specifying the repository or PR",
+  "description": "This is a manual publisher smoke test. The CLI resolved the current branch’s PR automatically, validated the form with the extension’s parser, and posted readable JSON. Repeating the command with the same submission ID reuses this comment. Optional feedback below is just example data; no workflow handler runs.",
+  "allowCodeFileChanges": false,
+  "questions": [
+    {
+      "type": "textarea",
+      "id": "additional_notes",
+      "title": "Optional feedback on form publishing",
+      "description": "Does this form render correctly in the PR view? No answer is required for the smoke test.",
+      "placeholder": "Optional notes about the authoring or publishing experience."
+    }
+  ]
+}

@@ -1,0 +1,21 @@
+import decision from '../docs/examples/form-comment.md?raw';
+import followup from '../docs/examples/yaml-comment.md?raw';
+import workflow from '../docs/examples/workflow-comment.md?raw';
+import { parseRecord } from '../src/protocol';
+
+export function extractRecord(value: string): string {
+  const fenced = /```(?:github-task|github-workflow|github-response|json|yaml|yml)\s*\n([\s\S]*?)\n```/.exec(value);
+  return fenced ? fenced[1] : value;
+}
+const form = parseRecord(extractRecord(decision));
+export const stories = [
+  { id: 'decision', title: 'Decision form', caption: 'Choices, recommendations & notes', source: extractRecord(decision) },
+  { id: 'wizard', title: 'Question wizard', caption: 'Steps, optional omissions & review', source: JSON.stringify({ format: 'standard', id: 'wizard_demo', title: 'Plan the next change', goal: 'Try a focused multi-question conversation.', questions: [{ id: 'approach', title: 'Which direction should we explore?', type: 'choices', description: 'Choose a direction, or leave this unanswered if it no longer applies.', required: true, choices: [{ id: 'small', label: 'A small focused change' }, { id: 'broad', label: 'A broader investigation' }] }, { id: 'context', type: 'textarea', title: 'What context matters?', required: true, description: 'Keyboard shortcuts should stay inside the form while you type.' }, { id: 'verification', type: 'textarea', title: 'How should we verify it?', description: 'You can browse questions in any order.' }, { id: 'additional_notes', type: 'textarea', title: 'Additional notes', description: 'Global notes are outside the question count.' }] }, null, 2) },
+  { id: 'submitted', title: 'Submitted form', caption: 'Collapsed, immutable answer history', source: extractRecord(decision) },
+  { id: 'followup', title: 'Follow-up question', caption: 'YAML frontmatter · discussion only', source: extractRecord(followup) },
+  { id: 'workflow', title: 'Workflow & beads', caption: 'Saved progress and private links', source: extractRecord(workflow) },
+  { id: 'superseded', title: 'Superseded form', caption: 'Read-only historical state', source: JSON.stringify({ ...form, id: 'superseded_form', invalidatedAt: '2026-11-05T08:00:00Z', invalidatedReason: 'A newer form replaces this decision.' }, null, 2) },
+  { id: 'response', title: 'Saved response', caption: 'Approval and continued-session history', source: JSON.stringify({ kind: 'response', schema_version: 1, response_id: 'response-demo', task_id: 'task-h1i.30', form_id: 'investigation_form', session_id: 'session-demo', parent_task_id: null, source: { repository: 'mickmister/github-ultimate', number: 1, comment_id: 'issuecomment-demo', revision: 'a'.repeat(64) }, intent: 'approved-next-steps', resume_session: true, allow_code_file_changes: true, answers: { scope: { unit: true, all: false }, additional_notes: 'Keep the changes focused and explain the result.' } }, null, 2) },
+  { id: 'longform', title: 'Long content', caption: 'Wrapping, Markdown and many choices', source: JSON.stringify({ format: 'standard', id: 'long_form', title: 'A longer architectural decision with enough context to explore wrapping on a narrow screen', goal: 'Make the important context readable at every width.', description: '## Context\n\nThis story exercises **Markdown**, `inline code`, lists and multi-paragraph descriptions.\n\n- One concern\n- Another concern\n\nUse it to check your typography and spacing.', questions: [{ id: 'directions', type: 'choices', title: 'Which directions are worth investigating?', description: 'Select any number. Open the contextual notes to explore expanded layouts.', choices: Array.from({ length: 5 }, (_, i) => ({ id: `direction_${i}`, label: `Direction ${i + 1}: a descriptive option title that may wrap over multiple lines`, description: 'Detailed context should stay readable, even when a label is long and the viewport is narrow.', ...(i === 0 ? { assumedTrue: true, is_recommended_reason: 'A useful baseline to compare against.' } : {}) })) }, { id: 'additional_notes', title: 'Additional notes', description: 'The master notes field.', type: 'textarea' }] }, null, 2) },
+  { id: 'invalid', title: 'Validation error', caption: 'Unsupported fields stay visible', source: JSON.stringify({ ...form, workflow: 'untrusted-action.yml' }, null, 2) },
+];
