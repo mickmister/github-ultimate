@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "GitHub Ultimate",
+  "version": "0.1.0",
+  "description": "Forms, bead progress and saved workflow sessions directly in your GitHub PR workspace.",
+  "minimum_chrome_version": "120",
+  "permissions": ["storage"],
+  "content_scripts": [{
+    "matches": ["https://github.com/*"],
+    "js": ["content.js"],
+    "run_at": "document_idle"
+  }],
+  "action": { "default_popup": "popup.html", "default_title": "GitHub Ultimate settings" },
+  "content_security_policy": { "extension_pages": "script-src 'self'; object-src 'none'" }
+}
