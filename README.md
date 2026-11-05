@@ -49,6 +49,34 @@ Dashboard links accept private `https://node.tailnet.ts.net/` hosts without quer
 
 ## Development and verification
 
+### Styling playground
+
+```sh
+npm ci
+npm run playground
+```
+
+Open `http://localhost:5173`. The Vite playground uses the extension's **actual**
+parser, Shadow DOM renderer and `src/workspace.css`, with no Chrome installation
+or GitHub login required. Choose a story, edit pretty JSON or YAML frontmatter,
+then click **Render source**. Theme/width controls and live CSS overrides let you
+iterate without clearing form answers. Try the local GitHub comment editor to
+inspect generated slash commands without posting anything.
+
+Examples cover decisions, YAML follow-ups, saved workflow/bead snapshots,
+responses, superseded forms, long content and validation failures. Source/style
+edits are saved in your browser. **Export CSS/source** produces files to use in
+a fork or contribution; preview edits do not modify repository files. **Copy
+share link** includes your current source/styles in its URL fragment, so only
+share non-sensitive example data. Add exported rules to `src/workspace.css` when
+you want the extension build to include them.
+
+`npm run playground:build` creates a standalone static `playground-dist/` site;
+`npm run test:playground` tests it in a normal browser. In a managed preview,
+the server uses the assigned `PORT` and supports the `*.jamtools.dev` host.
+
+### Extension checks
+
 Requires Node 22 and Chrome/Chromium 120+.
 
 ```sh

@@ -6,6 +6,9 @@
   "description": "A comment-powered GitHub PR workspace for human-agent collaboration",
   "license": "MIT",
   "scripts": {
+    "playground": "vite --config playground/vite.config.ts",
+    "playground:build": "vite build --config playground/vite.config.ts",
+    "test:playground": "playwright test --config playground/playwright.config.ts",
     "build": "node scripts/build.mjs",
     "check": "tsc --noEmit",
     "test": "vitest run",
@@ -25,6 +28,7 @@
     "esbuild": "^0.25.12",
     "fflate": "^0.8.2",
     "typescript": "^5.9.3",
+    "vite": "^7.3.7",
     "vitest": "^4.0.8"
   }
 }

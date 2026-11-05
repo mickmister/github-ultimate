@@ -2,7 +2,7 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 import { composeResponse, validateAnswers, safeLink, type TaskForm, type Answers, type Snapshot, type ResponseRecord } from './protocol';
 import { read, write } from './storage';
-import css from './workspace.css';
+import css from './workspace.css?inline';
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);

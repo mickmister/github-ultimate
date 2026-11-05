@@ -7,8 +7,8 @@
     "strict": true,
     "noEmit": true,
     "allowImportingTsExtensions": true,
-    "types": ["chrome", "node"],
+    "types": ["chrome", "node", "vite/client"],
     "skipLibCheck": true
   },
-  "include": ["src", "tests", "playwright.config.ts", "vitest.config.ts"]
+  "include": ["src", "tests", "playground", "playwright.config.ts", "vitest.config.ts"]
 }
