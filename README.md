@@ -112,7 +112,9 @@ Load `dist/` unpacked for development. `release/` contains the ZIP and checksum.
 
 Playwright loads the **actual built extension** in an isolated Chromium profile against controlled GitHub-shaped pages, covering native draft composition/no auto-submit, intent and session serialization, drafts/notes/wizard position, immutable submissions and revision matching, zen focus/Escape, multiple pending forms, capture-phase keyboard isolation, progress/dashboard links, SPA cleanup and malicious records. This is complemented by a public-GitHub DOM smoke check during release preparation; authenticated native-editor behavior still merits checking in your own account when GitHub changes its DOM.
 
-CI runs type checks, protocol tests, packaged browser tests and creates the ZIP. Pushing a matching `v<package version>` tag publishes that CI artifact as a GitHub Release asset **only after verification succeeds**. CI uses its own repository-scoped release token; no deployment secret is required.
+CI runs type checks, protocol/publisher tests, packaged browser tests and creates the ZIP. Every successful branch-push run publishes one **prerelease** with the tested ZIP and SHA-256 checksum. Tags use `continuous-<branch-slug>-<workflow-run-id>`: separate pushes get separate releases, while rerunning a workflow repairs the same release. Release notes identify the branch, exact commit, workflow run and installation steps. Prereleases do not replace the latest stable release; their manifest version remains the package version.
+
+Pull-request and manual verification runs do not publish prereleases. Failed verification does not publish a release. Publishing starts as a draft and becomes public after both assets upload successfully. Pushing a matching `v<package version>` tag publishes the verified artifact as a stable GitHub Release. CI uses its own repository-scoped release token; no deployment secret is required.
 
 ## Scope and research
 
