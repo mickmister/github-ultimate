@@ -8,6 +8,8 @@ Required: `format: "standard"`, `id`, `title`, `questions`. `version` is 1 (defa
 
 IDs begin with a letter and contain letters, numbers, `_` or `-`, maximum 100 characters. IDs and generated answer names must be unique. `next_instruction` and `allow_code_file_changes` are reserved.
 
+Task, bead, session, attempt and response **references** are separate from form/question IDs: they may start with a letter or number and include `.`, `:`, `_` and `-`, maximum 160 characters. This accepts actual hierarchical bead IDs such as `task-h1i.29` and provider session handles without widening DOM/answer-field identifiers.
+
 Questions share `id`, `title`, `description` (defaults empty) and optional `required`:
 
 - `type: "textarea"` or `"text"`, optional `placeholder`.

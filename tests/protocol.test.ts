@@ -5,6 +5,10 @@ import { readFileSync } from 'node:fs';
 const form = { format: 'standard', id: 'review', title: 'Review next steps', session_id: 'session-one', questions: [{ id: 'scope', type: 'choices', title: 'Scope', required: true, choices: [{ id: 'small', label: 'Small' }, { id: 'large', label: 'Large' }], choiceGroups: [{ id: 'one', mode: 'exactlyOne', choiceIds: ['small', 'large'] }] }, { id: 'notes', type: 'textarea', title: 'Explain', required: true }] };
 function parsed() { const result = parseRecord(JSON.stringify(form)); if (!('format' in result)) throw new Error('Expected form'); return result; }
 describe('untrusted GitHub protocol', () => {
+  it('accepts real dotted bead IDs and provider session handles as references', () => {
+    const record = parseRecord(JSON.stringify({ kind: 'workflow', schema_version: 1, task_id: 'task-h1i.29', title: 'Release', status: 'done', session_id: '1234-session:resume', updated_at: '2026-11-05T08:00:00Z', beads: [{ id: 'task-h1i.28', title: 'Chrome milestone', status: 'closed', dependencies: ['task-h1i.6'] }] }));
+    expect(record).toMatchObject({ task_id: 'task-h1i.29', beads: [{ id: 'task-h1i.28' }] });
+  });
   it('parses every published manual fixture using the shipping protocol', () => {
     for (const name of ['form-comment', 'yaml-comment', 'workflow-comment']) {
       const doc = readFileSync(new URL(`../docs/examples/${name}.md`, import.meta.url), 'utf8');

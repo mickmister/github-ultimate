@@ -2,6 +2,9 @@ import { z } from 'zod';
 import { parseDocument } from 'yaml';
 
 const id = z.string().regex(/^[A-Za-z][\w-]{0,99}$/);
+// Runtime references are not DOM/answer-field identifiers. Beads uses dotted
+// child IDs, and session providers may use UUIDs or colon-separated handles.
+const reference = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/);
 const text = z.string().max(16000);
 const group = z.object({ id, title: text.optional(), description: text.optional(), mode: z.enum(['any', 'atMostOne', 'exactlyOne']), choiceIds: z.array(id).min(1).max(50) }).strict();
 const choice = z.object({ id, label: text, description: text.optional(), is_recommended_reason: text.optional(), assumedTrue: z.boolean().optional(), prosAndCons: z.object({ pros: z.array(text).max(20).optional(), cons: z.array(text).max(20).optional() }).strict().optional() }).strict();
@@ -13,7 +16,7 @@ const question = z.discriminatedUnion('type', [
 const formSchema = z.object({
   format: z.literal('standard'), kind: z.literal('form').optional(), version: z.literal(1).default(1),
   id, title: text, goal: text.optional(), description: text.optional(),
-  task_id: id.optional(), session_id: id.optional(), parent_task_id: id.optional(),
+  task_id: reference.optional(), session_id: reference.optional(), parent_task_id: reference.optional(),
   invalidatedAt: z.string().max(100).optional(), invalidatedReason: text.optional(),
   allowCodeFileChanges: z.union([z.literal(false), z.object({ allowLabel: text.optional(), avoidLabel: text.optional(), label: text.optional(), description: text.optional(), defaultChecked: z.boolean().optional() }).strict()]).optional(),
   nextInstructionPresets: z.array(z.object({ label: text, value: text }).strict()).max(8).optional(),
@@ -44,10 +47,10 @@ const formSchema = z.object({
   }
 });
 export const statuses = ['submitted', 'queued', 'running', 'needs-input', 'ready-for-review', 'failed', 'cancelled', 'done'] as const;
-const bead = z.object({ id, title: text, status: z.enum(['open', 'in_progress', 'blocked', 'closed']), dependencies: z.array(id).max(100).optional() }).strict();
+const bead = z.object({ id: reference, title: text, status: z.enum(['open', 'in_progress', 'blocked', 'closed']), dependencies: z.array(reference).max(100).optional() }).strict();
 const snapshotSchema = z.object({
-  kind: z.literal('workflow'), schema_version: z.literal(1), task_id: id,
-  title: text, status: z.enum(statuses), session_id: id.optional(), attempt_id: id.optional(),
+  kind: z.literal('workflow'), schema_version: z.literal(1), task_id: reference,
+  title: text, status: z.enum(statuses), session_id: reference.optional(), attempt_id: reference.optional(),
   updated_at: z.iso.datetime({ offset: true }), started_at: z.iso.datetime({ offset: true }).optional(),
   run_url: z.string().max(2000).optional(), dashboard_url: z.string().max(2000).optional(),
   dashboard_status: z.enum(['available', 'offline']).optional(),
@@ -59,8 +62,8 @@ export type Question = TaskForm['questions'][number];
 export type Snapshot = z.infer<typeof snapshotSchema>;
 const sourceSchema = z.object({ repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/), number: z.number().int().positive(), comment_id: z.string().min(1).max(200), revision: z.string().regex(/^[a-f0-9]{64}$/) }).strict();
 const responseSchema = z.object({
-  kind: z.literal('response'), schema_version: z.literal(1), response_id: id,
-  task_id: id, form_id: id, session_id: id.nullable(), parent_task_id: id.nullable(),
+  kind: z.literal('response'), schema_version: z.literal(1), response_id: reference,
+  task_id: reference, form_id: id, session_id: reference.nullable(), parent_task_id: reference.nullable(),
   source: sourceSchema, intent: z.enum(['discussion', 'approved-next-steps']),
   resume_session: z.boolean(), allow_code_file_changes: z.boolean(),
   answers: z.record(z.string().max(250), z.union([text, z.boolean(), z.record(id, z.boolean())])).refine(value => Object.keys(value).length <= 400, 'Too many answer fields'),
