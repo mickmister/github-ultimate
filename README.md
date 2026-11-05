@@ -35,6 +35,19 @@ Only comments loaded in the GitHub page are included. Use GitHub's **Load more**
 
 ## Authoring protocol
 
+### Publish with one command
+
+```sh
+./bin/github-ultimate-form path/to/form.json
+# or: npm run form -- --file path/to/form.yaml
+```
+
+The publisher validates the DSL, uses `gh` to find the current repository/PR,
+and posts the form comment. File/stdin input, preview/dry-run, JSON output,
+retry keys and automatic GitHub Actions context are supported. A reusable
+form-posting composite action uses the same operation. See [form CLI and
+Actions usage](docs/form-cli.md).
+
 Use a fenced `github-task` block for a standard form, `github-workflow` for a saved run, or `github-response` for answers. JSON is recommended for question arrays: **pretty-print it rather than minifying it**. YAML documents, including frontmatter followed by Markdown instructions, are supported for input definitions. A normal `json`/`yaml` fence is also discovered when its data explicitly declares the supported record type.
 
 See [the versioned protocol](docs/protocol.md) for supported fields, bounds and dispatch semantics. Raw source remains available with **Show / hide original record**. Unknown fields/versions are rejected with an error while preserving the original code.

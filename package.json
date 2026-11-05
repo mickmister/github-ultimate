@@ -5,7 +5,11 @@
   "type": "module",
   "description": "A comment-powered GitHub PR workspace for human-agent collaboration",
   "license": "MIT",
+  "bin": {
+    "github-ultimate-form": "bin/github-ultimate-form"
+  },
   "scripts": {
+    "form": "node --experimental-strip-types cli/form.ts",
     "playground": "vite --config playground/vite.config.ts",
     "playground:build": "vite build --config playground/vite.config.ts",
     "test:playground": "playwright test --config playground/playwright.config.ts",
