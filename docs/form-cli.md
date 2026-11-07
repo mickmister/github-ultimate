@@ -49,6 +49,23 @@ comment ID/URL and whether an existing submission was reused. Errors exit nonzer
 Tokens are read by `gh`, never inserted into the form or printed by this CLI.
 Neither publishing a form nor this action executes slash commands or agents.
 
+Every generated form comment starts with a hidden watermark, for example:
+
+```html
+<!-- github-ultimate:form:decision;submission:run-42-decision -->
+```
+
+The `;submission:...` part is optional; the `<!-- github-ultimate:form:` prefix
+identifies form output. The source workflow and central reusable entrypoint skip
+these `issue_comment` events at job level, before allocating a runner, minting App
+tokens, or invoking an agent. GitHub may list a skipped workflow entry; no routing
+or agent job runs. This also covers forms published before the guard was added.
+Agents posting a form manually must preserve this watermark (or use `--print` to
+generate the complete comment). Keep it out of human answer comments: the extension's
+`/github-ultimate discuss` and `/github-ultimate approve` responses remain eligible
+requests for the trusted router. The watermark is an output/opt-out label, not
+proof of authorship or execution permission.
+
 ## Automatic context
 
 Locally, `gh repo view` and `gh pr view` resolve the current checkout's open PR.

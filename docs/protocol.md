@@ -4,6 +4,13 @@ The Chrome extension supports three bounded, strictly validated record types. Us
 
 ## Form (`github-task`)
 
+Agent-published form comments carry the hidden `<!-- github-ultimate:form:FORM_ID -->`
+watermark (optionally `;submission:KEY` before ` -->`). The CLI adds it automatically.
+The workflow entrypoint skips marked `issue_comment` events before starting a runner;
+these comments are output awaiting a human answer, not workflow requests. Preserve
+the marker when publishing manually. Do not attach it to human `github-response`
+comments. This marker never grants execution authority.
+
 Required: `format: "standard"`, `id`, `title`, `questions`. `version` is 1 (default). Optional: `kind: "form"`, `goal`, `description`, `task_id`, `session_id`, `parent_task_id`, `invalidatedAt`, `invalidatedReason`, `allowCodeFileChanges`, `nextInstructionPresets`.
 
 IDs begin with a letter and contain letters, numbers, `_` or `-`, maximum 100 characters. IDs and generated answer names must be unique. `next_instruction` and `allow_code_file_changes` are reserved.

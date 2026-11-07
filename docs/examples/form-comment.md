@@ -1,3 +1,5 @@
+<!-- github-ultimate:form:investigation_form -->
+
 ## Decide the next step
 
 This is a manual GitHub Ultimate test form. It does not start a workflow until a separate handler is installed.
