@@ -1,6 +1,6 @@
 import { parseRecord, revisionOf, type RecordData, type TaskForm, type Snapshot, type ResponseRecord } from './protocol';
 import { defaults, settings, type Settings } from './storage';
-import { el, button, shadow, renderForm, renderSnapshot, renderResponse, type FormController } from './ui';
+import { el, button, shadow, renderForm, renderRecordTools, renderSnapshot, renderResponse, type FormController } from './ui';
 import { isolateExtensionKeyboard } from './keyboard';
 import { extensionAPI } from './extension-api';
 
@@ -65,7 +65,8 @@ function ensureController(item: Mounted) {
   const key = route;
   const root = item.host.shadowRoot!;
   root.querySelector('.inline-disabled')?.remove();
-  item.controller = renderForm(root, item.data, { repository: current.repository, number: current.number, comment_id: item.sourceId, revision: item.revision! }, () => item.code.isConnected && item.code.textContent === item.raw && sourceId(item.code) === item.sourceId && route === key && `${context()?.repository}/${context()?.type}/${context()?.number}` === key, config.rememberDrafts);
+  root.querySelector('.record-tools')?.remove();
+  item.controller = renderForm(root, item.data, { repository: current.repository, number: current.number, comment_id: item.sourceId, revision: item.revision! }, () => item.code.isConnected && item.code.textContent === item.raw && sourceId(item.code) === item.sourceId && route === key && `${context()?.repository}/${context()?.type}/${context()?.number}` === key, config.rememberDrafts, config.showDiagnosticJson ? () => { item.presentation.hidden = !item.presentation.hidden; } : undefined);
 }
 function openForm(item: Mounted, zen = true) {
   ensureController(item);
@@ -196,7 +197,7 @@ async function scan() {
       } catch (e) { item.error = (e as Error).message.slice(0, 1000); root.append(el('p', `GitHub Ultimate could not render this record: ${item.error}`, 'error')); }
       if (!item.error) {
         presentation.hidden = true;
-        root.append(button('Show / hide original record', () => { presentation.hidden = !presentation.hidden; }, 'raw-toggle'));
+        if (config.showDiagnosticJson && !item.controller) root.append(renderRecordTools(undefined, () => { presentation.hidden = !presentation.hidden; }));
       }
       presentation.insertAdjacentElement('afterend', host); mounted.set(code, item); changed = true;
     }
