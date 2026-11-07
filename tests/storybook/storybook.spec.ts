@@ -16,6 +16,11 @@ test('every indexed story renders the shipping UI or its intentional native fall
 
 test('Other, independent selections, preview, native draft and simulated history form a complete local loop', async ({ page }) => {
   await page.goto('/iframe.html?id=forms--pending&viewMode=story');
+  await expect(page.getByRole('group', { name: 'What kind of change should we make?' })).toBeVisible();
+  const commentButton = page.getByRole('button', { name: 'Leave a comment about A small focused change', exact: true });
+  await expect(commentButton).toHaveText('Leave a comment');
+  await commentButton.click();
+  await expect(page.getByRole('textbox', { name: 'Add note about A small focused change', exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'A small focused change', exact: true }).check();
   await page.getByRole('checkbox', { name: 'A broader investigation', exact: true }).check();
   await expect(page.getByRole('checkbox', { name: 'A small focused change', exact: true })).toBeChecked();
@@ -95,7 +100,7 @@ test('phone and zen keep seeded values while raw invalid records and unsafe mark
   await page.getByRole('button', { name: '2. What context matters?', exact: true }).click();
   const input = page.getByRole('textbox', { name: 'What context matters?', exact: true });
   const value = await input.inputValue();
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).click();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await expect(input).toHaveValue(value);
   await page.getByRole('button', { name: 'Close zen', exact: true }).click();

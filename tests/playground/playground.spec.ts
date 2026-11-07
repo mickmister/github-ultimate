@@ -58,11 +58,11 @@ test('wizard supports browsing, notes, zen and explicit unanswered questions', a
   await page.goto('/');
   await page.getByRole('button', { name: /Question wizard/ }).click();
   await expect(page.getByText('Question 1 of 3', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Add note about A small focused change', exact: true }).click();
+  await page.getByRole('button', { name: 'Leave a comment about A small focused change', exact: true }).click();
   await page.getByRole('textbox', { name: 'Add note about A small focused change', exact: true }).fill('Consider a small scope.');
   await page.getByRole('button', { name: '2. What context matters?', exact: true }).click();
   await page.getByRole('textbox', { name: 'What context matters?', exact: true }).fill('Typing m stays in this field.');
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).click();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
   const zen = page.getByRole('dialog', { name: 'Plan the next change' });
   await expect(zen).toBeVisible();
   await expect(zen.getByRole('textbox', { name: 'What context matters?', exact: true })).toHaveValue('Typing m stays in this field.');

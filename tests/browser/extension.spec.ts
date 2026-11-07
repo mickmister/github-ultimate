@@ -71,14 +71,14 @@ test('packaged extension renders forms, previews intent and preserves native dra
   await expect(preview).toHaveValue(/\/github-ultimate approve/);
   await expect(preview).toHaveValue(/"allow_code_file_changes": true/);
 });
-test('restores drafts, wizard position and note icons; requested answers may be omitted', async () => {
+test('restores drafts, wizard position and comment buttons; requested answers may be omitted', async () => {
   await goReview(page);
   await page.getByRole('button', { name: 'Approved for next steps', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Generated comment preview' })).toHaveValue(/"omitted_questions"/);
   await goScope(page);
   await page.getByRole('checkbox', { name: 'Unit tests' }).check();
-  const note = page.getByRole('button', { name: 'Add note about Unit tests', exact: true });
-  await expect(note).toHaveText('');
+  const note = page.getByRole('button', { name: 'Leave a comment about Unit tests', exact: true });
+  await expect(note).toHaveText('Leave a comment');
   await note.click();
   await page.getByRole('textbox', { name: 'Add note about Unit tests', exact: true }).fill('Only the failed test.');
   await goInstructions(page);
@@ -107,7 +107,7 @@ test('Other and multiple selections survive zen, review and posted history', asy
   const other = page.getByRole('checkbox', { name: 'Other', exact: true });
   await expect(other).toHaveCount(1); await other.check();
   await page.getByRole('textbox', { name: 'Add note about Other', exact: true }).fill('A combined approach.');
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).click();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('checkbox', { name: 'Unit tests', exact: true })).toBeChecked();
   await page.getByRole('button', { name: 'Close zen', exact: true }).click();
   await expect(other).toBeChecked();
@@ -277,7 +277,7 @@ test('zen shares wizard state, contains focus, closes with Escape and preserves 
   await goInstructions(page);
   await page.getByRole('textbox', { name: 'Instructions', exact: true }).fill('Same draft in zen.');
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).click();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
   const zen = page.getByRole('dialog', { name: 'Choose the next step' });
   await expect(zen).toBeVisible();
   await expect(zen.getByRole('textbox', { name: 'Instructions', exact: true })).toHaveValue('Same draft in zen.');
@@ -291,7 +291,7 @@ test('zen shares wizard state, contains focus, closes with Escape and preserves 
   await page.keyboard.press('Escape');
   await expect(zen).toBeHidden();
   await expect(page.getByRole('textbox', { name: 'Instructions', exact: true })).toHaveValue('Same draft in zen.m');
-  await expect(page.getByRole('button', { name: 'Open in zen', exact: true })).toBeFocused();
+  await expect(page.getByRole('button', { name: 'View in Zen Mode', exact: true })).toBeFocused();
 });
 
 test('offscreen pending form has a sticky zen entry point without automatic opening', async () => {

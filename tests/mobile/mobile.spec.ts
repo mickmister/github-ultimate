@@ -33,11 +33,11 @@ test.beforeEach(async ({ context, page }) => {
 
 test('touch wizard, zen, preserved native draft and posted response round trip', async ({ page }) => {
   await page.getByRole('textbox', { name: 'GitHub comment' }).fill('Existing native draft.');
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).tap();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).tap();
   const dialog = page.getByRole('dialog', { name: 'Mobile decision' });
   await expect(dialog).toBeVisible();
   await dialog.getByRole('checkbox', { name: 'Keep the change focused' }).check();
-  await dialog.getByRole('button', { name: 'Add note about Keep the change focused', exact: true }).tap();
+  await dialog.getByRole('button', { name: 'Leave a comment about Keep the change focused', exact: true }).tap();
   await dialog.getByRole('textbox', { name: 'Add note about Keep the change focused', exact: true }).fill('Touch note.');
   await dialog.getByRole('button', { name: '2. Instructions', exact: true }).tap();
   await dialog.getByRole('textbox', { name: 'Instructions', exact: true }).fill('Keep iOS and desktop working.');
@@ -64,7 +64,7 @@ test('touch wizard, zen, preserved native draft and posted response round trip',
 test('pagehide flushes a pending edit and restores notes and wizard position', async ({ page }) => {
   await page.getByRole('checkbox', { name: 'Other', exact: true }).check();
   await page.getByRole('textbox', { name: 'Add note about Other', exact: true }).fill('Try another option.');
-  await page.getByRole('button', { name: 'Add note about Keep the change focused', exact: true }).tap();
+  await page.getByRole('button', { name: 'Leave a comment about Keep the change focused', exact: true }).tap();
   await page.getByRole('textbox', { name: 'Add note about Keep the change focused', exact: true }).fill('Remember this note.');
   await page.getByRole('button', { name: '2. Instructions', exact: true }).tap();
   // Edit and pagehide in the same task: a 250ms debounce alone cannot pass this.
@@ -115,7 +115,7 @@ test('draft persistence leaves IME text, selection and focus alone and has no ro
 test('mobile controls fit, avoid focus zoom and hide floating chrome while typing', async ({ page, isMobile }) => {
   expect(isMobile).toBe(true);
   await page.setViewportSize({ width: 390, height: 844 });
-  const note = page.getByRole('button', { name: 'Add note about Keep the change focused', exact: true });
+  const note = page.getByRole('button', { name: 'Leave a comment about Keep the change focused', exact: true });
   const box = await note.boundingBox();
   expect(box!.height).toBeGreaterThanOrEqual(44); expect(box!.width).toBeGreaterThanOrEqual(44);
   await note.tap();
@@ -125,7 +125,7 @@ test('mobile controls fit, avoid focus zoom and hide floating chrome while typin
   await expect(page.getByRole('button', { name: 'Open GitHub Ultimate workspace' })).toBeHidden();
   await note.tap();
   await expect(page.getByRole('button', { name: 'Open GitHub Ultimate workspace' })).toBeVisible();
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).tap();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).tap();
   for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 320, height: 568 }]) {
     await page.setViewportSize(size);
     const dialog = page.getByRole('dialog');
@@ -138,7 +138,7 @@ test('mobile controls fit, avoid focus zoom and hide floating chrome while typin
 });
 
 test('keyboard leaves zen shell stable while its focused field and close control stay usable', async ({ page }) => {
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).tap();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).tap();
   await page.getByRole('button', { name: '2. Instructions', exact: true }).tap();
   const input = page.getByRole('textbox', { name: 'Instructions', exact: true });
   await input.fill('Keep this text and selection.');
@@ -170,7 +170,7 @@ test('denied clipboard has a selectable manual fallback inside zen', async ({ pa
     Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Denied')) } });
     document.execCommand = () => false;
   });
-  await page.getByRole('button', { name: 'Open in zen', exact: true }).tap();
+  await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).tap();
   await page.getByRole('button', { name: 'Review answers', exact: true }).first().tap();
   await page.getByRole('button', { name: 'Continue discussion — don’t implement yet', exact: true }).tap();
   await page.getByRole('button', { name: 'Copy comment', exact: true }).tap();

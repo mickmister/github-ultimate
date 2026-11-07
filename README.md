@@ -38,7 +38,7 @@ Paste these complete comment bodies into any GitHub PR or issue conversation:
 
 Comment records can be authored manually or published with the CLI below. The extension can render and compose responses before workflow handlers exist. After posting a generated response and loading that comment, the form is marked submitted and collapsed. Posted submissions are immutable in the extension; **Submit another response** starts a separate answer rather than editing history. Previewing, copying or inserting a comment does not mark the form submitted.
 
-The CLI publishes readable questions alongside the structured form, and generated responses include a readable answer summary. Both use native GitHub disclosure sections so comments remain useful without the extension. Contextual notes use compact comment icons with accessible labels, and keyboard input within the extension stays isolated from GitHub shortcuts.
+The CLI publishes readable questions alongside the structured form, and generated responses include a readable answer summary. Both use native GitHub disclosure sections so comments remain useful without the extension. Contextual notes use **Leave a comment** buttons with accessible contextual labels, and keyboard input within the extension stays isolated from GitHub shortcuts.
 
 Only comments loaded in the GitHub page are included. Use GitHub's **Load more** controls to include older records. **Rescan** reindexes the loaded DOM; it does not contact workflow APIs. Snapshot timestamps show freshness rather than pretending a stopped runner is live. The extension also works on issue conversations for easy testing.
 

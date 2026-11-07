@@ -32,13 +32,12 @@ export function shadow(host: HTMLElement): ShadowRoot {
   isolateExtensionKeyboard(); host.setAttribute('data-gu-root', '');
   const root = host.attachShadow({ mode: 'open' }); const style = el('style'); style.textContent = css; root.append(style); trackViewport(host); return root;
 }
-function noteIcon(label: string): HTMLButtonElement {
-  const toggle = button('', () => {}, 'note-toggle'); toggle.title = 'Add a note'; toggle.setAttribute('aria-label', label); toggle.setAttribute('aria-expanded', 'false');
-  toggle.innerHTML = '<svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path d="M5 4h14a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-8l-6 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>';
+function commentButton(label: string): HTMLButtonElement {
+  const toggle = button('Leave a comment', () => {}, 'note-toggle'); toggle.title = 'Leave a comment'; toggle.setAttribute('aria-label', label.replace(/^Add note/, 'Leave a comment')); toggle.setAttribute('aria-expanded', 'false');
   return toggle;
 }
 function notes(label: string, name: string, values: Answers): HTMLDivElement {
-  const details = el('div', undefined, 'notes'); const toggle = noteIcon(label);
+  const details = el('div', undefined, 'notes'); const toggle = commentButton(label);
   const input = el('textarea'); input.name = name; input.rows = 3; input.maxLength = 16000; input.setAttribute('aria-label', label);
   input.hidden = true;
   toggle.addEventListener('click', () => { input.hidden = !input.hidden; toggle.setAttribute('aria-expanded', String(!input.hidden)); if (!input.hidden) input.focus(); });
@@ -119,7 +118,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       key.preventDefault(); (key.shiftKey ? last : first).focus();
     }
   });
-  header.append(button('Open in zen', openZen, 'zen-open'));
+  header.append(button('View in Zen Mode', openZen, 'zen-open'));
   const controller: FormController = { openZen, isComposingResponse: () => false, setResponses: () => {}, dispose: closeZen };
   root.host.addEventListener('gu-dispose', () => controller.dispose(), { once: true });
   if (form.invalidatedAt) { editor.append(el('p', `This form was superseded. ${form.invalidatedReason ?? ''}`, 'notice')); return controller; }
