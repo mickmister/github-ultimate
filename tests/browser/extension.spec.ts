@@ -9,7 +9,11 @@ const escape = (s: string) => s.replaceAll('&', '&amp;').replaceAll('<', '&lt;')
 function comment(id: number, data: unknown) { return `<article id="issuecomment-${id}" class="timeline-comment"><div class="comment-body"><div class="highlight-source-json"><pre><code>${escape(JSON.stringify(data, null, 2))}</code></pre></div></div></article>`; }
 function fixture() { return `<!doctype html><html data-color-mode="light"><head><title>Fixture PR</title><script>window.shortcutHits=[]; for(const type of ['keydown','keypress','keyup']) window.addEventListener(type,e=>{if(e.key==='m')window.shortcutHits.push(type)},true); document.addEventListener('keydown',e=>{if(e.key==='m')window.shortcutHits.push('document')},true);</script></head><body><main><h1>PR conversation</h1>${comment(1, form)}${comment(2, snapshot)}<form id="new_comment"><textarea id="new_comment_field" name="comment[body]" aria-label="GitHub comment"></textarea><button type="submit">Comment</button></form></main><script>window.nativeSubmissions=0; document.querySelector('#new_comment').onsubmit=e=>{e.preventDefault();window.nativeSubmissions++}</script></body></html>`; }
 const goInstructions = (page: Page) => page.getByRole('button', { name: '2. Instructions', exact: true }).click();
-const goScope = (page: Page) => page.getByRole('button', { name: '1. Investigation scope', exact: true }).click();
+const goScope = async (page: Page) => {
+  // Return to the question navigation before choosing a tab.
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.getByRole('button', { name: '1. Investigation scope', exact: true }).click();
+};
 const goReview = (page: Page) => page.getByRole('button', { name: 'Review answers', exact: true }).first().click();
 let context: BrowserContext, page: Page, profile: string;
 test.beforeEach(async () => {
@@ -21,6 +25,48 @@ test.beforeEach(async () => {
   await expect(page.getByRole('heading', { name: 'Choose the next step' })).toBeVisible();
 });
 test.afterEach(async () => { await context?.close(); await rm(profile, { recursive: true, force: true }); });
+
+test('diagnostic setting updates inline tools and keeps either tool group centered', async () => {
+  const row = page.locator('.wizard-header .wizard-navigation');
+  const tools = row.locator('.record-tools');
+  const raw = page.getByRole('button', { name: 'Show / hide original record', exact: true });
+  const assertCentered = async () => {
+    const outer = (await row.boundingBox())!, inner = (await tools.boundingBox())!;
+    expect(Math.abs(inner.x + inner.width / 2 - outer.x - outer.width / 2)).toBeLessThan(1);
+    const previous = (await row.getByRole('button', { name: 'Previous', exact: true }).boundingBox())!;
+    expect(Math.abs(inner.y + inner.height - previous.y - previous.height)).toBeLessThan(1);
+  };
+  await expect(raw).toHaveCount(0);
+  await assertCentered();
+  const session = await context.newCDPSession(page);
+  const worlds: Array<{ id: number; origin: string }> = [];
+  session.on('Runtime.executionContextCreated', event => worlds.push(event.context));
+  await session.send('Runtime.enable');
+  const world = worlds.find(world => world.origin.startsWith('chrome-extension://'))!;
+  const result = await session.send('Runtime.evaluate', { expression: 'chrome.runtime.id', contextId: world.id, returnByValue: true });
+  const popup = await context.newPage();
+  await popup.goto(`chrome-extension://${result.result.value}/popup.html`);
+  const setting = popup.getByRole('checkbox', { name: 'Show diagnostic JSON', exact: true });
+  await expect(setting).not.toBeChecked();
+  await setting.check();
+  await expect(raw).toHaveCount(2); // Form and workflow snapshot.
+  await assertCentered();
+  const formRaw = tools.getByRole('button', { name: 'Show / hide original record', exact: true });
+  await formRaw.click();
+  await expect(page.locator('#issuecomment-1 pre')).toBeVisible();
+  await formRaw.click();
+  await expect(page.locator('#issuecomment-1 pre')).toBeHidden();
+  await row.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('button', { name: 'View in Zen Mode', exact: true })).toBeHidden();
+  await assertCentered(); // Diagnostic button alone in zen.
+  await page.getByRole('button', { name: 'Close zen', exact: true }).click();
+  await setting.uncheck();
+  await expect(raw).toHaveCount(0);
+  await expect(page.locator('#issuecomment-1 pre')).toBeHidden();
+  await assertCentered();
+  await popup.reload();
+  await expect(setting).not.toBeChecked();
+});
 
 for (const layout of ['markdown-body', 'comment-container']) {
   test(`discovers ${layout} records without legacy body classes or test IDs`, async () => {

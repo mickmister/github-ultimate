@@ -1,6 +1,6 @@
 import { extensionAPI } from './extension-api';
 
-export const defaults = { enabled: true, inlineForms: true, rememberDrafts: true };
+export const defaults = { enabled: true, inlineForms: true, rememberDrafts: true, showDiagnosticJson: false };
 export type Settings = typeof defaults;
 export async function read<T>(key: string, fallback: T): Promise<T> {
   try { const data = await extensionAPI().storage.local.get(key); return data[key] as T ?? fallback; } catch { return fallback; }

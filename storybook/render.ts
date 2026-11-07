@@ -1,4 +1,4 @@
-import { el, button, shadow, renderForm, renderSnapshot, renderResponse, type FormController } from '../src/ui';
+import { el, button, shadow, renderForm, renderRecordTools, renderSnapshot, renderResponse, type FormController } from '../src/ui';
 import { parseRecord, revisionOf, type Answers, type ResponseRecord } from '../src/protocol';
 import { response, source } from './fixtures';
 import { githubEnvironment, type GitHubOptions } from './github';
@@ -70,9 +70,11 @@ export function renderRecord(args: StoryArgs): HTMLElement {
       const data = parseRecord(raw);
       revision = await revisionOf(raw);
       if (disposed || !host.isConnected) return;
+      const original = el('pre', raw, 'gh-source-data'); original.hidden = true;
+      const toggleOriginal = () => { original.hidden = !original.hidden; };
       if ('format' in data) {
         formId = data.id;
-        controller = renderForm(root, data, { ...source, revision }, () => !disposed, Boolean(args.storageFailure));
+        controller = renderForm(root, data, { ...source, revision }, () => !disposed, Boolean(args.storageFailure), toggleOriginal);
         environment.setForm(data.title, Boolean(data.invalidatedAt), controller.openZen, controller.isComposingResponse);
         for (const input of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
           const value = args.seed?.[input.name];
@@ -100,8 +102,8 @@ export function renderRecord(args: StoryArgs): HTMLElement {
         if (args.stage === 'zen') controller.openZen();
       } else if (data.kind === 'workflow') root.append(renderSnapshot(data, source.repository));
       else root.append(renderResponse(data));
-      const original = el('pre', raw, 'gh-source-data'); original.hidden = true; recordBody.append(original);
-      root.append(button('Show / hide original record', () => { original.hidden = !original.hidden; }));
+      recordBody.append(original);
+      if (!('format' in data)) root.append(renderRecordTools(undefined, toggleOriginal));
     } catch (error) {
       if (disposed) return;
       const message = el('p', `Invalid record: ${(error as Error).message}`, 'error'); message.setAttribute('role', 'alert');

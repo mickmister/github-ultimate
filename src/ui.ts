@@ -75,7 +75,14 @@ export type SavedSubmission = { record: ResponseRecord; url?: string };
 export type FormController = { openZen: () => void; isComposingResponse: () => boolean; setResponses: (responses: SavedSubmission[]) => void; dispose: () => void };
 let closeActiveZen: (() => void) | undefined;
 
-export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isCurrent: () => boolean, remember: boolean): FormController {
+export function renderRecordTools(openZen?: () => void, toggleOriginal?: () => void): HTMLElement {
+  const tools = el('div', undefined, 'record-tools');
+  if (openZen) tools.append(button('View in Zen Mode', openZen, 'zen-open'));
+  if (toggleOriginal) tools.append(button('Show / hide original record', toggleOriginal, 'raw-toggle'));
+  return tools;
+}
+
+export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isCurrent: () => boolean, remember: boolean, toggleOriginal?: () => void): FormController {
   const inline = el('div', undefined, 'inline-form'); root.append(inline);
   const card = el('section', undefined, 'form-card'); inline.append(card);
   const header = el('header', undefined, 'form-header'); const title = el('h2', form.title);
@@ -118,7 +125,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       key.preventDefault(); (key.shiftKey ? last : first).focus();
     }
   });
-  header.append(button('View in Zen Mode', openZen, 'zen-open'));
+  const standaloneTools = renderRecordTools(openZen, toggleOriginal); card.insertBefore(standaloneTools, editor);
   const controller: FormController = { openZen, isComposingResponse: () => false, setResponses: () => {}, dispose: closeZen };
   root.host.addEventListener('gu-dispose', () => controller.dispose(), { once: true });
   if (form.invalidatedAt) { editor.append(el('p', `This form was superseded. ${form.invalidatedReason ?? ''}`, 'notice')); return controller; }
@@ -233,19 +240,20 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     step = Math.max(0, Math.min(index, questions.length)); renderStep(); save(); viewChanged();
     questionStart.scrollIntoView({ behavior: 'instant', block: 'start' });
   }
-  function navigationRow() {
+  function navigationRow(includeTools = false) {
     const row = el('div', undefined, 'wizard-navigation');
     const previous = button('Previous', () => goTo(step - 1));
     const next = button('Next', () => goTo(step + 1), 'primary');
-    row.append(previous, next); navigation.push({ previous, next }); return row;
+    row.append(previous, renderRecordTools(includeTools ? openZen : undefined, includeTools ? toggleOriginal : undefined), next); navigation.push({ previous, next }); return row;
   }
   const headerSteps = el('div', undefined, 'wizard-header');
   const questionStart = el('div', undefined, 'wizard-anchor'); questionStart.setAttribute('aria-hidden', 'true');
   if (wizard) {
+    standaloneTools.hidden = true;
     questions.forEach((q, index) => { const b = button(`${index + 1}. ${q.title}`, () => goTo(index)); stepButtons.push(b); nav.append(b); });
     const b = button('Review answers', () => goTo(questions.length)); stepButtons.push(b); nav.append(b);
     for (const tab of stepButtons) tab.title = tab.textContent!;
-    headerSteps.append(nav, progress, navigationRow()); htmlForm.prepend(questionStart, headerSteps);
+    headerSteps.append(nav, progress, navigationRow(true)); htmlForm.prepend(questionStart, headerSteps);
     htmlForm.insertBefore(review, submissionControls); htmlForm.append(navigationRow());
   }
   function renderStep() {
@@ -277,6 +285,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     if (signature === responseSignature) return; responseSignature = signature;
     summary.replaceChildren();
     const submitted = responses.length > 0;
+    standaloneTools.hidden = wizard && !submitted;
     card.dataset.state = submitted ? 'submitted' : 'pending'; summary.hidden = !submitted; editor.hidden = submitted;
     badge.textContent = submitted ? 'Submitted' : 'Needs input';
     if (!submitted) return;
@@ -291,6 +300,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     }
     const view = button('View submitted answers', () => { answers.hidden = !answers.hidden; view.setAttribute('aria-expanded', String(!answers.hidden)); view.textContent = answers.hidden ? 'View submitted answers' : 'Hide submitted answers'; }); view.setAttribute('aria-expanded', 'false');
     summary.append(view, button('Submit another response', () => {
+      standaloneTools.hidden = wizard;
       editor.hidden = false; summary.hidden = true; badge.textContent = 'New response';
       // Starting a new submission never edits a posted response or its ID.
       for (const name of Object.keys(values)) delete values[name];

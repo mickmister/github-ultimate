@@ -2,7 +2,7 @@ import { settings, write } from './storage';
 import { extensionAPI } from './extension-api';
 async function main() {
   const current = await settings();
-  for (const key of ['enabled', 'inlineForms', 'rememberDrafts'] as const) {
+  for (const key of ['enabled', 'inlineForms', 'rememberDrafts', 'showDiagnosticJson'] as const) {
     const input = document.getElementById(key) as HTMLInputElement;
     input.checked = current[key];
     input.addEventListener('change', async () => {
