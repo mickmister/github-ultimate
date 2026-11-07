@@ -1,0 +1,20 @@
+name: Native workspace persistence
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/nugs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    # One-time opt-in after configuring the storage secrets. No changing native
+    # checkpoint or handoff arguments are required on subsequent invocations.
+    if: ${{ vars.NUGS_WORKSPACE_SEED != '' }}
+    uses: mickmister/gh-agentic-workflows/.github/workflows/nugs-source.yml@93caabf7b5faee087216018fe026c065edda1f1a
+    secrets:
+      NUGS_STORAGE_URL: ${{ secrets.NUGS_STORAGE_URL }}
+      NUGS_STORAGE_TOKEN: ${{ secrets.NUGS_STORAGE_TOKEN }}
