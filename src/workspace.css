@@ -98,9 +98,9 @@ progress { width: 100%; accent-color: var(--accent); height: 7px; }
 .zen-dialog[open] { display: flex; flex-direction: column; }
 .zen-dialog::backdrop { background: #0d1117b3; backdrop-filter: blur(2px); }
 .zen-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 20px; border-bottom: 1px solid var(--border); flex-shrink: 0; transform: translateY(var(--gu-zen-content-offset, 0px)); z-index: 3; background: var(--bg); }
-.zen-body { overflow: auto; overscroll-behavior: contain; flex-shrink: 0; height: var(--gu-zen-body-height, auto); transform: translateY(var(--gu-zen-content-offset, 0px)); min-height: 0; padding: 20px 28px; }
+.zen-body { --zen-block-inset: 20px; --zen-inline-inset: 28px; overflow: auto; overscroll-behavior: contain; flex-shrink: 0; height: var(--gu-zen-body-height, auto); transform: translateY(var(--gu-zen-content-offset, 0px)); min-height: 0; padding: var(--zen-block-inset) var(--zen-inline-inset); }
 .zen-dialog .zen-open { display: none; }
-.zen-dialog .wizard-header { top: 0; }
+.zen-dialog .wizard-header { top: calc(0px - var(--zen-block-inset)); margin-inline: calc(0px - var(--zen-inline-inset)); }
 .pending-navigation { position: fixed; right: 22px; bottom: 80px; z-index: 2147483600; background: var(--bg); color: var(--fg); border: 1px solid var(--accent); border-radius: 10px; box-shadow: 0 5px 24px #0002; padding: 12px; display: flex; gap: 9px; align-items: center; flex-wrap: wrap; width: min(390px, calc(100vw - 32px)); }
 .pending-count { font-size: 13px; font-weight: 600; flex: 1; }
 .pending-navigation select { flex-basis: 100%; order: 3; }
@@ -126,6 +126,7 @@ progress { width: 100%; accent-color: var(--accent); height: 7px; }
 }
 @media(max-width:600px) {
   .zen-body, .panel-header, .panel-body { padding: 14px; }
+  .zen-body { --zen-block-inset: 14px; --zen-inline-inset: 14px; }
   .zen-body { padding-bottom: max(14px, env(safe-area-inset-bottom)); }
   .zen-header, .panel-header { padding-top: max(12px, env(safe-area-inset-top)); }
   .panel-body { padding-bottom: max(14px, env(safe-area-inset-bottom)); }
