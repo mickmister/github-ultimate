@@ -4,7 +4,7 @@ import { response, source } from './fixtures';
 import { githubEnvironment, type GitHubOptions } from './github';
 
 export type StoryArgs = GitHubOptions & {
-  source: string;
+  source: string | object;
   theme: 'light' | 'dark';
   width: 'fluid' | 'phone' | 'sidebar';
   stage: 'edit' | 'question-two' | 'review' | 'preview' | 'zen' | 'submitted' | 'history' | 'new-response';
@@ -13,7 +13,7 @@ export type StoryArgs = GitHubOptions & {
 };
 export const baseArgs = { theme: 'light', width: 'fluid', stage: 'edit', layout: 'github', thread: 'pull', conversation: 'short' } as const;
 export const controls = {
-  source: { control: 'text' },
+  source: { name: 'Raw JSON', control: 'object', description: 'Expand the record or toggle “Edit source as JSON” to view/edit raw JSON. This is the record rendered in the story; YAML and malformed-source examples retain their original text.' },
   theme: { control: 'inline-radio', options: ['light', 'dark'] },
   width: { control: 'inline-radio', options: ['fluid', 'phone', 'sidebar'] },
   stage: { control: 'select', options: ['edit', 'question-two', 'review', 'preview', 'zen', 'submitted', 'history', 'new-response'] },
@@ -64,9 +64,11 @@ export function renderRecord(args: StoryArgs): HTMLElement {
   });
   let revision = '', formId = '';
   void (async () => {
+    let raw = '';
     try {
-      const data = parseRecord(args.source);
-      revision = await revisionOf(args.source);
+      raw = typeof args.source === 'string' ? args.source : JSON.stringify(args.source, null, 2) ?? '';
+      const data = parseRecord(raw);
+      revision = await revisionOf(raw);
       if (disposed || !host.isConnected) return;
       if ('format' in data) {
         formId = data.id;
@@ -98,12 +100,12 @@ export function renderRecord(args: StoryArgs): HTMLElement {
         if (args.stage === 'zen') controller.openZen();
       } else if (data.kind === 'workflow') root.append(renderSnapshot(data, source.repository));
       else root.append(renderResponse(data));
-      const original = el('pre', args.source, 'gh-source-data'); original.hidden = true; recordBody.append(original);
+      const original = el('pre', raw, 'gh-source-data'); original.hidden = true; recordBody.append(original);
       root.append(button('Show / hide original record', () => { original.hidden = !original.hidden; }));
     } catch (error) {
       if (disposed) return;
       const message = el('p', `Invalid record: ${(error as Error).message}`, 'error'); message.setAttribute('role', 'alert');
-      root.append(message, el('pre', args.source, 'answer-json'));
+      root.append(message, el('pre', raw, 'answer-json'));
     }
   })();
   return frame;

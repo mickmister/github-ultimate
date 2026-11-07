@@ -71,6 +71,7 @@ test('mock GitHub includes a PR timeline, safe native preview, posted comments a
 
 test('long conversation has a pending zen entry; issue and phone fixtures fit their context', async ({ page }) => {
   await page.goto('/iframe.html?id=github-conversation--long-conversation&viewMode=story');
+  expect((await page.locator('.gh-timeline').boundingBox())!.width).toBe(814);
   await page.evaluate(() => scrollTo(0, 0));
   await page.getByRole('button', { name: 'Go to form', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
@@ -119,4 +120,15 @@ test('Storybook manager opens a navigable story canvas', async ({ page }) => {
   await expect(page.locator('#storybook-preview-iframe')).toBeVisible();
   const canvas = page.frameLocator('#storybook-preview-iframe');
   await expect(canvas.getByRole('heading', { name: 'Plan the next change', exact: true })).toBeVisible();
+  await page.getByRole('tab', { name: /Controls/ }).click();
+  const jsonControl = page.getByRole('row').filter({ hasText: 'Raw JSON' });
+  await expect(jsonControl).toContainText('storybook_plan');
+  await jsonControl.getByRole('switch', { name: 'Edit source as JSON', exact: true }).click();
+  const raw = jsonControl.getByPlaceholder('Edit JSON string...');
+  const record = JSON.parse(await raw.inputValue());
+  expect(record.questions[0].title).toBe('What kind of change should we make?');
+  record.title = 'Edited through the Raw JSON knob';
+  await raw.fill(JSON.stringify(record, null, 2));
+  await raw.press('Tab');
+  await expect(canvas.getByRole('heading', { name: 'Edited through the Raw JSON knob', exact: true })).toBeVisible();
 });

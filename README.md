@@ -82,6 +82,8 @@ Open `http://127.0.0.1:6006`. Storybook uses the **shipping parser, Shadow DOM
 renderer and styles**, with 48 interactive stories. By default, records appear
 inside a **mock GitHub conversation**: repository/PR or issue header, timeline
 comments, metadata sidebar, and a native-looking Write/Preview comment editor.
+The desktop discussion/timeline column is capped at **814px** and shrinks on
+smaller screens; the metadata sidebar sits alongside it.
 The surrounding GitHub UI is a visual fixture; form/zen and record rendering use
 production code. A styled workspace scaffold and offscreen pending-form control
 let you explore their placement in the conversation.
@@ -101,6 +103,11 @@ let you explore their placement in the conversation.
 - **Fallbacks:** unsupported fields/version, malformed JSON and unsafe Markdown.
 
 Use the theme, canvas width, stage, source and seed controls to explore variants.
+In **Controls**, expand **Raw JSON** to inspect the record tree, or use its
+**Edit source as JSON** toggle to view/edit the full JSON text. JSON is kept as
+an object in the controls and serialized only when rendering, so this is the
+same data shown in the story. YAML and malformed-source stories retain their
+original text.
 The `layout` control switches between the mock GitHub page and an isolated
 renderer; `thread`, `conversation` and `workspaceOpen` select context variants.
 Forms include a local comment composer that preserves a fictional existing

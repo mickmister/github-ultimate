@@ -51,4 +51,6 @@ export const snapshot: Snapshot = {
   ],
 };
 
-export const json = (value: unknown) => JSON.stringify(value, null, 2);
+// Keep JSON as data for Storybook's expandable tree/RAW controls. Serialize at
+// the renderer boundary, so the inspector and the rendered record cannot drift.
+export const json = <T extends object>(value: T): T => structuredClone(value);
