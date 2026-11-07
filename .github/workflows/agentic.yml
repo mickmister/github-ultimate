@@ -1,0 +1,25 @@
+name: Agentic workspace
+
+on:
+  workflow_dispatch:
+  issues:
+    types: [opened]
+  # Includes issue comments and PR conversation comments.
+  issue_comment:
+    types: [created]
+  # Route PR creation using the default-branch workflow definition.
+  pull_request_target:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  entry:
+    # Published forms are agent output, not requests; skip before starting a runner.
+    if: ${{ github.event_name != 'issue_comment' || !contains(github.event.comment.body, '<!-- github-ultimate:form:') }}
+    uses: mickmister/gh-agentic-workflows/.github/workflows/agentic-entry.yml@vk/46e5-vd-multi-instanc
+    secrets:
+      AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
+      AGENT_APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      NUGS_STORAGE_URL: ${{ secrets.NUGS_STORAGE_URL }}
