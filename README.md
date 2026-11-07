@@ -118,6 +118,8 @@ CI runs type checks, protocol/publisher tests, packaged Chrome tests, mobile Web
 
 Pull-request and manual verification runs do not publish prereleases. Failed verification does not publish a release. Publishing starts as a draft and becomes public after both assets upload successfully. Pushing a matching `v<package version>` tag publishes the verified artifact as a stable GitHub Release. CI uses its own repository-scoped release token; no deployment secret is required.
 
+Both branch prereleases and tagged releases put **Download Chrome extension (ZIP)** and **SHA-256 checksum** links at the top of the release description. Links target that exact release tag and its verified uploaded filenames, so older releases continue to download their own builds.
+
 ## Scope and research
 
 The first release focuses on the Chrome PR view. Safari iOS compatibility/mobile code is implemented; Xcode packaging and signed real-device acceptance remain pending. Gas City execution handlers, model/session infrastructure, account-wide workflow monitoring, Notifications integration and Monaco remain planned follow-on work.

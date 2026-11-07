@@ -1,8 +1,7 @@
-import { createHash } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gh, type Gh, type Environment } from './publish-form.ts';
+import { downloadLinks, releaseArtifact } from './release-assets.ts';
 
 export function prereleaseMetadata(env: Environment) {
   const repository = env.GITHUB_REPOSITORY ?? '';
@@ -30,13 +29,8 @@ export function prereleaseMetadata(env: Environment) {
 
 export function publishPrerelease(env: Environment, run: Gh = gh, directory = 'release'): string {
   const meta = prereleaseMetadata(env);
-  const names = readdirSync(directory);
-  const archives = names.filter(name => /^github-ultimate-chrome-[\d.]+\.zip$/.test(name));
-  if (archives.length !== 1 || names.length !== 2 || !names.includes(`${archives[0]}.sha256`)) throw new Error('Expected exactly one CI-built extension ZIP and its checksum.');
-  const archive = archives[0];
-  const assets = [resolve(directory, archive), resolve(directory, `${archive}.sha256`)];
-  const checksum = createHash('sha256').update(readFileSync(assets[0])).digest('hex');
-  if (readFileSync(assets[1], 'utf8') !== `${checksum}  ${archive}\n`) throw new Error('CI artifact checksum does not match the extension ZIP.');
+  const { archive, assets } = releaseArtifact(directory);
+  const notes = `${downloadLinks(meta.repository, meta.tag, archive)}\n\n${meta.notes}`;
 
   let existing: { targetCommitish?: string; isPrerelease?: boolean } | undefined;
   try {
@@ -46,11 +40,11 @@ export function publishPrerelease(env: Environment, run: Gh = gh, directory = 'r
     if (!/release not found|HTTP 404/i.test(String(error))) throw error;
   }
   if (existing && (existing.targetCommitish !== meta.sha || !existing.isPrerelease)) throw new Error('Existing release does not match this prerelease run and commit.');
-  if (!existing) run(['release', 'create', meta.tag, '--repo', meta.repository, '--target', meta.sha, '--title', meta.title, '--notes', meta.notes, '--draft', '--prerelease', '--latest=false']);
+  if (!existing) run(['release', 'create', meta.tag, '--repo', meta.repository, '--target', meta.sha, '--title', meta.title, '--notes', notes, '--draft', '--prerelease', '--latest=false']);
   // Keep new releases in draft until both tested assets have uploaded. A failed
   // upload can be retried against the same draft/tag on a workflow rerun.
   run(['release', 'upload', meta.tag, ...assets, '--repo', meta.repository, '--clobber']);
-  run(['release', 'edit', meta.tag, '--repo', meta.repository, '--title', meta.title, '--notes', meta.notes, '--draft=false', '--prerelease', '--latest=false']);
+  run(['release', 'edit', meta.tag, '--repo', meta.repository, '--title', meta.title, '--notes', notes, '--draft=false', '--prerelease', '--latest=false']);
   return meta.url;
 }
 

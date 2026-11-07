@@ -59,15 +59,20 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: chrome-extension
           path: release
+      - name: Generate release notes with direct asset links
+        run: node --experimental-strip-types cli/release-notes.ts > "$RUNNER_TEMP/github-ultimate-release-notes.md"
       - name: Publish CI-built Chrome package
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        run: gh release create "$TAG" release/* --verify-tag --title "GitHub Ultimate $TAG" --notes-file docs/release-notes.md
+        run: gh release create "$TAG" release/* --verify-tag --title "GitHub Ultimate $TAG" --notes-file "$RUNNER_TEMP/github-ultimate-release-notes.md"
   prerelease:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && !github.event.deleted
     needs: verify

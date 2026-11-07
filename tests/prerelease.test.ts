@@ -4,12 +4,13 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { prereleaseMetadata, publishPrerelease } from '../cli/prerelease';
+import { stableReleaseNotes } from '../cli/release-notes';
 
 const env = { GITHUB_EVENT_NAME: 'push', GITHUB_REF: 'refs/heads/vk/test', GITHUB_REF_NAME: 'vk/test', GITHUB_REPOSITORY: 'owner/repo', GITHUB_SHA: 'a'.repeat(40), GITHUB_RUN_ID: '123' };
 const temporary: string[] = [];
-function artifact() {
+function artifact(version = '0.1.1') {
   const path = mkdtempSync(join(tmpdir(), 'github-ultimate-prerelease-')); temporary.push(path);
-  const name = 'github-ultimate-chrome-0.1.1.zip';
+  const name = `github-ultimate-chrome-${version}.zip`;
   const bytes = Buffer.from('CI artifact fixture');
   writeFileSync(join(path, name), bytes);
   writeFileSync(join(path, `${name}.sha256`), `${createHash('sha256').update(bytes).digest('hex')}  ${name}\n`);
@@ -34,6 +35,11 @@ describe('continuous prerelease publishing', () => {
     expect(create[create.indexOf('--target') + 1]).toBe(env.GITHUB_SHA);
     expect(run.mock.calls[2][0]).toContain(join(path, 'github-ultimate-chrome-0.1.1.zip.sha256'));
     expect(run.mock.calls[3][0]).toContain('--draft=false');
+    for (const args of [create, run.mock.calls[3][0]]) {
+      const notes = args[args.indexOf('--notes') + 1];
+      expect(notes).toContain('[Download Chrome extension (ZIP)](https://github.com/owner/repo/releases/download/continuous-vk-test-123/github-ultimate-chrome-0.1.1.zip)');
+      expect(notes).toContain('[SHA-256 checksum](https://github.com/owner/repo/releases/download/continuous-vk-test-123/github-ultimate-chrome-0.1.1.zip.sha256)');
+    }
   });
   it('repairs an interrupted draft or existing prerelease without creating another release', () => {
     const path = artifact();
@@ -41,6 +47,8 @@ describe('continuous prerelease publishing', () => {
     publishPrerelease(env, run, path);
     expect(run.mock.calls.map(([args]) => args[1])).toEqual(['view', 'upload', 'edit']);
     expect(run.mock.calls[1][0]).toContain('--clobber');
+    const edit = run.mock.calls[2][0];
+    expect(edit[edit.indexOf('--notes') + 1]).toContain('/releases/download/continuous-vk-test-123/github-ultimate-chrome-0.1.1.zip)');
   });
   it('leaves a new release unpublished when asset upload fails', () => {
     const path = artifact();
@@ -67,5 +75,26 @@ describe('continuous prerelease publishing', () => {
     const run = vi.fn(() => { throw new Error('HTTP 403: forbidden'); });
     expect(() => publishPrerelease(env, run, artifact())).toThrow('HTTP 403');
     expect(run).toHaveBeenCalledTimes(1);
+  });
+  it('links the actual uploaded version instead of assuming the current package version', () => {
+    const run = vi.fn((args: string[]) => { if (args[1] === 'view') throw new Error('HTTP 404'); return ''; });
+    publishPrerelease(env, run, artifact('4.5.6'));
+    const edit = run.mock.calls.at(-1)![0];
+    expect(edit[edit.indexOf('--notes') + 1]).toContain('/releases/download/continuous-vk-test-123/github-ultimate-chrome-4.5.6.zip)');
+    expect(run.mock.calls[2][0].some(arg => arg.endsWith('/github-ultimate-chrome-4.5.6.zip'))).toBe(true);
+  });
+  it('prepends tag-specific download links to stable release notes', () => {
+    const notes = stableReleaseNotes({ ...env, GITHUB_REF: 'refs/tags/v4.5.6', GITHUB_REF_NAME: 'v4.5.6' }, artifact('4.5.6'));
+    expect(notes).toMatch(/^## Download/);
+    expect(notes).toContain('[Download Chrome extension (ZIP)](https://github.com/owner/repo/releases/download/v4.5.6/github-ultimate-chrome-4.5.6.zip)');
+    expect(notes).toContain('[SHA-256 checksum](https://github.com/owner/repo/releases/download/v4.5.6/github-ultimate-chrome-4.5.6.zip.sha256)');
+    expect(notes).toContain('Load unpacked');
+  });
+  it('does not generate stable download links for a mismatched tag or corrupt artifact', () => {
+    const path = artifact();
+    expect(() => stableReleaseNotes(env, path)).toThrow('version tag');
+    expect(() => stableReleaseNotes({ ...env, GITHUB_REF: 'refs/tags/v4.5.6', GITHUB_REF_NAME: 'v4.5.6' }, path)).toThrow('artifact version');
+    writeFileSync(join(path, 'github-ultimate-chrome-0.1.1.zip'), 'corrupt');
+    expect(() => stableReleaseNotes({ ...env, GITHUB_REF: 'refs/tags/v0.1.1', GITHUB_REF_NAME: 'v0.1.1' }, path)).toThrow('checksum');
   });
 });

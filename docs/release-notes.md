@@ -1,6 +1,6 @@
-## Chrome PR workspace — v0.1.1
+## Chrome PR workspace
 
-Download `github-ultimate-chrome-0.1.1.zip`, extract it, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the extracted folder containing `manifest.json`.
+Download the Chrome extension ZIP linked above, extract it, open `chrome://extensions`, enable **Developer mode**, choose **Load unpacked**, and select the extracted folder containing `manifest.json`.
 
 The patch release accepts actual dotted bead IDs (for example `task-h1i.29`) and provider session references while keeping question/answer-field identifiers strict.
 
