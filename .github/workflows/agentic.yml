@@ -1,0 +1,17 @@
+name: Agentic workspace
+
+on:
+  issue_comment:
+    types: [created]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  entry:
+    uses: mickmister/gh-agentic-workflows/.github/workflows/agentic-entry.yml@vk/46e5-vd-multi-instanc
+    secrets:
+      AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
+      AGENT_APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      NUGS_STORAGE_URL: ${{ secrets.NUGS_STORAGE_URL }}
