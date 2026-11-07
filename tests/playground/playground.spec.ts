@@ -78,6 +78,42 @@ test('wizard supports browsing, notes, zen and explicit unanswered questions', a
   await expect(page.getByRole('textbox', { name: 'Local GitHub comment editor' })).toHaveValue(/Submitted answers · GitHub Ultimate/);
 });
 
+test('wizard scrolls to each question and uses a square compact header while stuck, inline and in zen', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Question wizard/ }).click();
+  const header = page.locator('#renderer .wizard-header');
+  const index = header.getByRole('navigation', { name: 'Form questions' });
+  const title = header.locator('.wizard-title');
+  await expect(header).toHaveCSS('border-top-left-radius', '0px');
+  await expect(header).toHaveCSS('border-bottom-left-radius', '0px');
+  for (const zen of [false, true]) {
+    if (zen) await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
+    await page.locator('#renderer .wizard-anchor').evaluate(node => node.scrollIntoView({ block: 'start' }));
+    await expect(index).toBeVisible();
+    await header.evaluate(node => {
+      // Keep enough content below the viewport to exercise actual sticky scrolling.
+      (node.parentElement!.querySelector('fieldset:not([hidden])') as HTMLElement).style.minHeight = '1800px';
+      const scroller = node.closest('.zen-body');
+      if (scroller) scroller.scrollBy(0, 300); else window.scrollBy(0, 300);
+    });
+    await expect(index).toBeHidden();
+    await expect(title).toBeVisible();
+    await expect(title).toHaveText('What kind of change should we make?');
+    await expect(header.getByText('Question 1 of 3', { exact: true })).toBeVisible();
+    await header.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(index).toBeVisible();
+    await expect(title).toBeHidden();
+    await expect(page.getByRole('textbox', { name: 'What context matters?', exact: true })).toBeInViewport();
+    const offset = await header.evaluate(node => {
+      const scroller = node.closest('.zen-body');
+      return node.getBoundingClientRect().top - (scroller ? scroller.getBoundingClientRect().top + parseFloat(getComputedStyle(scroller).paddingTop) : 0);
+    });
+    expect(Math.abs(offset)).toBeLessThanOrEqual(2);
+    await index.getByRole('button', { name: /^1\./ }).click();
+    await expect(header.getByText('Question 1 of 3', { exact: true })).toBeVisible();
+  }
+});
+
 test('submitted story starts collapsed and permits a distinct new response', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Submitted form/ }).click();
