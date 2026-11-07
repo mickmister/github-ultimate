@@ -131,6 +131,9 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   if (form.invalidatedAt) { editor.append(el('p', `This form was superseded. ${form.invalidatedReason ?? ''}`, 'notice')); return controller; }
   const values: Answers = {};
   const htmlForm = el('form'); htmlForm.noValidate = true; editor.append(htmlForm);
+  const questionSection = el('section', undefined, 'questions-section'); questionSection.setAttribute('aria-label', 'Questions');
+  const additionalNotes = el('section', undefined, 'additional-notes-section'); additionalNotes.setAttribute('aria-label', 'Additional notes');
+  htmlForm.append(questionSection, additionalNotes);
   const status = el('p', '', 'draft-error error'); status.setAttribute('role', 'alert');
   const errors = el('div', undefined, 'error'); errors.setAttribute('role', 'alert');
   const key = `draft:${source.repository}:${source.number}:${source.comment_id}:${form.id}:${source.revision}`;
@@ -186,11 +189,12 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     }
     if (q.required) fieldset.append(el('small', 'Answer requested · you may skip if it no longer applies', 'muted'));
     if (q.id !== 'additional_notes') fieldset.append(notes(`Add note for ${q.title}`, `${q.id}_more_info`, values));
-    htmlForm.append(fieldset);
+    (q.id === 'additional_notes' ? additionalNotes : questionSection).append(fieldset);
   }
   if (!form.questions.some(q => q.id === 'additional_notes')) {
-    const label = el('label', 'Additional notes'); const input = el('textarea'); input.rows = 4; input.name = 'additional_notes'; input.maxLength = 16000;
-    input.addEventListener('input', () => { values.additional_notes = input.value; }); controls.set('additional_notes', input); label.append(input); htmlForm.append(label);
+    const fieldset = el('fieldset'); fieldset.append(el('legend', 'Additional notes'));
+    const input = el('textarea'); input.rows = 4; input.name = 'additional_notes'; input.maxLength = 16000; input.setAttribute('aria-label', 'Additional notes');
+    input.addEventListener('input', () => { values.additional_notes = input.value; }); controls.set('additional_notes', input); fieldset.append(input); additionalNotes.append(fieldset);
   }
   const next = el('label', 'Next instruction (optional)'); const nextInput = el('textarea'); nextInput.rows = 3; nextInput.name = 'next_instruction'; nextInput.maxLength = 8000;
   nextInput.addEventListener('input', () => { values.next_instruction = nextInput.value; }); controls.set('next_instruction', nextInput);
@@ -229,6 +233,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   }, 'primary'), button('Copy comment', () => { void copyText(previewText.value).then(() => { previewStatus.textContent = 'Copied.'; }).catch(e => { previewStatus.textContent = e.message; }); }), button('Close preview', () => { preview.hidden = true; viewChanged(); }));
   preview.append(previewActions); editor.append(preview);
   const questions = form.questions.filter(q => q.id !== 'additional_notes');
+  questionSection.hidden = questions.length === 0;
   const wizard = questions.length > 1;
   const nav = el('nav', undefined, 'question-index'); nav.setAttribute('aria-label', 'Form questions');
   const progress = el('p', '', 'wizard-progress'); progress.setAttribute('aria-live', 'polite');
@@ -253,8 +258,8 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     questions.forEach((q, index) => { const b = button(`${index + 1}. ${q.title}`, () => goTo(index)); stepButtons.push(b); nav.append(b); });
     const b = button('Review answers', () => goTo(questions.length)); stepButtons.push(b); nav.append(b);
     for (const tab of stepButtons) tab.title = tab.textContent!;
-    headerSteps.append(nav, progress, navigationRow(true)); htmlForm.prepend(questionStart, headerSteps);
-    htmlForm.insertBefore(review, submissionControls); htmlForm.append(navigationRow());
+    headerSteps.append(nav, progress, navigationRow(true)); questionSection.prepend(questionStart, headerSteps);
+    questionSection.append(review, navigationRow());
   }
   function renderStep() {
     if (!wizard) return;
