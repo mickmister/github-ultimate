@@ -105,6 +105,11 @@ test('sticky pending prompt stays out of response preview and native submission 
   });
   await page.getByRole('button', { name: 'Comment', exact: true }).focus();
   await expect(page.getByRole('button', { name: 'Go to form', exact: true })).toBeHidden();
+  // The native Preview tab can hide its textarea while keeping a generated draft.
+  await page.getByRole('textbox', { name: 'GitHub comment', exact: true }).evaluate(node => { (node as HTMLElement).hidden = true; });
+  await page.getByRole('button', { name: 'Comment', exact: true }).focus();
+  await expect(page.getByRole('button', { name: 'Go to form', exact: true })).toBeHidden();
+  await page.locator('#new_comment_field').evaluate(node => { (node as HTMLElement).hidden = false; });
   await expect(page.getByRole('button', { name: 'View submitted answers' })).toHaveCount(0);
   // Cancel composition: close preview and clear the draft; pending is discoverable again.
   await page.getByRole('button', { name: 'Close preview', exact: true }).click();

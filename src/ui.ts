@@ -292,6 +292,10 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       for (const name of Object.keys(values)) delete values[name];
       for (const q of form.questions) if (q.type === 'choices') values[q.id] = Object.fromEntries(choiceOptions(form, q).map(c => [c.id, false]));
       for (const input of htmlForm.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) { if (input instanceof HTMLInputElement && input.type === 'checkbox') input.checked = false; else input.value = ''; }
+      for (const note of htmlForm.querySelectorAll<HTMLElement>('.notes')) {
+        note.querySelector('textarea')!.hidden = true;
+        const toggle = note.querySelector('button')!; toggle.setAttribute('aria-expanded', 'false'); toggle.classList.remove('has-note');
+      }
       step = 0; preview.hidden = true; renderStep(); save(); viewChanged();
     }), answers);
   };
@@ -310,6 +314,11 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     for (const input of htmlForm.querySelectorAll<HTMLTextAreaElement>('.notes textarea')) if (typeof saved[input.name] === 'string') {
       input.value = saved[input.name] as string; values[input.name] = input.value; input.hidden = !input.value;
       const toggle = input.parentElement!.querySelector('button')!; toggle.setAttribute('aria-expanded', String(!input.hidden)); toggle.classList.toggle('has-note', Boolean(input.value));
+    }
+    for (const q of form.questions) if (q.type === 'choices') for (const c of choiceOptions(form, q)) {
+      if (!isOtherChoice(c) || !(controls.get(`${q.id}:${c.id}`) as HTMLInputElement).checked) continue;
+      const input = htmlForm.querySelector<HTMLTextAreaElement>(`textarea[name="${q.id}_${c.id}_more_info"]`)!;
+      input.hidden = false; input.parentElement!.querySelector('button')!.setAttribute('aria-expanded', 'true');
     }
   }
   if (remember) void read<Record<string, unknown> | null>(key, null).then(saved => {
