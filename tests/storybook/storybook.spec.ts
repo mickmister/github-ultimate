@@ -4,7 +4,7 @@ test('every indexed story renders the shipping UI or its intentional native fall
   const index = await (await request.get('/index.json')).json();
   const entries = Object.values(index.entries) as { id: string; type: string }[];
   const stories = entries.filter(entry => entry.type === 'story');
-  expect(stories.length).toBeGreaterThanOrEqual(40);
+  expect(stories.length).toBeGreaterThanOrEqual(48);
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   for (const story of stories) {
     await page.goto(`/iframe.html?id=${story.id}&viewMode=story`);
@@ -29,10 +29,54 @@ test('Other, independent selections, preview, native draft and simulated history
   await page.getByRole('button', { name: 'Place in GitHub comment editor', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Local GitHub comment editor', exact: true })).toHaveValue(/^My existing native comment draft\.\n\n\/github-ultimate discuss/);
   await expect(page.getByRole('button', { name: 'View submitted answers', exact: true })).toHaveCount(0);
-  await page.getByRole('button', { name: 'Simulate posting locally', exact: true }).click();
+  await page.getByRole('button', { name: 'Comment', exact: true }).click();
   await page.getByRole('button', { name: 'View submitted answers', exact: true }).click();
   await expect(page.locator('.saved-answers')).toContainText('Combine the approaches.');
   await expect(page.getByRole('status').filter({ hasText: 'Nothing was sent to GitHub' })).toBeVisible();
+});
+
+test('mock GitHub includes a PR timeline, safe native preview, posted comments and workspace navigation', async ({ page }) => {
+  const outbound: string[] = [];
+  page.on('request', request => { if (request.url().startsWith('https://github.com/')) outbound.push(request.url()); });
+  await page.goto('/iframe.html?id=github-conversation--pull-request&viewMode=story');
+  await expect(page.getByRole('region', { name: 'Mock GitHub conversation' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Make workspace feedback easier to review #42', exact: true })).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Conversation navigation (visual fixture)' })).toContainText('Files changed');
+  await expect(page.locator('.gh-comment-card').filter({ has: page.locator('[data-story-renderer]') })).toContainText('github-ultimate[bot]');
+  await expect(page.getByRole('heading', { name: 'Plan the next change', exact: true })).toBeVisible();
+  await page.screenshot({ path: 'test-results/storybook/github-conversation.png', fullPage: true });
+  await page.getByRole('button', { name: 'Open GitHub Ultimate workspace', exact: true }).click();
+  const workspace = page.getByRole('complementary', { name: 'GitHub Ultimate PR workspace' });
+  await expect(workspace).toBeVisible();
+  await workspace.getByRole('button', { name: 'Needs input · Plan the next change', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Close zen', exact: true }).click();
+  const editor = page.getByRole('textbox', { name: 'Local GitHub comment editor', exact: true });
+  await editor.fill('An ordinary **local comment**. <img src=x onerror="window.mockPwned=1">');
+  await page.getByRole('tab', { name: 'Preview', exact: true }).click();
+  await expect(editor).toBeHidden();
+  await expect(page.locator('.gh-native-preview strong')).toHaveText('local comment');
+  await expect(page.locator('.gh-native-preview img')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Comment', exact: true }).click();
+  await expect(page.locator('.gh-posted-timeline')).toContainText('An ordinary local comment.');
+  await expect(page.getByRole('button', { name: 'View submitted answers', exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => (window as unknown as { mockPwned?: number }).mockPwned)).toBeUndefined();
+  expect(outbound).toEqual([]);
+});
+
+test('long conversation has a pending zen entry; issue and phone fixtures fit their context', async ({ page }) => {
+  await page.goto('/iframe.html?id=github-conversation--long-conversation&viewMode=story');
+  await page.evaluate(() => scrollTo(0, 0));
+  await page.getByRole('button', { name: 'Go to form', exact: true }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Close zen', exact: true }).click();
+  await page.goto('/iframe.html?id=github-conversation--issue&viewMode=story');
+  await expect(page.locator('.gh-thread-subtitle')).toContainText('opened this issue');
+  await expect(page.getByRole('navigation', { name: 'Conversation navigation (visual fixture)' })).not.toContainText('Files changed');
+  await page.goto('/iframe.html?id=github-conversation--mobile-dark&viewMode=story');
+  await expect(page.locator('.gh-mock')).toHaveAttribute('data-theme', 'dark');
+  await expect(page.locator('.gh-sidebar')).toBeHidden();
+  expect(await page.locator('.gh-mock').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
 });
 
 test('submitted history is read-only and a new response starts empty', async ({ page }) => {

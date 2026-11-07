@@ -1,8 +1,9 @@
 import { el, button, shadow, renderForm, renderSnapshot, renderResponse, type FormController } from '../src/ui';
 import { parseRecord, revisionOf, type Answers, type ResponseRecord } from '../src/protocol';
 import { response, source } from './fixtures';
+import { githubEnvironment, type GitHubOptions } from './github';
 
-export type StoryArgs = {
+export type StoryArgs = GitHubOptions & {
   source: string;
   theme: 'light' | 'dark';
   width: 'fluid' | 'phone' | 'sidebar';
@@ -10,7 +11,7 @@ export type StoryArgs = {
   seed?: Answers;
   storageFailure?: boolean;
 };
-export const baseArgs = { theme: 'light', width: 'fluid', stage: 'edit' } as const;
+export const baseArgs = { theme: 'light', width: 'fluid', stage: 'edit', layout: 'github', thread: 'pull', conversation: 'short' } as const;
 export const controls = {
   source: { control: 'text' },
   theme: { control: 'inline-radio', options: ['light', 'dark'] },
@@ -18,41 +19,49 @@ export const controls = {
   stage: { control: 'select', options: ['edit', 'question-two', 'review', 'preview', 'zen', 'submitted', 'history', 'new-response'] },
   seed: { control: 'object' },
   storageFailure: { control: 'boolean' },
+  layout: { control: 'inline-radio', options: ['github', 'isolated'] },
+  thread: { control: 'inline-radio', options: ['pull', 'issue'] },
+  conversation: { control: 'inline-radio', options: ['short', 'long'] },
+  workspaceOpen: { control: 'boolean' },
 } as const;
 
 let disposeCurrent: (() => void) | undefined;
 
 export function renderRecord(args: StoryArgs): HTMLElement {
   disposeCurrent?.();
-  const frame = el('section'); frame.setAttribute('aria-label', 'Story canvas');
-  frame.style.cssText = `max-width:${args.width === 'phone' ? '390px' : args.width === 'sidebar' ? '480px' : '960px'};margin:0 auto;padding:20px;background:${args.theme === 'dark' ? '#17121b' : '#fff'};color:${args.theme === 'dark' ? '#f0e8e5' : '#1f2328'};font:14px/1.6 system-ui;box-sizing:border-box;`;
-  const caption = el('p', 'Interactive fixture · shipping extension renderer · no GitHub requests or agent execution'); frame.append(caption);
+  const environment = githubEnvironment(args);
+  const { frame, recordBody, editor, receipt } = environment;
   const host = el('div'); host.dataset.theme = args.theme; host.dataset.storyRenderer = '';
-  frame.append(host); const root = shadow(host);
+  recordBody.append(host); const root = shadow(host);
   let disposed = false;
-  disposeCurrent = () => { disposed = true; host.dispatchEvent(new Event('gu-dispose')); };
-  const native = el('form'); native.setAttribute('aria-label', 'Local comment composer');
-  native.style.cssText = 'margin-top:24px;border-top:1px solid #888;padding-top:12px';
-  const label = el('label', 'Local GitHub comment editor (demo only)');
-  const editor = el('textarea'); editor.id = 'new_comment_field'; editor.name = 'comment[body]'; editor.rows = 8;
-  editor.setAttribute('aria-label', 'Local GitHub comment editor'); editor.value = 'My existing native comment draft.';
-  editor.style.cssText = 'display:block;width:100%;box-sizing:border-box;font:16px/1.5 monospace';
-  label.append(editor); native.append(label);
-  const receipt = el('p'); receipt.setAttribute('role', 'status');
+  const postedHosts: HTMLElement[] = [];
+  disposeCurrent = () => {
+    disposed = true; host.dispatchEvent(new Event('gu-dispose')); environment.dispose();
+    for (const entry of postedHosts) entry.dispatchEvent(new Event('gu-dispose'));
+  };
   let controller: FormController | undefined;
   const posted: { record: ResponseRecord }[] = [];
-  native.append(button('Simulate posting locally', () => {
+  function appendResponse(record: ResponseRecord) {
+    const responseHost = el('div'); responseHost.dataset.theme = args.theme;
+    shadow(responseHost).append(renderResponse(record)); postedHosts.push(responseHost);
+    environment.appendPosted(responseHost);
+  }
+  environment.setPost(() => {
     try {
+      if (!editor.value.trim()) throw new Error('Write a comment before posting.');
       const match = /```github-response\s*\n([\s\S]*?)\n```/.exec(editor.value);
-      if (!match) throw new Error('Generate a response and place it in this editor first.');
+      if (!match) {
+        environment.appendNativePosted(editor.value); environment.resetEditor();
+        receipt.textContent = 'Simulated ordinary comment. Nothing was sent to GitHub.'; return;
+      }
       const record = parseRecord(match[1]);
       if (!('kind' in record) || record.kind !== 'response' || record.source.revision !== revision || record.form_id !== formId) throw new Error('The response does not match this story form.');
       posted.push({ record }); controller?.setResponses(posted);
+      appendResponse(record); environment.setPosted(posted.length);
       receipt.textContent = `Simulated posted response ${posted.length}. Nothing was sent to GitHub.`;
-      editor.value = '';
+      environment.resetEditor();
     } catch (error) { receipt.textContent = (error as Error).message; }
-  }), receipt);
-  native.addEventListener('submit', event => event.preventDefault());
+  });
   let revision = '', formId = '';
   void (async () => {
     try {
@@ -62,7 +71,7 @@ export function renderRecord(args: StoryArgs): HTMLElement {
       if ('format' in data) {
         formId = data.id;
         controller = renderForm(root, data, { ...source, revision }, () => !disposed, Boolean(args.storageFailure));
-        if (!data.invalidatedAt) frame.append(native);
+        environment.setForm(data.title, Boolean(data.invalidatedAt), controller.openZen, controller.isComposingResponse);
         for (const input of root.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) {
           const value = args.seed?.[input.name];
           if (input instanceof HTMLInputElement && input.type === 'checkbox') {
@@ -79,6 +88,8 @@ export function renderRecord(args: StoryArgs): HTMLElement {
           posted.push({ record: entry });
           if (args.stage === 'history') posted.push({ record: { ...response(args.seed, true, 2), source: { ...source, revision }, form_id: data.id } });
           controller.setResponses(posted);
+          for (const entry of posted) appendResponse(entry.record);
+          environment.setPosted(posted.length);
           if (args.stage === 'new-response') click('Submit another response');
         }
         if (args.stage === 'question-two') root.querySelectorAll<HTMLButtonElement>('.question-index button')[1]?.click();
@@ -87,6 +98,8 @@ export function renderRecord(args: StoryArgs): HTMLElement {
         if (args.stage === 'zen') controller.openZen();
       } else if (data.kind === 'workflow') root.append(renderSnapshot(data, source.repository));
       else root.append(renderResponse(data));
+      const original = el('pre', args.source, 'gh-source-data'); original.hidden = true; recordBody.append(original);
+      root.append(button('Show / hide original record', () => { original.hidden = !original.hidden; }));
     } catch (error) {
       if (disposed) return;
       const message = el('p', `Invalid record: ${(error as Error).message}`, 'error'); message.setAttribute('role', 'alert');

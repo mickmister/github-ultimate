@@ -1,0 +1,81 @@
+.gh-mock, .gh-isolated {
+  --gh-bg: #fff; --gh-subtle: #f6f8fa; --gh-fg: #1f2328; --gh-muted: #59636e;
+  --gh-border: #d1d9e0; --gh-link: #0969da; --gh-hover: #eef1f4;
+  background: var(--gh-bg); color: var(--gh-fg); font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-height: 100vh; margin: 0 auto; width: 100%; max-width: 1440px; container: github-preview / inline-size;
+}
+.gh-mock[data-theme=dark], .gh-isolated[data-theme=dark] { --gh-bg: #0d1117; --gh-subtle: #161b22; --gh-fg: #e6edf3; --gh-muted: #8b949e; --gh-border: #30363d; --gh-link: #58a6ff; --gh-hover: #21262d; color-scheme: dark; }
+.gh-mock[data-width=phone], .gh-isolated[data-width=phone] { max-width: 390px; }
+.gh-mock[data-width=sidebar], .gh-isolated[data-width=sidebar] { max-width: 480px; }
+.gh-mock *, .gh-isolated * { box-sizing: border-box; }
+.gh-mock [hidden], .gh-isolated [hidden] { display: none !important; }
+.gh-mock h1, .gh-mock h2, .gh-mock h3, .gh-mock p { margin: 0; }
+.gh-demo-banner { padding: 7px 20px; font-size: 12px; color: var(--gh-muted); background: var(--gh-subtle); border-bottom: 1px solid var(--gh-border); }
+.gh-global-header { display: flex; gap: 18px; align-items: center; padding: 16px 24px; background: #24292f; color: #fff; }
+.gh-logo { border: 2px solid currentColor; border-radius: 50%; width: 32px; height: 32px; display: grid; place-items: center; font-size: 11px; font-weight: 700; flex-shrink: 0; }
+.gh-global-links { font-size: 13px; white-space: pre; }
+.gh-search { border: 1px solid #57606a; border-radius: 6px; color: #c9d1d9; padding: 6px 12px; margin-left: auto; min-width: 200px; }
+.gh-avatar { display: grid; place-items: center; width: 38px; height: 38px; flex-shrink: 0; border-radius: 50%; background: #8250df; color: #fff; font-weight: 700; }
+.gh-self { width: 30px; height: 30px; background: #1f6feb; }
+.gh-repo-header { background: var(--gh-subtle); border-bottom: 1px solid var(--gh-border); }
+.gh-repo-name { display: flex; align-items: center; gap: 10px; padding: 20px 32px 12px; font-size: 20px; color: var(--gh-link); }
+.gh-pill { display: inline-block; padding: 1px 7px; border: 1px solid var(--gh-border); border-radius: 12px; color: var(--gh-muted); font-size: 12px; font-weight: 500; white-space: nowrap; }
+.gh-repo-tabs, .gh-thread-tabs { display: flex; gap: 10px; overflow-x: auto; scrollbar-width: thin; }
+.gh-repo-tabs { padding: 0 24px; }
+.gh-repo-tabs span, .gh-thread-tabs span { display: inline-block; padding: 12px 10px; border-bottom: 2px solid transparent; white-space: nowrap; }
+.gh-repo-tabs .selected, .gh-thread-tabs .selected { border-bottom-color: #fd8c73; font-weight: 600; }
+.gh-main { padding: 28px 32px 100px; }
+.gh-thread-title { font-size: 28px; line-height: 1.3; font-weight: 400; overflow-wrap: anywhere; }
+.gh-muted { color: var(--gh-muted); }
+.gh-thread-subtitle { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 12px 0 20px; color: var(--gh-muted); }
+.gh-open { background: #1f883d; color: #fff; border-radius: 20px; padding: 5px 12px; font-weight: 600; }
+.gh-thread-tabs { border-bottom: 1px solid var(--gh-border); margin-bottom: 24px; }
+.gh-grid { display: grid; grid-template-columns: minmax(0, 1fr) 230px; gap: 32px; }
+.gh-timeline { min-width: 0; position: relative; }
+.gh-comment-row { position: relative; display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; min-width: 0; }
+.gh-comment-row::before { content: ""; position: absolute; top: 38px; bottom: -24px; left: 19px; width: 2px; background: var(--gh-border); }
+.gh-comment-card { position: relative; flex: 1; min-width: 0; border: 1px solid var(--gh-border); border-radius: 6px; background: var(--gh-bg); }
+.gh-comment-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; border-bottom: 1px solid var(--gh-border); background: var(--gh-subtle); border-radius: 6px 6px 0 0; font-size: 12px; }
+.gh-comment-header strong { font-size: 14px; }
+.gh-comment-header .gh-pill { margin-left: auto; }
+.gh-comment-body { padding: 16px; min-width: 0; overflow-wrap: anywhere; }
+.gh-comment-footer { padding: 0 16px 12px; color: var(--gh-muted); font-size: 12px; }
+.gh-timeline-event { padding: 4px 0 24px 56px; color: var(--gh-muted); font-size: 13px; }
+.gh-markdown { font-size: 14px; line-height: 1.6; }
+.gh-markdown p, .gh-markdown ul, .gh-markdown ol { margin: 0 0 12px; }
+.gh-markdown h2, .gh-markdown h3 { font-size: 18px; margin: 0 0 12px; }
+.gh-markdown a { color: var(--gh-link); }
+.gh-markdown pre { overflow: auto; padding: 12px; background: var(--gh-subtle); border-radius: 6px; }
+.gh-markdown code { font-size: 12px; }
+.gh-markdown blockquote { border-left: 3px solid var(--gh-border); padding-left: 14px; color: var(--gh-muted); margin-left: 0; }
+.gh-sidebar { color: var(--gh-muted); font-size: 12px; }
+.gh-sidebar section { padding: 0 0 18px; margin-bottom: 18px; border-bottom: 1px solid var(--gh-border); }
+.gh-sidebar h3 { color: var(--gh-fg); font-size: 12px; margin-bottom: 8px; }
+.gh-composer { margin: 24px 0 0 54px; border-top: 1px solid var(--gh-border); padding-top: 20px; }
+.gh-composer h2 { font-size: 18px; margin: 0 0 12px; }
+.gh-editor-tabs { padding: 8px 8px 0; border: 1px solid var(--gh-border); border-bottom: 0; border-radius: 6px 6px 0 0; background: var(--gh-subtle); }
+.gh-editor-tabs button { padding: 8px 14px; font: inherit; color: var(--gh-muted); border: 1px solid transparent; border-radius: 6px 6px 0 0; background: transparent; cursor: pointer; }
+.gh-editor-tabs button[aria-selected=true] { border-color: var(--gh-border); border-bottom-color: var(--gh-bg); background: var(--gh-bg); color: var(--gh-fg); }
+.gh-composer textarea { display: block; width: 100%; min-height: 180px; resize: vertical; padding: 14px; border: 1px solid var(--gh-border); background: var(--gh-subtle); color: var(--gh-fg); border-radius: 0 0 6px 6px; font: 14px/1.6 ui-monospace, monospace; }
+.gh-composer textarea:focus { outline: 2px solid var(--gh-link); outline-offset: -2px; background: var(--gh-bg); }
+.gh-native-preview { padding: 16px; min-height: 180px; border: 1px solid var(--gh-border); border-radius: 0 0 6px 6px; }
+.gh-editor-footer { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-top: 10px; font-size: 12px; }
+.gh-comment-submit { font: inherit; font-weight: 600; background: #1f883d; color: #fff; border: 1px solid #1b7f37; border-radius: 6px; padding: 7px 16px; cursor: pointer; }
+.gh-post-receipt { margin-top: 12px !important; font-size: 12px; color: var(--gh-muted); }
+.gh-post-receipt:empty { display: none; }
+.gh-source-data { max-height: 360px; overflow: auto; padding: 12px; background: var(--gh-subtle); font: 12px/1.5 ui-monospace, monospace; }
+.gh-isolated { min-height: auto; padding: 20px; max-width: 960px; }
+.gh-isolated .gh-main { padding: 20px 0; }
+.gh-isolated .gh-grid { display: block; }
+.gh-isolated .gh-composer { margin-left: 0; }
+@container github-preview (max-width: 900px) { .gh-global-links { display: none; } .gh-grid { grid-template-columns: minmax(0, 1fr); } .gh-sidebar { display: none; } }
+@container github-preview (max-width: 600px) {
+  .gh-global-header { padding: 12px; gap: 12px; } .gh-search { display: none; } .gh-self { margin-left: auto; }
+  .gh-repo-name { padding: 16px 12px 8px; font-size: 17px; } .gh-repo-tabs { padding: 0 4px; }
+  .gh-main { padding: 20px 12px 100px; } .gh-thread-title { font-size: 23px; }
+  .gh-comment-row { gap: 0; } .gh-comment-row > .gh-avatar, .gh-comment-row::before { display: none; }
+  .gh-comment-body { padding: 12px; } .gh-comment-header { padding: 10px; }
+  .gh-timeline-event { padding-left: 0; } .gh-composer { margin-left: 0; }
+  .gh-composer textarea { font-size: 16px; } .gh-editor-footer { flex-wrap: wrap; }
+  .gh-demo-banner { padding: 7px 12px; }
+}

@@ -79,7 +79,15 @@ npm run storybook
 ```
 
 Open `http://127.0.0.1:6006`. Storybook uses the **shipping parser, Shadow DOM
-renderer and styles**, with 40 interactive stories:
+renderer and styles**, with 48 interactive stories. By default, records appear
+inside a **mock GitHub conversation**: repository/PR or issue header, timeline
+comments, metadata sidebar, and a native-looking Write/Preview comment editor.
+The surrounding GitHub UI is a visual fixture; form/zen and record rendering use
+production code. A styled workspace scaffold and offscreen pending-form control
+let you explore their placement in the conversation.
+
+- **GitHub conversation:** PR, response composition, posted response timeline,
+  issue, long thread, workspace panel, dark mobile and isolated renderer.
 
 - **Forms:** pending, multiple selections/automatic Other, seeded draft, second
   question, review with omissions, filled review, response preview, zen, phone,
@@ -93,14 +101,18 @@ renderer and styles**, with 40 interactive stories:
 - **Fallbacks:** unsupported fields/version, malformed JSON and unsafe Markdown.
 
 Use the theme, canvas width, stage, source and seed controls to explore variants.
+The `layout` control switches between the mock GitHub page and an isolated
+renderer; `thread`, `conversation` and `workspaceOpen` select context variants.
 Forms include a local comment composer that preserves a fictional existing
-draft. **Simulate posting locally** exercises submitted-answer history without
-making GitHub requests. Draft fixtures are seeded; normal stories do not use
+draft. **Preview** renders safe Markdown; **Comment** adds an ordinary comment
+or generated response to the local timeline and exercises submitted-answer
+history without making GitHub requests. Draft fixtures are seeded; normal stories do not use
 extension storage. The unavailable-storage story deliberately exercises the
 real save-failure message. This is a UI test environment, not an agent runner.
 
 `npm run storybook:build` creates `storybook-static/`. `npm run test:storybook`
-checks every story and exercises composition/history, phone/zen and inert
+checks every story and exercises composition/history, native preview/posting,
+workspace/pending navigation, phone/zen and inert
 fallbacks. Set `STORYBOOK_URL` to test a running preview instead of starting a
 local server. The managed preview uses the injected `PORT` and
 `STORYBOOK_PREVIEW=1`; it disables Vite HMR, so refresh after source edits.
