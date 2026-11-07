@@ -78,31 +78,38 @@ test('wizard supports browsing, notes, zen and explicit unanswered questions', a
   await expect(page.getByRole('textbox', { name: 'Local GitHub comment editor' })).toHaveValue(/Submitted answers · GitHub Ultimate/);
 });
 
-test('wizard scrolls to each question and uses a square compact header while stuck, inline and in zen', async ({ page }) => {
+test('wizard keeps readable active question tabs before and after scrolling, inline and in zen', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Question wizard/ }).click();
   const header = page.locator('#renderer .wizard-header');
   const index = header.getByRole('navigation', { name: 'Form questions' });
-  const title = header.locator('.wizard-title');
+  const active = index.locator('button[aria-current=step]');
   await expect(header).toHaveCSS('border-top-left-radius', '0px');
   await expect(header).toHaveCSS('border-bottom-left-radius', '0px');
   for (const zen of [false, true]) {
     if (zen) await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
     await page.locator('#renderer .wizard-anchor').evaluate(node => node.scrollIntoView({ block: 'start' }));
     await expect(index).toBeVisible();
+    await expect(active).toHaveText('1. What kind of change should we make?');
+    const tabSize = await active.boundingBox();
+    const activeFont = await active.evaluate(node => parseFloat(getComputedStyle(node).fontSize));
+    const inactiveFont = await index.locator('button[aria-current=false]').first().evaluate(node => parseFloat(getComputedStyle(node).fontSize));
+    expect(activeFont).toBeGreaterThan(inactiveFont);
+    expect(await active.evaluate(node => node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight)).toBe(true);
     await header.evaluate(node => {
       // Keep enough content below the viewport to exercise actual sticky scrolling.
       (node.parentElement!.querySelector('fieldset:not([hidden])') as HTMLElement).style.minHeight = '1800px';
       const scroller = node.closest('.zen-body');
       if (scroller) scroller.scrollBy(0, 300); else window.scrollBy(0, 300);
     });
-    await expect(index).toBeHidden();
-    await expect(title).toBeVisible();
-    await expect(title).toHaveText('What kind of change should we make?');
+    await expect(index).toBeVisible();
+    await expect(active).toBeInViewport();
+    expect((await active.boundingBox())!.height).toBe(tabSize!.height);
+    expect((await active.boundingBox())!.width).toBe(tabSize!.width);
     await expect(header.getByText('Question 1 of 3', { exact: true })).toBeVisible();
     await header.getByRole('button', { name: 'Next', exact: true }).click();
     await expect(index).toBeVisible();
-    await expect(title).toBeHidden();
+    await expect(active).toHaveText('2. What context matters?');
     await expect(page.getByRole('textbox', { name: 'What context matters?', exact: true })).toBeInViewport();
     const offset = await header.evaluate(node => {
       const scroller = node.closest('.zen-body');
@@ -112,6 +119,18 @@ test('wizard scrolls to each question and uses a square compact header while stu
     await index.getByRole('button', { name: /^1\./ }).click();
     await expect(header.getByText('Question 1 of 3', { exact: true })).toBeVisible();
   }
+});
+
+test('long active question tabs stay fully readable on narrow screens', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await page.getByRole('button', { name: /Question wizard/ }).click();
+  const active = page.locator('#renderer .question-index button[aria-current=step]');
+  await active.evaluate(node => { node.textContent = '1. A long question title that should wrap across multiple lines without being clipped or truncated, even on a narrow phone screen?'; });
+  await expect(active).toHaveCSS('white-space', 'normal');
+  expect(await active.evaluate(node => node.scrollWidth <= node.clientWidth && node.scrollHeight <= node.clientHeight)).toBe(true);
+  const index = page.locator('#renderer .question-index');
+  expect(await index.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
 test('submitted story starts collapsed and permits a distinct new response', async ({ page }) => {

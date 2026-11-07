@@ -231,9 +231,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   const navigation: Array<{ previous: HTMLButtonElement; next: HTMLButtonElement }> = [];
   function goTo(index: number) {
     step = Math.max(0, Math.min(index, questions.length)); renderStep(); save(); viewChanged();
-    headerSteps.classList.remove('is-stuck');
     questionStart.scrollIntoView({ behavior: 'instant', block: 'start' });
-    updateStickyHeader();
   }
   function navigationRow() {
     const row = el('div', undefined, 'wizard-navigation');
@@ -243,32 +241,18 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   }
   const headerSteps = el('div', undefined, 'wizard-header');
   const questionStart = el('div', undefined, 'wizard-anchor'); questionStart.setAttribute('aria-hidden', 'true');
-  const stickyTitle = el('h2', '', 'wizard-title');
-  let stickyFrame = 0;
-  function updateStickyHeader() {
-    const top = dialog.open ? zenBody.getBoundingClientRect().top + zenBody.clientTop : 0;
-    const stuck = getComputedStyle(headerSteps).position === 'sticky' && questionStart.getBoundingClientRect().top < top - 1;
-    headerSteps.classList.toggle('is-stuck', stuck);
-  }
-  function scheduleStickyHeader() {
-    if (!stickyFrame) stickyFrame = requestAnimationFrame(() => { stickyFrame = 0; updateStickyHeader(); });
-  }
   if (wizard) {
     questions.forEach((q, index) => { const b = button(`${index + 1}. ${q.title}`, () => goTo(index)); stepButtons.push(b); nav.append(b); });
     const b = button('Review answers', () => goTo(questions.length)); stepButtons.push(b); nav.append(b);
-    headerSteps.append(nav, stickyTitle, progress, navigationRow()); htmlForm.prepend(questionStart, headerSteps);
+    for (const tab of stepButtons) tab.title = tab.textContent!;
+    headerSteps.append(nav, progress, navigationRow()); htmlForm.prepend(questionStart, headerSteps);
     htmlForm.insertBefore(review, submissionControls); htmlForm.append(navigationRow());
-    window.addEventListener('scroll', scheduleStickyHeader, true);
-    zenBody.addEventListener('scroll', scheduleStickyHeader);
-    window.addEventListener('resize', scheduleStickyHeader);
-    window.addEventListener('gu-view-change', scheduleStickyHeader);
   }
   function renderStep() {
     if (!wizard) return;
     questions.forEach((q, index) => { fields.get(q.id)!.hidden = index !== step; });
     stepButtons.forEach((b, index) => b.setAttribute('aria-current', index === step ? 'step' : 'false'));
     const reviewing = step === questions.length;
-    stickyTitle.textContent = reviewing ? 'Review answers' : questions[step]!.title;
     progress.textContent = reviewing ? `Review · ${questions.length} questions` : `Question ${step + 1} of ${questions.length}`;
     submissionControls.hidden = !reviewing; review.hidden = !reviewing; preview.hidden = true;
     for (const pair of navigation) { pair.previous.disabled = step === 0; pair.next.hidden = reviewing; pair.next.textContent = step === questions.length - 1 ? 'Review answers' : 'Next'; }
@@ -348,11 +332,6 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     renderStep();
   });
   controller.dispose = () => {
-    window.removeEventListener('scroll', scheduleStickyHeader, true);
-    zenBody.removeEventListener('scroll', scheduleStickyHeader);
-    window.removeEventListener('resize', scheduleStickyHeader);
-    window.removeEventListener('gu-view-change', scheduleStickyHeader);
-    cancelAnimationFrame(stickyFrame);
     closeZen();
     draft.dispose();
   };
