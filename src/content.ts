@@ -75,8 +75,12 @@ function updatePendingNavigation() {
   // person review, paste, preview and click Comment without a sticky prompt.
   const active = document.activeElement;
   const editingNative = [...document.querySelectorAll<HTMLTextAreaElement>('#new_comment_field, textarea[name="comment[body]"], textarea[placeholder="Leave a comment"]')]
-    .some(input => !input.closest('.js-comment-update') && input.getClientRects().length > 0 &&
-      (input === active || Boolean(active && input.closest('form')?.contains(active)) || input.value.includes('```github-response')));
+    .some(input => {
+      const form = input.closest('form');
+      // GitHub's Preview tab may hide the textarea while retaining its draft.
+      return !input.closest('.js-comment-update') && (input.getClientRects().length > 0 || Boolean(form?.getClientRects().length)) &&
+        (input === active || Boolean(active && form?.contains(active)) || input.value.includes('```github-response'));
+    });
   if (editingNative || [...mounted.values()].some(item => item.controller?.isComposingResponse())) { pendingNavigation.hidden = true; return; }
   if (!pendingForms.some(item => pendingKey(item) === selectedPending)) selectedPending = pendingForms[0] ? pendingKey(pendingForms[0]) : '';
   const target = pendingForms.find(item => pendingKey(item) === selectedPending);

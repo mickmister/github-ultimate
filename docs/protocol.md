@@ -14,11 +14,13 @@ Questions share `id`, `title`, `description` (defaults empty) and optional `requ
 
 - `type: "textarea"` or `"text"`, optional `placeholder`.
 - `type: "choices"`, `choices: [{id, label, description?, is_recommended_reason?, assumedTrue?, prosAndCons?: {pros?: string[], cons?: string[]}}]`. Choices are always checkboxes. `assumedTrue` is explanatory, never a preselection.
-- Optional `choiceGroups: [{id, title?, description?, mode: "any" | "atMostOne" | "exactlyOne", choiceIds: string[]}]`. Selecting an exclusive option clears its peers. Multiple selections in exclusive groups are always rejected; unanswered exactly-one groups may be explicitly omitted in the UI.
+- Optional `choiceGroups: [{id, title?, description?, mode: "any" | "atMostOne" | "exactlyOne", choiceIds: string[]}]`. Modes preserve the author's suggested grouping, but **all checkboxes permit multiple selections**. Selecting a choice never clears its peers, and validation does not reject combinations. An exactly-one group requests an answer; it does not restrict the user's response to one option.
+
+The renderer automatically adds **Other** to every choices question unless an authored choice already has ID `other` or a label beginning with the word Other. This is derived presentation/answer behavior: it never adds a choice to the source record or changes its revision. The default generated ID is `other`; if its note name would collide with an existing field, the deterministic ID is `other_2`, `other_3`, etc., using the complete original form when checking collisions. Selecting Other exposes its explanation textarea. Older published comments remain unchanged; the publisher still prints the authored definition, while the extension supplies Other at render time.
 
 Every choice/question has optional contextual notes opened with an accessible comment-icon button. `additional_notes` is the master textarea and has no redundant nested notes. Next Instruction is an independent textarea, with optional `{label, value}` presets. Safe Markdown supports contextual text without executing HTML. A form with `invalidatedAt` is displayed as superseded and cannot be answered.
 
-Forms with more than one question excluding `additional_notes` use a single-question wizard with direct navigation and final review. Requested answers can be skipped when no longer applicable. The UI passes `allowUnanswered: true` to validation/composition, records omissions, and still rejects invalid answer types, unknown options and conflicting exclusive selections. Protocol callers enforce requested answers by default unless they opt into the same behavior. Wizard position and values are local, scoped to the source revision, and shared by inline and zen views.
+Forms with more than one question excluding `additional_notes` use a single-question wizard with direct navigation and final review. Requested answers can be skipped when no longer applicable. The UI passes `allowUnanswered: true` to validation/composition, records omissions, and still rejects invalid answer types and unknown options (the derived Other option is known). Protocol callers enforce requested answers by default unless they opt into the same behavior. Wizard position and values are local, scoped to the source revision, and shared by inline and zen views.
 
 `allowCodeFileChanges: false` exposes only discussion intent. Otherwise its optional object supports `allowLabel`, `avoidLabel`, `label`, `description`, `defaultChecked` (accepted for authoring compatibility, never grants implicit permission). Approval requires the explicit button action.
 
@@ -34,7 +36,7 @@ or `/github-ultimate approve`. Command parsing/execution belongs to a future tru
 
 Fields: `schema_version: 1`, `kind: "response"`, unique `response_id`, `task_id`, `form_id`, nullable `session_id`/`parent_task_id`, `source: {repository, number, comment_id, revision}`, `intent`, `resume_session`, `allow_code_file_changes`, `answers`.
 
-Optional `omitted_questions` lists question IDs whose requested answer or exactly-one group is unanswered. It does not relax type or exclusive-choice integrity. Handlers should validate answers against the bound form independently.
+Optional `omitted_questions` lists question IDs whose requested answer is unanswered, including questions containing an exactly-one group. Selecting Other counts as an answer. Type checks remain enforced. Handlers should validate answers against the bound form independently and must not infer mutually-exclusive selections from the author's group mode.
 
 The SHA-256 `source.revision` hashes the exact rendered code-block text, not a normalized reserialization. Whitespace edits therefore invalidate previous source binding. `source.comment_id` is GitHub's comment anchor when available, or `description` for the PR/issue body. Description submissions additionally bind thread and form ID. Execution handlers must independently check the source and author; the extension never supplies an authenticated requester claim. PR head-SHA validation belongs to the future handler, not an invented value in a credential-free browser.
 
@@ -42,7 +44,9 @@ Discussion intent always disallows implementation. Approval is an approved-next-
 
 Choice answers normalize to `{optionId: boolean}`; text/notes are strings. Generated notes use `<question>_more_info` and `<question>_<choice>_more_info`. These are answer data, never template code. `next_instruction` and `additional_notes` remain distinct.
 
-Matching loaded response comments are the current durable submission source: repository, thread number, source comment, form ID and source revision must match. Submitted forms default to a collapsed read-only history; a separate new response receives a new ID. Local drafts, previews and inserted-but-unposted comments never count as submissions. Reading submission state directly from canonical bead records is future work.
+Other uses these existing v1 answer shapes, e.g. `"scope": {"small": true, "other": true}` and `"scope_other_more_info": "An alternative approach"`. There are no new root protocol fields. Current review/history and native-readable response summaries include Other and its explanation. Earlier installed readers can still parse this response envelope, but may omit derived options when rendering against the authored choice list; the posted Markdown/JSON preserves the complete answer.
+
+Matching loaded response comments are the current durable submission source: repository, thread number, source comment, form ID and source revision must match. Submitted forms default to a collapsed read-only history; a separate new response receives a new ID. Local drafts, previews and inserted-but-unposted comments never count as submissions. The sticky pending prompt hides during generated-response review and native comment composition, including GitHub's Preview/submission controls, without changing pending counts or marking the form submitted. Reading submission state directly from canonical bead records is future work.
 
 ## Saved workflow snapshot (`github-workflow`)
 

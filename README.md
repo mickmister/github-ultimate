@@ -16,13 +16,13 @@ For updates, replace the extracted files and click **Reload** on the extension c
 
 ## What works
 
-- **Forms in comments:** BeadsForm-style textareas and checkbox choices, exclusive groups, recommendations, assumptions, pros/cons, contextual notes and Next Instruction.
+- **Forms in comments:** BeadsForm-style textareas and checkbox choices, recommendations, assumptions, pros/cons, contextual notes and Next Instruction. Multiple selections are always allowed; author single-choice groups are guidance. Every choices question includes **Other**, with space to explain.
 - **Focused questions:** multi-question forms have a question index, Previous/Next navigation and a final review. Browse or skip questions freely; unanswered requested questions are listed and recorded. Global notes stay outside the step count.
-- **Zen view:** open the same form in a centered overlay without losing answers or position. Escape closes it and restores focus. Offscreen pending forms have a sticky **Go to form** control, with a selector when several need input; zen never opens automatically.
+- **Zen view:** open the same form in a focused overlay without losing answers or position. Its outer size stays stable as the mobile keyboard opens; the inner scroll window adapts to keep the field and Close control usable. Escape closes it and restores focus. Offscreen pending forms have a sticky **Go to form** control, with a selector when several need input; it stays out of the way during response composition. Zen never opens automatically.
 - **Submitted answers:** matching posted responses collapse the form into a read-only summary. Expand the answer history or choose **Submit another response** for a separate submission with a new ID.
 - **Explicit intent:** “Continue discussion” generates `/github-ultimate discuss`; “Approved for next steps” generates `/github-ultimate approve`. Both include readable structured answers, source-comment SHA-256 and task/session references.
 - **Native submission:** review the generated comment, copy it or insert it into GitHub's existing editor without replacing your draft, then click GitHub's Comment button. Nothing auto-submits.
-- **Draft recovery:** form values, notes and wizard position survive reloads in extension-local browser storage. Pending edits flush when a page is hidden or leaves. Changes to the source record start a separate revision-bound draft.
+- **Draft recovery:** form values, notes and wizard position survive reloads in extension-local browser storage. Persistence quietly saves snapshots independently of text editing, without routine save/restore messages or processing unfinished IME composition. Pending edits flush when a page is hidden or leaves. Changes to the source record start a separate revision-bound draft.
 - **PR workspace:** forms, saved responses, attention counts, latest task state, complete loaded run history, bead progress and private Tailscale dashboard links.
 - **SPA-safe UI:** initial load, navigation, edited comments, lazy-loaded records, light/dark themes, native fallback and settings.
 

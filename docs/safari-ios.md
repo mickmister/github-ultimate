@@ -39,19 +39,27 @@ monitoring, or native messaging requirement in this slice.
   pending edits instead of relying on a timer surviving tab suspension.
   Mobile OS process termination can still interrupt storage; no asynchronous
   page-exit write can guarantee recovery after an abrupt kill.
-- Zen and workspace panels use visual-viewport dimensions. Keyboard-sized and
-  offset viewports constrain the modal without changing GitHub's viewport meta
-  tag or disabling zoom. Safe-area padding protects edge controls.
+- Zen captures stable outer bounds when opened. Keyboard-sized and offset visual
+  viewports adjust only its inner scroll window and control positions, rather
+  than shrinking/recentering the modal on every keyboard animation frame.
+  Orientation changes can resize it. Workspace panels use visual-viewport
+  dimensions. Neither changes GitHub's viewport meta tag or disables zoom.
+  Safe-area padding protects edge controls.
 - Narrow or touch-oriented views use 44px controls and 16px text fields,
   including notes/previews. Floating entry controls hide during text entry.
 - The native modal keeps the focused form separate from GitHub; the same card,
   values and wizard position move between inline and zen views.
+- Persistence is a separate snapshot-only module. Normal saving/restoration is
+  silent; only a failed save produces a message. IME composition is not
+  processed by persistence while typing, and save completion never replaces
+  input values, changes selection, or rerenders the form.
 - Clipboard denial leaves a selectable preview and manual-copy instructions.
   The legacy copy fallback selects a temporary field inside the active modal
   and restores focus. Clipboard success is not required to submit a response.
 - Editor insertion preserves existing text, dispatches native input/change
   events, focuses the editor and never clicks GitHub's Comment button. A form
-  becomes submitted only when a matching posted response is discovered.
+  becomes submitted only when a matching posted response is discovered. The
+  sticky pending prompt hides during preview/native composition and submission.
 - On page restoration/foregrounding the content script rescans loaded records.
   No keepalive service or continuous background polling is assumed.
 
@@ -73,8 +81,9 @@ GitHub-shaped pages. Only extension storage is substituted, using a `browser`
 namespace (no `chrome` global). Tests cover touch navigation, notes, generated
 intent, preservation/manual submission of a native draft, confirmed response
 history, pagehide draft recovery, source-revision separation, portrait/landscape
-and small viewports, simulated visual-viewport keyboard geometry, and clipboard
-denial. They do not load a Safari extension or emulate an actual iOS keyboard.
+and small viewports, stable modal bounds with simulated visual-viewport keyboard
+geometry, IME text/selection preservation, automatic Other draft recovery, and
+clipboard denial. They do not load a Safari extension or emulate an actual iOS keyboard.
 CI retains `dist-safari/` as the `safari-webextension-resources` artifact.
 
 ## Later: Xcode and real-device acceptance
