@@ -6,6 +6,7 @@ import { isolateExtensionKeyboard } from './keyboard';
 import { read } from './storage';
 import { draftPersistence } from './draft';
 import { choiceOptions, isOtherChoice } from './choices';
+import { ADDITIONAL_NOTES_DESCRIPTION } from './form-copy';
 import css from './workspace.css?inline';
 import { trackViewport, stabilizeZen } from './viewport';
 
@@ -146,7 +147,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement>();
   const fields = new Map<string, HTMLFieldSetElement>();
   for (const q of form.questions) {
-    const fieldset = el('fieldset'); fieldset.append(el('legend', q.title), markdown(q.description));
+    const fieldset = el('fieldset'); fieldset.append(el('legend', q.title), markdown(q.id === 'additional_notes' ? ADDITIONAL_NOTES_DESCRIPTION : q.description));
     fields.set(q.id, fieldset);
     if (q.type === 'choices') {
       const choices = choiceOptions(form, q);
@@ -192,7 +193,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     (q.id === 'additional_notes' ? additionalNotes : questionSection).append(fieldset);
   }
   if (!form.questions.some(q => q.id === 'additional_notes')) {
-    const fieldset = el('fieldset'); fieldset.append(el('legend', 'Additional notes'));
+    const fieldset = el('fieldset'); fieldset.append(el('legend', 'Additional notes'), markdown(ADDITIONAL_NOTES_DESCRIPTION));
     const input = el('textarea'); input.rows = 4; input.name = 'additional_notes'; input.maxLength = 16000; input.setAttribute('aria-label', 'Additional notes');
     input.addEventListener('input', () => { values.additional_notes = input.value; }); controls.set('additional_notes', input); fieldset.append(input); additionalNotes.append(fieldset);
   }
