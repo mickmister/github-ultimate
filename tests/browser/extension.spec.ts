@@ -63,13 +63,14 @@ test('restores drafts, wizard position and note icons; requested answers may be 
   await expect(page.getByRole('textbox', { name: 'Add note about Unit tests', exact: true })).toHaveValue('Only the failed test.');
 });
 
-test('Other and multiple selections survive zen, reload, review and posted history', async () => {
+test('Other and multiple selections survive zen, review and posted history', async () => {
   await page.evaluate(() => {
     const code = document.querySelector('#issuecomment-1 pre code')!;
     const data = JSON.parse(code.textContent!);
     data.questions[0].choiceGroups = [{ id: 'one', mode: 'exactlyOne', choiceIds: ['unit', 'all'] }];
     code.textContent = JSON.stringify(data);
   });
+  await expect(page.getByText('The author suggests one option; you may select several or choose Other.', { exact: true })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Unit tests', exact: true }).check();
   await page.getByRole('checkbox', { name: 'All tests', exact: true }).check();
   const other = page.getByRole('checkbox', { name: 'Other', exact: true });
