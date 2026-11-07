@@ -1,4 +1,5 @@
 import { settings, write } from './storage';
+import { extensionAPI } from './extension-api';
 async function main() {
   const current = await settings();
   for (const key of ['enabled', 'inlineForms', 'rememberDrafts'] as const) {
@@ -11,8 +12,8 @@ async function main() {
     });
   }
   document.getElementById('clear')!.addEventListener('click', async () => {
-    const all = await chrome.storage.local.get(null);
-    await chrome.storage.local.remove(Object.keys(all).filter(key => key.startsWith('draft:')));
+    const all = await extensionAPI().storage.local.get(null);
+    await extensionAPI().storage.local.remove(Object.keys(all).filter(key => key.startsWith('draft:')));
     document.getElementById('status')!.textContent = 'Saved drafts cleared.';
   });
 }

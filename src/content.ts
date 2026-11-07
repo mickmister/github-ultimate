@@ -2,6 +2,7 @@ import { parseRecord, revisionOf, type RecordData, type TaskForm, type Snapshot,
 import { defaults, settings, type Settings } from './storage';
 import { el, button, shadow, renderForm, renderSnapshot, renderResponse, type FormController } from './ui';
 import { isolateExtensionKeyboard } from './keyboard';
+import { extensionAPI } from './extension-api';
 
 isolateExtensionKeyboard();
 
@@ -29,7 +30,7 @@ function dispose(item: Mounted) {
 }
 function cleanup() {
   for (const item of mounted.values()) dispose(item);
-  mounted.clear(); shell?.remove(); shell = undefined; shellRoot = undefined; body = undefined; panel = undefined; pendingForms = []; pendingNavigation = undefined;
+  mounted.clear(); shell?.dispatchEvent(new Event('gu-dispose')); shell?.remove(); shell = undefined; shellRoot = undefined; body = undefined; panel = undefined; pendingForms = []; pendingNavigation = undefined;
 }
 function sourceId(code: HTMLElement): string {
   const comment = code.closest<HTMLElement>('[id^="issuecomment-"], [id^="discussion_r"], [id^="pullrequestreview-"], .timeline-comment, [data-comment-id]');
@@ -201,7 +202,9 @@ async function boot() {
   window.addEventListener('scroll', updatePendingNavigation, { passive: true });
   window.addEventListener('resize', updatePendingNavigation);
   window.addEventListener('gu-view-change', updatePendingNavigation);
-  chrome.storage.onChanged.addListener((changes, area) => {
+  window.addEventListener('pageshow', schedule);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schedule(); });
+  extensionAPI().storage.onChanged.addListener((changes, area) => {
     if (area === 'local' && changes.settings) { void settings().then(value => { config = value; rebuildInline(); }); }
   });
   // GitHub can change route without a body mutation. No network polling is performed.

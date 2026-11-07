@@ -5,6 +5,7 @@ import { answersMarkdown } from './comment-markdown';
 import { isolateExtensionKeyboard } from './keyboard';
 import { read, write } from './storage';
 import css from './workspace.css?inline';
+import { trackViewport } from './viewport';
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -27,7 +28,7 @@ export function markdown(text: string | undefined): HTMLDivElement {
 }
 export function shadow(host: HTMLElement): ShadowRoot {
   isolateExtensionKeyboard(); host.setAttribute('data-gu-root', '');
-  const root = host.attachShadow({ mode: 'open' }); const style = el('style'); style.textContent = css; root.append(style); return root;
+  const root = host.attachShadow({ mode: 'open' }); const style = el('style'); style.textContent = css; root.append(style); trackViewport(host); return root;
 }
 function noteIcon(label: string): HTMLButtonElement {
   const toggle = button('', () => {}, 'note-toggle'); toggle.title = 'Add a note'; toggle.setAttribute('aria-label', label); toggle.setAttribute('aria-expanded', 'false');
@@ -45,10 +46,16 @@ function notes(label: string, name: string, values: Answers): HTMLDivElement {
 export type Source = { repository: string; number: number; comment_id: string; revision: string };
 
 export async function copyText(value: string): Promise<void> {
+  const focused = document.activeElement?.shadowRoot?.activeElement ?? document.activeElement;
   try { await navigator.clipboard.writeText(value); }
   catch {
-    const field = el('textarea'); field.value = value; field.style.position = 'fixed'; field.style.top = '0'; document.body.append(field); field.focus(); field.select();
-    const copied = document.execCommand('copy'); field.remove();
+    const field = el('textarea'); field.value = value; field.style.position = 'fixed'; field.style.top = '0'; field.style.fontSize = '16px';
+    // A textarea outside an open modal is inert, so copy within the active dialog.
+    const modal = [...document.querySelectorAll('[data-gu-root]')].map(host => host.shadowRoot?.querySelector('dialog[open]')).find(Boolean);
+    (modal ?? document.body).append(field); field.focus(); field.select(); field.setSelectionRange(0, value.length);
+    let copied = false;
+    try { copied = document.execCommand('copy'); }
+    finally { field.remove(); if (focused instanceof HTMLElement) focused.focus({ preventScroll: true }); }
     if (!copied) throw new Error('Clipboard unavailable. Select and copy the preview text manually.');
   }
 }
@@ -60,7 +67,7 @@ export function insertComment(value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!;
   setter.call(input, [input.value.trimEnd(), value].filter(Boolean).join('\n\n'));
   input.dispatchEvent(new Event('input', { bubbles: true })); input.dispatchEvent(new Event('change', { bubbles: true }));
-  input.scrollIntoView({ behavior: 'smooth', block: 'center' }); input.focus();
+  input.focus({ preventScroll: true }); input.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 export type SavedSubmission = { record: ResponseRecord; url?: string };
@@ -117,7 +124,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   const status = el('p', '', 'muted'); status.setAttribute('role', 'status');
   const errors = el('div', undefined, 'error'); errors.setAttribute('role', 'alert');
   const key = `draft:${source.repository}:${source.number}:${source.comment_id}:${form.id}:${source.revision}`;
-  let disposed = false, changed = false, saveVersion = 0, timer: ReturnType<typeof setTimeout>;
+  let disposed = false, changed = false, dirty = false, saveVersion = 0, timer: ReturnType<typeof setTimeout>;
   let step = 0;
   const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement>();
   const fields = new Map<string, HTMLFieldSetElement>();
@@ -275,18 +282,24 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       step = 0; renderStep(); save();
     }), answers);
   };
+  const flushDraft = () => {
+    clearTimeout(timer);
+    if (!remember || !dirty) return;
+    dirty = false;
+    const version = saveVersion;
+    void write(key, { values, step }).then(() => {
+      if (!disposed && version === saveVersion) status.textContent = 'Draft saved in this browser profile.';
+    }).catch(() => {
+      if (version === saveVersion) dirty = true;
+      if (!disposed && version === saveVersion) status.textContent = 'Could not save draft locally. Keep this page open or copy your answers.';
+    });
+  };
   const save = () => {
     changed = true; clearTimeout(timer);
-    const version = ++saveVersion;
+    ++saveVersion; dirty = true;
     if (remember) {
       status.textContent = 'Saving draft…';
-      timer = setTimeout(() => {
-        if (!disposed) void write(key, { values, step }).then(() => {
-          if (!disposed && version === saveVersion) status.textContent = 'Draft saved in this Chrome profile.';
-        }).catch(() => {
-          if (!disposed && version === saveVersion) status.textContent = 'Could not save draft locally. Keep this page open or copy your answers.';
-        });
-      }, 250);
+      timer = setTimeout(flushDraft, 250);
     }
   };
   htmlForm.addEventListener('input', save); htmlForm.addEventListener('change', save);
@@ -311,11 +324,17 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     if (typeof saved.step === 'number') step = Math.max(0, Math.min(saved.step, questions.length));
     renderStep();
   });
-  // Flush on host cleanup as well as during ordinary typing.
+  // iOS can suspend a tab before the debounce fires. No unload/beforeunload
+  // handler: those are unreliable on mobile and can interfere with back/forward cache.
+  const onVisibility = () => { if (document.visibilityState === 'hidden') flushDraft(); };
+  document.addEventListener('visibilitychange', onVisibility);
+  window.addEventListener('pagehide', flushDraft);
   controller.dispose = () => {
     closeZen();
     disposed = true; clearTimeout(timer);
-    if (remember && changed) void write(key, { values, step }).catch(() => {});
+    document.removeEventListener('visibilitychange', onVisibility);
+    window.removeEventListener('pagehide', flushDraft);
+    flushDraft();
   };
   return controller;
 }

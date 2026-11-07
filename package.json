@@ -14,6 +14,8 @@
     "playground:build": "vite build --config playground/vite.config.ts",
     "test:playground": "playwright test --config playground/playwright.config.ts",
     "build": "node scripts/build.mjs",
+    "build:safari": "node scripts/build.mjs safari",
+    "test:mobile": "playwright test --config playwright.mobile.config.ts",
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",

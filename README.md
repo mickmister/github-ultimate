@@ -1,6 +1,6 @@
 # GitHub Ultimate
 
-**Your pull request, a human–agent workspace.** A Chrome extension that turns ordinary GitHub comments into decision forms, saved workflow views and bead progress. GitHub remains the persistent workspace; no application backend or API token is needed for this release.
+**Your pull request, a human–agent workspace.** A browser extension that turns ordinary GitHub comments into decision forms, saved workflow views and bead progress. Chrome is installable today; Safari iOS compatibility code and build resources are available for later Xcode packaging. GitHub remains the persistent workspace; no application backend or API token is needed for this release.
 
 ## Install
 
@@ -12,6 +12,8 @@
 
 For updates, replace the extracted files and click **Reload** on the extension card. This is a developer-mode ZIP, not a Web Store-signed CRX.
 
+**Safari on iPhone/iPad:** `npm run build:safari` produces `dist-safari/` for later Xcode conversion/signing. See [Safari iOS preparation and verification](docs/safari-ios.md). These resources are not an installable iOS app.
+
 ## What works
 
 - **Forms in comments:** BeadsForm-style textareas and checkbox choices, exclusive groups, recommendations, assumptions, pros/cons, contextual notes and Next Instruction.
@@ -20,7 +22,7 @@ For updates, replace the extracted files and click **Reload** on the extension c
 - **Submitted answers:** matching posted responses collapse the form into a read-only summary. Expand the answer history or choose **Submit another response** for a separate submission with a new ID.
 - **Explicit intent:** “Continue discussion” generates `/github-ultimate discuss`; “Approved for next steps” generates `/github-ultimate approve`. Both include readable structured answers, source-comment SHA-256 and task/session references.
 - **Native submission:** review the generated comment, copy it or insert it into GitHub's existing editor without replacing your draft, then click GitHub's Comment button. Nothing auto-submits.
-- **Draft recovery:** form values, notes and wizard position survive reloads in local Chrome storage. Changes to the source record start a separate revision-bound draft.
+- **Draft recovery:** form values, notes and wizard position survive reloads in extension-local browser storage. Pending edits flush when a page is hidden or leaves. Changes to the source record start a separate revision-bound draft.
 - **PR workspace:** forms, saved responses, attention counts, latest task state, complete loaded run history, bead progress and private Tailscale dashboard links.
 - **SPA-safe UI:** initial load, navigation, edited comments, lazy-loaded records, light/dark themes, native fallback and settings.
 
@@ -61,7 +63,7 @@ Records are untrusted presentation data. A saved response/run does not prove who
 
 ## Privacy and permissions
 
-The extension has only the `storage` permission and injects on `https://github.com/*` so navigation into a PR works. It does not use API tokens, analytics, background network polling or external executable code. Settings and form drafts stay in your Chrome profile and are not encrypted; use the toolbar popup to disable persistence or clear saved drafts. Do not enter credentials into public forms. Drafts are scoped by repository, thread, comment, form and source revision, not by signed-in GitHub account; users sharing a Chrome profile share its drafts. Generated response IDs and canonical comments are stored only when **you** submit through GitHub.
+The extension has only the `storage` permission and injects on `https://github.com/*` so navigation into a PR works. It does not use API tokens, analytics, background network polling or external executable code. Settings and form drafts stay in your browser profile and are not encrypted; use the toolbar popup to disable persistence or clear saved drafts. Do not enter credentials into public forms. Drafts are scoped by repository, thread, comment, form and source revision, not by signed-in GitHub account; users sharing a browser profile share its drafts. Generated response IDs and canonical comments are stored only when **you** submit through GitHub.
 
 Dashboard links accept private `https://node.tailnet.ts.net/` hosts without query strings/credentials; run links must point into the current repository's Actions runs. The extension doesn't create tunnels or make private links public. Native GitHub content stays available if you disable the extension.
 
@@ -112,13 +114,13 @@ Load `dist/` unpacked for development. `release/` contains the ZIP and checksum.
 
 Playwright loads the **actual built extension** in an isolated Chromium profile against controlled GitHub-shaped pages, covering native draft composition/no auto-submit, intent and session serialization, drafts/notes/wizard position, immutable submissions and revision matching, zen focus/Escape, multiple pending forms, capture-phase keyboard isolation, progress/dashboard links, SPA cleanup and malicious records. This is complemented by a public-GitHub DOM smoke check during release preparation; authenticated native-editor behavior still merits checking in your own account when GitHub changes its DOM.
 
-CI runs type checks, protocol/publisher tests, packaged browser tests and creates the ZIP. Every successful branch-push run publishes one **prerelease** with the tested ZIP and SHA-256 checksum. Tags use `continuous-<branch-slug>-<workflow-run-id>`: separate pushes get separate releases, while rerunning a workflow repairs the same release. Release notes identify the branch, exact commit, workflow run and installation steps. Prereleases do not replace the latest stable release; their manifest version remains the package version.
+CI runs type checks, protocol/publisher tests, packaged Chrome tests, mobile WebKit/Chromium checks and creates the Chrome ZIP. It also retains unsigned Safari resources for later Xcode packaging. Every successful branch-push run publishes one **prerelease** with the tested Chrome ZIP and SHA-256 checksum. Tags use `continuous-<branch-slug>-<workflow-run-id>`: separate pushes get separate releases, while rerunning a workflow repairs the same release. Release notes identify the branch, exact commit, workflow run and installation steps. Prereleases do not replace the latest stable release; their manifest version remains the package version.
 
 Pull-request and manual verification runs do not publish prereleases. Failed verification does not publish a release. Publishing starts as a draft and becomes public after both assets upload successfully. Pushing a matching `v<package version>` tag publishes the verified artifact as a stable GitHub Release. CI uses its own repository-scoped release token; no deployment secret is required.
 
 ## Scope and research
 
-The first release focuses on the Chrome PR view. Gas City execution handlers, model/session infrastructure, account-wide workflow monitoring, Notifications integration, Monaco and Safari iOS remain planned follow-on work.
+The first release focuses on the Chrome PR view. Safari iOS compatibility/mobile code is implemented; Xcode packaging and signed real-device acceptance remain pending. Gas City execution handlers, model/session infrastructure, account-wide workflow monitoring, Notifications integration and Monaco remain planned follow-on work.
 
 - [Initial research](docs/intake-analysis.md) — historical intake; later decisions are tracked in beads.
 - [Original standalone decision form](docs/intake-form.json)

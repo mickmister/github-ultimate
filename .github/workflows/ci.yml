@@ -1,4 +1,4 @@
-name: Chrome extension
+name: Browser extension
 on:
   push:
     branches: ['**']
@@ -23,9 +23,11 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - run: npm run build:safari
       - run: npm run playground:build
-      - run: npx playwright install --with-deps chromium
+      - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
+      - run: npm run test:mobile
       - run: npm run test:playground
       - run: npm run package
       - name: Verify release version matches tag
@@ -37,6 +39,11 @@ jobs:
         with:
           name: chrome-extension
           path: release/*
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: safari-webextension-resources
+          path: dist-safari/
           if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
