@@ -86,6 +86,9 @@ progress { width: 100%; accent-color: var(--accent); height: 7px; }
 .wizard-navigation > button:last-child { justify-self: end; }
 .record-tools { display: flex; justify-content: center; align-items: end; gap: 8px; min-width: 0; }
 .record-tools > button { margin: 0; min-width: 0; min-height: 0; padding: 4px 8px; font-size: 11px; overflow-wrap: anywhere; }
+.additional-notes-section { margin: 24px 0; padding: 16px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.additional-notes-section fieldset { margin: 0; padding: 0; border: 0; }
+.additional-notes-section legend { padding: 0; margin-bottom: 8px; }
 .answer-review { margin: 20px 0; }
 .review-item { border-top: 1px solid var(--border); padding: 16px 0; }
 .submitted-summary { padding: 4px 0; }
