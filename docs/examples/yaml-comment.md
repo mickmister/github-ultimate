@@ -1,3 +1,5 @@
+<!-- github-ultimate:form:followup_form -->
+
 ## A small follow-up
 
 ```github-task

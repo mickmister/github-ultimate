@@ -3,6 +3,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { parse } from 'yaml';
 import { eventPr, formComment, formFromDsl, publishForm, resolveTarget, type Gh } from '../cli/publish-form';
+import { composeResponse } from '../src/protocol';
 
 const input = JSON.stringify({ format: 'standard', id: 'cli_form', title: 'Choose next steps', questions: [{ type: 'textarea', id: 'notes', title: 'Notes' }] });
 const target = { repository: 'owner/repo', number: 2, url: 'https://github.com/owner/repo/pull/2' };
@@ -18,6 +19,18 @@ function mockGh(pages: unknown = []) {
   });
 }
 describe('gh-backed form publisher', () => {
+  it('watermarks form output without marking human answer comments as non-triggering', () => {
+    const form = formFromDsl(input);
+    expect(formComment(form)).toMatch(/^<!-- github-ultimate:form:cli_form -->\n/);
+    expect(formComment(form, 'run-42')).toMatch(/^<!-- github-ultimate:form:cli_form;submission:run-42 -->\n/);
+    const workflow = parse(readFileSync(new URL('../.github/workflows/agentic.yml', import.meta.url), 'utf8'));
+    expect(workflow.jobs.entry.if).toBe("${{ github.event_name != 'issue_comment' || !contains(github.event.comment.body, '<!-- github-ultimate:form:') }}");
+    const response = composeResponse(form, { notes: 'Please continue discussion.' }, {
+      repository: 'owner/repo', number: 2, comment_id: 'issuecomment-123', revision: 'a'.repeat(64),
+    }, false);
+    expect(response).toMatch(/^\/github-ultimate discuss\n/);
+    expect(response).not.toContain('<!-- github-ultimate:form:');
+  });
   it('discovers repository/current branch PR and posts normalized DSL through gh stdin', () => {
     const gh = mockGh(); const result = publishForm(input, {}, {}, undefined, gh);
     expect(result).toMatchObject({ ...target, formId: 'cli_form', commentId: 123, commentUrl: comment.html_url, reused: false });
