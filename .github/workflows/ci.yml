@@ -25,10 +25,12 @@ jobs:
       - run: npm run build
       - run: npm run build:safari
       - run: npm run playground:build
+      - run: npm run storybook:build
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:browser
       - run: npm run test:mobile
       - run: npm run test:playground
+      - run: npm run test:storybook
       - run: npm run package
       - name: Verify release version matches tag
         if: startsWith(github.ref, 'refs/tags/v')

@@ -11,6 +11,9 @@
   "scripts": {
     "form": "node --experimental-strip-types cli/form.ts",
     "playground": "vite --config playground/vite.config.ts",
+    "storybook": "storybook dev --host 127.0.0.1 --port ${PORT:-6006} --ci --no-open --disable-telemetry",
+    "storybook:build": "storybook build --disable-telemetry",
+    "test:storybook": "playwright test --config playwright.storybook.config.ts",
     "playground:build": "vite build --config playground/vite.config.ts",
     "test:playground": "playwright test --config playground/playwright.config.ts",
     "build": "node scripts/build.mjs",
@@ -29,10 +32,12 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.56.1",
+    "@storybook/html-vite": "^10.6.6",
     "@types/chrome": "^0.1.24",
     "@types/node": "^22.19.0",
     "esbuild": "^0.25.12",
     "fflate": "^0.8.2",
+    "storybook": "^10.6.6",
     "typescript": "^5.9.3",
     "vite": "^7.3.7",
     "vitest": "^4.0.8"

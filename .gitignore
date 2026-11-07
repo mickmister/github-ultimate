@@ -6,3 +6,4 @@ test-results/
 playwright-report/
 *.tsbuildinfo
 playground-dist/
+storybook-static/

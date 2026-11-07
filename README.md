@@ -71,6 +71,40 @@ Dashboard links accept private `https://node.tailnet.ts.net/` hosts without quer
 
 ## Development and verification
 
+### Storybook
+
+```sh
+npm ci
+npm run storybook
+```
+
+Open `http://127.0.0.1:6006`. Storybook uses the **shipping parser, Shadow DOM
+renderer and styles**, with 40 interactive stories:
+
+- **Forms:** pending, multiple selections/automatic Other, seeded draft, second
+  question, review with omissions, filled review, response preview, zen, phone,
+  dark phone, submitted, immutable history, new response, superseded,
+  discussion-only, single question, authored Other, YAML, long content and
+  unavailable storage.
+- **Workflow snapshots:** all eight lifecycle statuses, stale/offline dashboard,
+  no beads, dark phone and unavailable links.
+- **Responses:** discussion, approval, new session, Other explanation and dark
+  phone.
+- **Fallbacks:** unsupported fields/version, malformed JSON and unsafe Markdown.
+
+Use the theme, canvas width, stage, source and seed controls to explore variants.
+Forms include a local comment composer that preserves a fictional existing
+draft. **Simulate posting locally** exercises submitted-answer history without
+making GitHub requests. Draft fixtures are seeded; normal stories do not use
+extension storage. The unavailable-storage story deliberately exercises the
+real save-failure message. This is a UI test environment, not an agent runner.
+
+`npm run storybook:build` creates `storybook-static/`. `npm run test:storybook`
+checks every story and exercises composition/history, phone/zen and inert
+fallbacks. Set `STORYBOOK_URL` to test a running preview instead of starting a
+local server. The managed preview uses the injected `PORT` and
+`STORYBOOK_PREVIEW=1`; it disables Vite HMR, so refresh after source edits.
+
 ### Styling playground
 
 ```sh

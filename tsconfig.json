@@ -10,5 +10,5 @@
     "types": ["chrome", "node", "vite/client"],
     "skipLibCheck": true
   },
-  "include": ["src", "cli", "tests", "playground", "playwright*.config.ts", "vitest.config.ts"]
+  "include": ["src", "cli", "tests", "playground", "storybook", ".storybook", "playwright*.config.ts", "vitest.config.ts"]
 }
