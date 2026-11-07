@@ -144,6 +144,36 @@ test('long active question tabs stay fully readable on narrow screens', async ({
   expect(await index.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
 });
 
+test('tab widths share available space and keep inactive labels readable across container sizes', async ({ page }) => {
+  await page.goto('/');
+  await page.getByRole('button', { name: /Question wizard/ }).click();
+  const index = page.locator('#renderer .question-index');
+  for (const width of [320, 480, 768, 1100]) {
+    await index.evaluate((node, width) => { (node as HTMLElement).style.width = `${width}px`; }, width);
+    const layout = await index.evaluate(node => ({
+      width: node.clientWidth, scrollWidth: node.scrollWidth, right: node.getBoundingClientRect().right,
+      tabs: [...node.querySelectorAll('button')].map(tab => ({
+        top: tab.getBoundingClientRect().top, right: tab.getBoundingClientRect().right, width: tab.getBoundingClientRect().width,
+        clipped: tab.scrollWidth > tab.clientWidth || tab.scrollHeight > tab.clientHeight,
+        whiteSpace: getComputedStyle(tab).whiteSpace, active: tab.getAttribute('aria-current') === 'step',
+      })),
+    }));
+    expect(layout.scrollWidth).toBeLessThanOrEqual(layout.width);
+    for (const tab of layout.tabs) {
+      expect(tab.clipped).toBe(false);
+      expect(tab.whiteSpace).toBe('normal');
+    }
+    // Each row spends its width on labels, rather than leaving an unused tail.
+    for (const top of new Set(layout.tabs.map(tab => tab.top))) {
+      expect(Math.abs(Math.max(...layout.tabs.filter(tab => tab.top === top).map(tab => tab.right)) - layout.right)).toBeLessThanOrEqual(1);
+    }
+    if (width >= 768) {
+      const active = layout.tabs.find(tab => tab.active)!;
+      expect(active.width).toBeGreaterThan(layout.tabs.find(tab => !tab.active)!.width);
+    }
+  }
+});
+
 test('submitted story starts collapsed and permits a distinct new response', async ({ page }) => {
   await page.goto('/');
   await page.getByRole('button', { name: /Submitted form/ }).click();
