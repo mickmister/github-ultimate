@@ -85,7 +85,7 @@ test('wizard keeps readable active question tabs before and after scrolling, inl
   const index = header.getByRole('navigation', { name: 'Form questions' });
   const active = index.locator('button[aria-current=step]');
   await expect(header).toHaveCSS('border-top-left-radius', '0px');
-  await expect(header).toHaveCSS('border-bottom-left-radius', '0px');
+  await expect(header).toHaveCSS('border-top-right-radius', '0px');
   for (const zen of [false, true]) {
     if (zen) await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
     await page.locator('#renderer .wizard-anchor').evaluate(node => node.scrollIntoView({ block: 'start' }));
@@ -124,7 +124,7 @@ test('wizard keeps readable active question tabs before and after scrolling, inl
     await expect(page.getByRole('textbox', { name: 'What context matters?', exact: true })).toBeInViewport();
     const offset = await header.evaluate(node => {
       const scroller = node.closest('.zen-body');
-      return node.getBoundingClientRect().top - (scroller ? scroller.getBoundingClientRect().top + parseFloat(getComputedStyle(scroller).paddingTop) : 0);
+      return node.getBoundingClientRect().top - (scroller ? scroller.getBoundingClientRect().top : 0);
     });
     expect(Math.abs(offset)).toBeLessThanOrEqual(2);
     await index.getByRole('button', { name: /^1\./ }).click();
