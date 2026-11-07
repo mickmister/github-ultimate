@@ -16,6 +16,8 @@ permissions:
 
 jobs:
   entry:
+    # Published forms are agent output, not requests; skip before starting a runner.
+    if: ${{ github.event_name != 'issue_comment' || !contains(github.event.comment.body, '<!-- github-ultimate:form:') }}
     uses: mickmister/gh-agentic-workflows/.github/workflows/agentic-entry.yml@vk/46e5-vd-multi-instanc
     secrets:
       AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
