@@ -92,6 +92,17 @@ test('wizard keeps readable active question tabs before and after scrolling, inl
     await expect(index).toBeVisible();
     await expect(active).toHaveText('1. What kind of change should we make?');
     const tabSize = await active.boundingBox();
+    const tabs = await index.getByRole('button').evaluateAll(nodes => nodes.map(node => {
+      const box = node.getBoundingClientRect();
+      return { top: box.top, right: box.right, left: box.left, height: box.height };
+    }));
+    const headerBox = (await header.boundingBox())!;
+    expect(tabs[0].top - headerBox.y).toBe(1); // Only the header border above the tabs.
+    for (let i = 1; i < tabs.length; i++) {
+      expect(tabs[i].top).toBe(tabs[0].top);
+      expect(tabs[i].height).toBe(tabs[0].height);
+      expect(Math.abs(tabs[i].left - tabs[i - 1].right)).toBeLessThanOrEqual(1);
+    }
     const activeFont = await active.evaluate(node => parseFloat(getComputedStyle(node).fontSize));
     const inactiveFont = await index.locator('button[aria-current=false]').first().evaluate(node => parseFloat(getComputedStyle(node).fontSize));
     expect(activeFont).toBeGreaterThan(inactiveFont);
