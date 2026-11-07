@@ -40,7 +40,7 @@ export function stabilizeZen(dialog: HTMLDialogElement): () => void {
   const viewport = window.visualViewport;
   const header = dialog.querySelector<HTMLElement>('.zen-header')!;
   const body = dialog.querySelector<HTMLElement>('.zen-body')!;
-  let layoutWidth = 0, top = 0, height = 0, frame = 0;
+  let layoutWidth = 0, layoutHeight = 0, top = 0, height = 0, frame = 0;
   const revealFocus = () => {
     const active = (dialog.getRootNode() as ShadowRoot).activeElement;
     if (!(active instanceof HTMLElement) || !body.contains(active)) return;
@@ -51,8 +51,10 @@ export function stabilizeZen(dialog: HTMLDialogElement): () => void {
   const update = () => {
     // A real orientation/layout-width change may resize the shell. Keyboard and
     // toolbar visualViewport height changes do not repeatedly recenter it.
-    if (innerWidth !== layoutWidth) {
-      layoutWidth = innerWidth;
+    const active = (dialog.getRootNode() as ShadowRoot).activeElement;
+    const editing = active instanceof HTMLElement && active.matches('input:not([type=checkbox]), textarea, [contenteditable=true]');
+    if (innerWidth !== layoutWidth || (innerHeight !== layoutHeight && !editing)) {
+      layoutWidth = innerWidth; layoutHeight = innerHeight;
       const gap = innerWidth <= 600 ? 12 : 32;
       top = gap / 2; height = Math.max(0, innerHeight - gap);
       const width = Math.min(900, innerWidth - gap);

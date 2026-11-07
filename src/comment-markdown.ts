@@ -13,7 +13,7 @@ export function formMarkdown(form: TaskForm): string {
   for (const [index, q] of form.questions.entries()) {
     lines.push(`#### ${index + 1}. ${inlineText(q.title)}`, '');
     if (q.description) lines.push(q.description, '');
-    if (q.type === 'choices') for (const choice of choiceOptions(form, q)) {
+    if (q.type === 'choices') for (const choice of q.choices) {
       lines.push(`- [ ] **${inlineText(choice.label)}**${choice.description ? ` — ${inlineText(choice.description)}` : ''}`);
       if (choice.is_recommended_reason) lines.push(`  - Recommended: ${inlineText(choice.is_recommended_reason)}`);
       for (const [kind, items] of Object.entries(choice.prosAndCons ?? {})) for (const item of items ?? []) lines.push(`  - ${kind === 'pros' ? 'Pro' : 'Con'}: ${inlineText(item)}`);
