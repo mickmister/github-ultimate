@@ -12,6 +12,8 @@
 
 For updates, replace the extracted files and click **Reload** on the extension card. This is a developer-mode ZIP, not a Web Store-signed CRX.
 
+Open the extension's toolbar popup to identify the installed build, for example **Version 0.1.1+abc12345**. Generated manifests also carry this display string in `version_name`; the browser-required numeric `version` stays `0.1.1`. The hash identifies the source commit. Local builds with uncommitted changes add `-dirty` so they can be distinguished from a clean release build.
+
 **Safari on iPhone/iPad:** `npm run build:safari` produces `dist-safari/` for later Xcode conversion/signing. See [Safari iOS preparation and verification](docs/safari-ios.md). These resources are not an installable iOS app.
 
 ## What works
