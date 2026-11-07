@@ -74,7 +74,7 @@ progress { width: 100%; accent-color: var(--accent); height: 7px; }
 .wizard-anchor { height: 1px; margin: 16px 0 -1px; }
 .wizard-header { position: sticky; top: 0; background: var(--bg); padding: 0 0 10px; z-index: 2; border: 1px solid var(--border); box-shadow: 0 3px 8px #0002; margin: 0 0 16px; }
 .question-index { display: flex; align-items: stretch; gap: 0; flex-wrap: wrap; border-bottom: 1px solid var(--border); }
-.question-index button { flex: 1 1 80px; min-width: 0; max-width: 180px; padding: 12px; margin-bottom: -1px; border-radius: 0; font-weight: 400; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.question-index button { flex: 1 1 80px; min-width: 0; max-width: 180px; padding: 12px; margin-bottom: -1px; border-radius: 5px 5px 0 0; font-weight: 400; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .question-index button[aria-current=step] { flex: 3 1 280px; max-width: 100%; padding: 12px; background: var(--bg); border-color: var(--border); border-bottom-color: var(--bg); box-shadow: inset 0 3px var(--accent); color: var(--fg); font-size: 18px; line-height: 1.35; font-weight: 650; white-space: normal; overflow: visible; overflow-wrap: anywhere; }
 .wizard-progress { color: var(--muted); font-size: 12px; margin: 10px 12px; }
 .wizard-header > .wizard-navigation { margin-inline: 12px; }
