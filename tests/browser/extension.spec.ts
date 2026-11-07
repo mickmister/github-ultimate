@@ -22,6 +22,37 @@ test.beforeEach(async () => {
 });
 test.afterEach(async () => { await context?.close(); await rm(profile, { recursive: true, force: true }); });
 
+for (const layout of ['markdown-body', 'comment-container']) {
+  test(`discovers ${layout} records without legacy body classes or test IDs`, async () => {
+    await context.unroute('https://github.com/**');
+    let html = fixture().replaceAll('class="comment-body"', `class="${layout === 'markdown-body' ? 'markdown-body' : 'new-timeline-body'}"`).replaceAll('class="timeline-comment"', 'class="new-timeline-comment"');
+    // A PR description has no comment anchor: this variant must use the
+    // Markdown-body path, while ordinary comments retain stable source IDs.
+    if (layout === 'markdown-body') html = html.replace('id="issuecomment-1"', 'id="description"');
+    await context.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: html }));
+    await page.reload();
+    expect(await page.locator('.comment-body, .js-comment-body, [data-testid="comment-body"], [data-testid="markdown-body"]').count()).toBe(0);
+    await expect(page.getByRole('heading', { name: 'Choose the next step', exact: true })).toBeVisible();
+    await expect(page.locator('.github-ultimate-record')).toHaveCount(2);
+    await goReview(page);
+    await page.getByRole('button', { name: 'Continue discussion — don’t implement yet', exact: true }).click();
+    const preview = await page.getByRole('textbox', { name: 'Generated comment preview' }).inputValue();
+    const record = JSON.parse(preview.split('```github-response\n')[1].split('\n```')[0]);
+    expect(record.source.comment_id).toBe(layout === 'markdown-body' ? 'description' : 'issuecomment-1');
+    // Quoted examples and source-code blocks outside comments remain untouched.
+    await page.evaluate(extra => {
+      const quote = document.createElement('blockquote'); quote.innerHTML = extra;
+      document.querySelector('main')!.append(quote);
+      const code = document.createElement('pre'); code.textContent = JSON.stringify({ format: 'standard', id: 'outside', title: 'Outside comments', questions: [{ id: 'answer', type: 'textarea', title: 'Example' }] });
+      document.querySelector('main')!.append(code);
+    }, comment(99, { ...form, id: 'quoted', title: 'Quoted form example' }));
+    await page.waitForTimeout(300);
+    await expect(page.getByRole('heading', { name: 'Quoted form example', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Outside comments', exact: true })).toHaveCount(0);
+    await expect(page.locator('.github-ultimate-record')).toHaveCount(2);
+  });
+}
+
 test('packaged extension renders forms, previews intent and preserves native drafts without auto submit', async () => {
   await page.getByRole('textbox', { name: 'GitHub comment' }).fill('My existing draft.');
   await page.getByRole('checkbox', { name: 'Unit tests' }).check();

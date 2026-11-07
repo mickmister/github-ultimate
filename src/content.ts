@@ -39,7 +39,10 @@ function sourceId(code: HTMLElement): string {
   return link?.hash.slice(1) || comment?.dataset.commentId || 'description';
 }
 function candidates(): HTMLElement[] {
-  const bodies = document.querySelectorAll('.comment-body, .js-comment-body, [data-testid="comment-body"], [data-testid="markdown-body"]');
+  // GitHub serves different timeline layouts across accounts and rollouts.
+  // Recognize Markdown bodies as well as stable comment containers, rather
+  // than depending entirely on a particular body wrapper/test ID.
+  const bodies = document.querySelectorAll('.comment-body, .js-comment-body, .markdown-body, [data-testid="comment-body"], [data-testid="markdown-body"], [id^="issuecomment-"], [id^="discussion_r"], [id^="pullrequestreview-"], [data-comment-id]');
   const blocks = new Set<HTMLElement>();
   for (const comment of bodies) for (const block of comment.querySelectorAll<HTMLElement>('pre')) {
     // Ignore quoted examples; only top-level comment-owned records are actionable.

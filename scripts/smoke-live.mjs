@@ -15,7 +15,8 @@ try {
   await page.waitForTimeout(1500);
   const result = await page.evaluate(() => ({
     url: location.href,
-    commentBodies: document.querySelectorAll('.comment-body, .js-comment-body, [data-testid="comment-body"], [data-testid="markdown-body"]').length,
+    commentBodies: document.querySelectorAll('.comment-body, .js-comment-body, .markdown-body, [data-testid="comment-body"], [data-testid="markdown-body"]').length,
+    commentContainers: document.querySelectorAll('[id^="issuecomment-"], [id^="discussion_r"], [id^="pullrequestreview-"], [data-comment-id]').length,
     records: document.querySelectorAll('.github-ultimate-record').length,
     forms: [...document.querySelectorAll('.github-ultimate-record')].filter(host => host.shadowRoot?.querySelector('.form-card')).length,
     errors: [...document.querySelectorAll('.github-ultimate-record')].map(host => host.shadowRoot?.querySelector('.error')?.textContent).filter(Boolean),
