@@ -52,12 +52,65 @@ test('restores drafts, wizard position and note icons; requested answers may be 
   await page.getByRole('textbox', { name: 'Add note about Unit tests', exact: true }).fill('Only the failed test.');
   await goInstructions(page);
   await page.getByRole('textbox', { name: 'Instructions', exact: true }).fill('Keep context across runs.');
-  await expect(page.getByRole('status').filter({ hasText: 'Draft saved' })).toBeVisible();
+  // Flush before reload; no save-status UI is required to recover the draft.
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pagehide', { persisted: true })));
+  await page.waitForTimeout(300);
+  await expect(page.getByText(/Saving draft|Draft saved|Restored saved draft/)).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Instructions', exact: true })).toHaveValue('Keep context across runs.');
   await goScope(page);
   await expect(page.getByRole('checkbox', { name: 'Unit tests' })).toBeChecked();
   await expect(page.getByRole('textbox', { name: 'Add note about Unit tests', exact: true })).toHaveValue('Only the failed test.');
+});
+
+test('Other and multiple selections survive zen, reload, review and posted history', async () => {
+  await page.evaluate(() => {
+    const code = document.querySelector('#issuecomment-1 pre code')!;
+    const data = JSON.parse(code.textContent!);
+    data.questions[0].choiceGroups = [{ id: 'one', mode: 'exactlyOne', choiceIds: ['unit', 'all'] }];
+    code.textContent = JSON.stringify(data);
+  });
+  await page.getByRole('checkbox', { name: 'Unit tests', exact: true }).check();
+  await page.getByRole('checkbox', { name: 'All tests', exact: true }).check();
+  const other = page.getByRole('checkbox', { name: 'Other', exact: true });
+  await expect(other).toHaveCount(1); await other.check();
+  await page.getByRole('textbox', { name: 'Add note about Other', exact: true }).fill('A combined approach.');
+  await page.getByRole('button', { name: 'Open in zen', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('checkbox', { name: 'Unit tests', exact: true })).toBeChecked();
+  await page.getByRole('button', { name: 'Close zen', exact: true }).click();
+  await expect(other).toBeChecked();
+  await goReview(page);
+  await expect(page.locator('.answer-review')).toContainText('Unit tests, All tests, Other');
+  await page.getByRole('button', { name: 'Continue discussion — don’t implement yet', exact: true }).click();
+  const value = await page.getByRole('textbox', { name: 'Generated comment preview' }).inputValue();
+  const record = JSON.parse(value.split('```github-response\n')[1].split('\n```')[0]);
+  expect(record.answers.scope).toEqual({ unit: true, all: true, other: true });
+  expect(record.answers.scope_other_more_info).toBe('A combined approach.');
+  await page.evaluate(html => document.querySelector('main')!.insertAdjacentHTML('beforeend', html), comment(3, record));
+  await page.getByRole('button', { name: 'View submitted answers' }).click();
+  await expect(page.locator('.saved-answers')).toContainText('A combined approach.');
+  await expect(page.locator('.saved-answers')).toContainText('Unit tests, All tests, Other');
+});
+
+test('sticky pending prompt stays out of response preview and native submission without claiming success', async () => {
+  await goReview(page);
+  await page.getByRole('button', { name: 'Continue discussion — don’t implement yet', exact: true }).click();
+  await page.getByRole('button', { name: 'Place in GitHub comment editor', exact: true }).click();
+  // Put the source well offscreen, then move focus from editor to submission.
+  await page.evaluate(() => {
+    const spacer = document.createElement('div'); spacer.style.height = '3000px';
+    document.querySelector('#new_comment')!.before(spacer);
+    document.querySelector('#new_comment')!.scrollIntoView();
+  });
+  await page.getByRole('button', { name: 'Comment', exact: true }).focus();
+  await expect(page.getByRole('button', { name: 'Go to form', exact: true })).toBeHidden();
+  await expect(page.getByRole('button', { name: 'View submitted answers' })).toHaveCount(0);
+  // Cancel composition: close preview and clear the draft; pending is discoverable again.
+  await page.getByRole('button', { name: 'Close preview', exact: true }).click();
+  await page.getByRole('textbox', { name: 'GitHub comment', exact: true }).fill('');
+  await page.getByRole('textbox', { name: 'GitHub comment', exact: true }).evaluate(node => (node as HTMLTextAreaElement).blur());
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await expect(page.getByRole('button', { name: 'Go to form', exact: true })).toBeVisible();
 });
 test('workspace shows saved run/bead details and private dashboard link', async () => {
   await page.getByRole('button', { name: 'Open GitHub Ultimate workspace' }).click();
@@ -134,7 +187,7 @@ test('posted responses collapse into immutable summaries and allow a separate ne
   await expect(page.getByRole('checkbox', { name: 'Unit tests' })).not.toBeChecked();
 });
 
-test('YAML discussion-only forms and exclusive choices work in dark narrow layout', async () => {
+test('YAML discussion-only forms permit multiple choices in authored single-choice groups', async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.evaluate(html => {
     document.documentElement.setAttribute('data-color-mode', 'dark');
@@ -146,7 +199,7 @@ test('YAML discussion-only forms and exclusive choices work in dark narrow layou
   await expect(page.getByRole('heading', { name: 'Quick follow-up' })).toBeVisible();
   await page.getByRole('checkbox', { name: 'Unit tests' }).check();
   await page.getByRole('checkbox', { name: 'All tests' }).check();
-  await expect(page.getByRole('checkbox', { name: 'Unit tests' })).not.toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Unit tests' })).toBeChecked();
   await goReview(page);
   // Only the first form has an approval action; the discussion-only form cannot approve.
   await expect(page.getByRole('button', { name: 'Approved for next steps', exact: true })).toHaveCount(1);

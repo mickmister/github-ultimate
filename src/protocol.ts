@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { parseDocument } from 'yaml';
 import { answersMarkdown, inlineText } from './comment-markdown.ts';
+import { choiceOptions } from './choices.ts';
 
 const id = z.string().regex(/^[A-Za-z][\w-]{0,99}$/);
 // Runtime references are not DOM/answer-field identifiers. Beads uses dotted
@@ -102,7 +103,7 @@ export function omittedQuestions(form: TaskForm, answers: Answers): string[] {
     const value = answers[q.id];
     if (q.type !== 'choices') return q.required && (typeof value !== 'string' || !value.trim());
     const selected = value && typeof value === 'object' ? value : {};
-    return (q.required && !Object.values(selected).some(Boolean)) || q.choiceGroups?.some(g => g.mode === 'exactlyOne' && !g.choiceIds.some(id => selected[id]));
+    return (q.required || q.choiceGroups?.some(g => g.mode === 'exactlyOne')) && !choiceOptions(form, q).some(c => selected[c.id]);
   }).map(q => q.id);
 }
 
@@ -112,7 +113,7 @@ export function validateAnswers(form: TaskForm, answers: Answers, options: { all
   for (const q of form.questions) {
     allowed.add(q.id);
     if (q.id !== 'additional_notes') allowed.add(`${q.id}_more_info`);
-    if (q.type === 'choices') for (const c of q.choices) allowed.add(`${q.id}_${c.id}_more_info`);
+    if (q.type === 'choices') for (const c of choiceOptions(form, q)) allowed.add(`${q.id}_${c.id}_more_info`);
   }
   for (const [name, value] of Object.entries(answers)) {
     if (!allowed.has(name)) errors.push(`Unknown answer field: ${name}.`);
@@ -126,12 +127,9 @@ export function validateAnswers(form: TaskForm, answers: Answers, options: { all
       continue;
     }
     const selected = value && typeof value === 'object' ? value : {};
-    if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value) || Object.entries(selected).some(([name, selected]) => !q.choices.some(c => c.id === name) || typeof selected !== 'boolean'))) errors.push(`${q.title}: invalid choice answer.`);
-    if (!options.allowUnanswered && q.required && !Object.values(selected).some(Boolean)) errors.push(`${q.title}: select an option.`);
-    for (const g of q.choiceGroups ?? []) {
-      const count = g.choiceIds.filter(name => selected[name]).length;
-      if ((g.mode === 'exactlyOne' && (count > 1 || (!options.allowUnanswered && count !== 1))) || (g.mode === 'atMostOne' && count > 1)) errors.push(`${g.title ?? q.title}: ${g.mode === 'exactlyOne' ? 'select exactly one' : 'select at most one'}.`);
-    }
+    const choices = choiceOptions(form, q);
+    if (value !== undefined && (!value || typeof value !== 'object' || Array.isArray(value) || Object.entries(selected).some(([name, selected]) => !choices.some(c => c.id === name) || typeof selected !== 'boolean'))) errors.push(`${q.title}: invalid choice answer.`);
+    if (!options.allowUnanswered && (q.required || q.choiceGroups?.some(g => g.mode === 'exactlyOne')) && !choices.some(c => selected[c.id])) errors.push(`${q.title}: select an option.`);
   }
   return errors;
 }

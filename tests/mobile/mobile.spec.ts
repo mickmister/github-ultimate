@@ -62,6 +62,8 @@ test('touch wizard, zen, preserved native draft and posted response round trip',
 });
 
 test('pagehide flushes a pending edit and restores notes and wizard position', async ({ page }) => {
+  await page.getByRole('checkbox', { name: 'Other', exact: true }).check();
+  await page.getByRole('textbox', { name: 'Add note about Other', exact: true }).fill('Try another option.');
   await page.getByRole('button', { name: 'Add note about Keep the change focused', exact: true }).tap();
   await page.getByRole('textbox', { name: 'Add note about Keep the change focused', exact: true }).fill('Remember this note.');
   await page.getByRole('button', { name: '2. Instructions', exact: true }).tap();
@@ -76,6 +78,8 @@ test('pagehide flushes a pending edit and restores notes and wizard position', a
   await page.reload();
   await expect(page.getByRole('textbox', { name: 'Instructions', exact: true })).toHaveValue('Last edit before suspension');
   await page.getByRole('button', { name: '1. Scope', exact: true }).tap();
+  await expect(page.getByRole('checkbox', { name: 'Other', exact: true })).toBeChecked();
+  await expect(page.getByRole('textbox', { name: 'Add note about Other', exact: true })).toHaveValue('Try another option.');
   await expect(page.getByRole('textbox', { name: 'Add note about Keep the change focused', exact: true })).toHaveValue('Remember this note.');
   // A new source revision must not inherit the old draft.
   await page.evaluate(() => {
@@ -83,6 +87,29 @@ test('pagehide flushes a pending edit and restores notes and wizard position', a
     const data = JSON.parse(code.textContent!); data.goal = 'Changed source'; code.textContent = JSON.stringify(data);
   });
   await expect(page.getByRole('textbox', { name: 'Add note about Keep the change focused', exact: true })).not.toBeVisible();
+});
+
+test('draft persistence leaves IME text, selection and focus alone and has no routine status', async ({ page }) => {
+  await page.getByRole('button', { name: '2. Instructions', exact: true }).tap();
+  const input = page.getByRole('textbox', { name: 'Instructions', exact: true });
+  await input.focus();
+  await input.evaluate(node => {
+    const field = node as HTMLTextAreaElement;
+    field.dispatchEvent(new CompositionEvent('compositionstart', { bubbles: true }));
+    field.value = '日本語 and m'; field.setSelectionRange(2, 2);
+    field.dispatchEvent(new InputEvent('input', { bubbles: true, isComposing: true, data: '語' }));
+  });
+  await page.waitForTimeout(350);
+  await expect(input).toHaveValue('日本語 and m'); await expect(input).toBeFocused();
+  expect(await input.evaluate(node => (node as HTMLTextAreaElement).selectionStart)).toBe(2);
+  expect(await page.evaluate(() => Object.values(localStorage).some(value => value.includes('日本語 and m')))).toBe(false);
+  await input.evaluate(node => node.dispatchEvent(new CompositionEvent('compositionend', { bubbles: true, data: '日本語' })));
+  await expect.poll(() => page.evaluate(() => Object.values(localStorage).some(value => value.includes('日本語 and m')))).toBe(true);
+  await expect(input).toBeFocused();
+  expect(await input.evaluate(node => (node as HTMLTextAreaElement).selectionStart)).toBe(2);
+  await expect(page.getByText(/Saving draft|Draft saved|Restored saved draft/)).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole('textbox', { name: 'Instructions', exact: true })).toHaveValue('日本語 and m');
 });
 
 test('mobile controls fit, avoid focus zoom and hide floating chrome while typing', async ({ page, isMobile }) => {
@@ -110,8 +137,13 @@ test('mobile controls fit, avoid focus zoom and hide floating chrome while typin
   }
 });
 
-test('zen follows an offset visual viewport when the keyboard reduces visible space', async ({ page }) => {
+test('keyboard leaves zen shell stable while its focused field and close control stay usable', async ({ page }) => {
   await page.getByRole('button', { name: 'Open in zen', exact: true }).tap();
+  await page.getByRole('button', { name: '2. Instructions', exact: true }).tap();
+  const input = page.getByRole('textbox', { name: 'Instructions', exact: true });
+  await input.fill('Keep this text and selection.');
+  const dialog = page.getByRole('dialog');
+  const before = (await dialog.boundingBox())!;
   // Explicit simulated visual-viewport geometry, not an actual iOS keyboard.
   await page.evaluate(() => {
     Object.defineProperties(window.visualViewport!, {
@@ -120,9 +152,16 @@ test('zen follows an offset visual viewport when the keyboard reduces visible sp
     window.visualViewport!.dispatchEvent(new Event('resize'));
   });
   await expect.poll(async () => {
-    const rect = (await page.getByRole('dialog').boundingBox())!;
+    const rect = (await dialog.locator('.zen-body').boundingBox())!;
     return rect.y >= 120 && rect.y + rect.height <= 441;
   }).toBe(true);
+  const after = (await dialog.boundingBox())!;
+  expect(after).toEqual(before);
+  await expect.poll(async () => {
+    const box = (await input.boundingBox())!;
+    return box.y >= 120 && box.y < 440;
+  }).toBe(true);
+  await expect(input).toHaveValue('Keep this text and selection.');
   await expect(page.getByRole('button', { name: 'Close zen' })).toBeInViewport();
 });
 

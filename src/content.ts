@@ -71,6 +71,13 @@ function openForm(item: Mounted, zen = true) {
 }
 function updatePendingNavigation() {
   if (!pendingNavigation || !pendingSelect) return;
+  // Composition is not submission. Keep counts/history pending, but let the
+  // person review, paste, preview and click Comment without a sticky prompt.
+  const active = document.activeElement;
+  const editingNative = [...document.querySelectorAll<HTMLTextAreaElement>('#new_comment_field, textarea[name="comment[body]"], textarea[placeholder="Leave a comment"]')]
+    .some(input => !input.closest('.js-comment-update') && input.getClientRects().length > 0 &&
+      (input === active || Boolean(active && input.closest('form')?.contains(active)) || input.value.includes('```github-response')));
+  if (editingNative || [...mounted.values()].some(item => item.controller?.isComposingResponse())) { pendingNavigation.hidden = true; return; }
   if (!pendingForms.some(item => pendingKey(item) === selectedPending)) selectedPending = pendingForms[0] ? pendingKey(pendingForms[0]) : '';
   const target = pendingForms.find(item => pendingKey(item) === selectedPending);
   if (!target) { pendingNavigation.hidden = true; return; }
@@ -202,6 +209,9 @@ async function boot() {
   window.addEventListener('scroll', updatePendingNavigation, { passive: true });
   window.addEventListener('resize', updatePendingNavigation);
   window.addEventListener('gu-view-change', updatePendingNavigation);
+  document.addEventListener('focusin', updatePendingNavigation);
+  document.addEventListener('focusout', () => queueMicrotask(updatePendingNavigation));
+  document.addEventListener('input', updatePendingNavigation);
   window.addEventListener('pageshow', schedule);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') schedule(); });
   extensionAPI().storage.onChanged.addListener((changes, area) => {

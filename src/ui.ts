@@ -3,9 +3,11 @@ import { marked } from 'marked';
 import { composeResponse, validateAnswers, omittedQuestions, safeLink, type TaskForm, type Answers, type Snapshot, type ResponseRecord } from './protocol';
 import { answersMarkdown } from './comment-markdown';
 import { isolateExtensionKeyboard } from './keyboard';
-import { read, write } from './storage';
+import { read } from './storage';
+import { draftPersistence } from './draft';
+import { choiceOptions, isOtherChoice } from './choices';
 import css from './workspace.css?inline';
-import { trackViewport } from './viewport';
+import { trackViewport, stabilizeZen } from './viewport';
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
@@ -71,7 +73,7 @@ export function insertComment(value: string): void {
 }
 
 export type SavedSubmission = { record: ResponseRecord; url?: string };
-export type FormController = { openZen: () => void; setResponses: (responses: SavedSubmission[]) => void; dispose: () => void };
+export type FormController = { openZen: () => void; isComposingResponse: () => boolean; setResponses: (responses: SavedSubmission[]) => void; dispose: () => void };
 let closeActiveZen: (() => void) | undefined;
 
 export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isCurrent: () => boolean, remember: boolean): FormController {
@@ -89,8 +91,10 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   const dialogHeader = el('div', undefined, 'zen-header'); dialogHeader.append(el('span', 'Focused form', 'muted'));
   const zenBody = el('div', undefined, 'zen-body'); dialog.append(dialogHeader, zenBody);
   let previousFocus: HTMLElement | null = null;
+  let stopZenViewport: (() => void) | undefined;
   function closeZen() {
     if (!dialog.open && card.parentElement !== zenBody) return;
+    stopZenViewport?.(); stopZenViewport = undefined;
     if (dialog.open) dialog.close();
     inline.prepend(card); placeholder.hidden = true;
     if (closeActiveZen === closeZen) closeActiveZen = undefined;
@@ -101,7 +105,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   function openZen() {
     if (dialog.open || !root.host.isConnected) return;
     closeActiveZen?.(); previousFocus = (root.activeElement ?? document.activeElement) as HTMLElement | null;
-    zenBody.append(card); placeholder.hidden = false; dialog.showModal(); closeActiveZen = closeZen; close.focus(); window.dispatchEvent(new Event('gu-view-change'));
+    zenBody.append(card); placeholder.hidden = false; dialog.showModal(); stopZenViewport = stabilizeZen(dialog); closeActiveZen = closeZen; close.focus(); window.dispatchEvent(new Event('gu-view-change'));
   }
   dialog.addEventListener('cancel', event => { event.preventDefault(); closeZen(); });
   dialog.addEventListener('close', () => { if (!dialog.open && card.parentElement === zenBody) closeZen(); });
@@ -116,51 +120,58 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     }
   });
   header.append(button('Open in zen', openZen, 'zen-open'));
-  const controller: FormController = { openZen, setResponses: () => {}, dispose: closeZen };
+  const controller: FormController = { openZen, isComposingResponse: () => false, setResponses: () => {}, dispose: closeZen };
   root.host.addEventListener('gu-dispose', () => controller.dispose(), { once: true });
   if (form.invalidatedAt) { editor.append(el('p', `This form was superseded. ${form.invalidatedReason ?? ''}`, 'notice')); return controller; }
   const values: Answers = {};
   const htmlForm = el('form'); htmlForm.noValidate = true; editor.append(htmlForm);
-  const status = el('p', '', 'muted'); status.setAttribute('role', 'status');
+  const status = el('p', '', 'draft-error error'); status.setAttribute('role', 'alert');
   const errors = el('div', undefined, 'error'); errors.setAttribute('role', 'alert');
   const key = `draft:${source.repository}:${source.number}:${source.comment_id}:${form.id}:${source.revision}`;
-  let disposed = false, changed = false, dirty = false, saveVersion = 0, timer: ReturnType<typeof setTimeout>;
   let step = 0;
+  let composing = false;
+  const draft = draftPersistence(key, remember, () => ({ values, step }), message => {
+    if (status.textContent !== message) status.textContent = message;
+  });
+  const save = () => draft.change(composing);
   const controls = new Map<string, HTMLInputElement | HTMLTextAreaElement>();
   const fields = new Map<string, HTMLFieldSetElement>();
   for (const q of form.questions) {
     const fieldset = el('fieldset'); fieldset.append(el('legend', q.title), markdown(q.description));
     fields.set(q.id, fieldset);
     if (q.type === 'choices') {
-      values[q.id] = Object.fromEntries(q.choices.map(c => [c.id, false]));
+      const choices = choiceOptions(form, q);
+      values[q.id] = Object.fromEntries(choices.map(c => [c.id, false]));
       const grouped = new Set((q.choiceGroups ?? []).flatMap(g => g.choiceIds));
       const choiceNodes = new Map<string, HTMLElement>();
-      for (const c of q.choices) {
+      for (const c of choices) {
         const row = el('div', undefined, 'choice'); const label = el('label', undefined, 'choice-label'); const input = el('input');
         input.type = 'checkbox'; input.name = q.id; input.value = c.id;
         controls.set(`${q.id}:${c.id}`, input);
         input.addEventListener('change', () => {
           (values[q.id] as Record<string, boolean>)[c.id] = input.checked;
-          const group = q.choiceGroups?.find(g => g.choiceIds.includes(c.id) && g.mode !== 'any');
-          if (input.checked && group) for (const name of group.choiceIds) if (name !== c.id) {
-            const other = controls.get(`${q.id}:${name}`) as HTMLInputElement;
-            other.checked = false; (values[q.id] as Record<string, boolean>)[name] = false;
-          }
         });
         label.append(input, el('span', c.label)); row.append(label);
         if (c.assumedTrue) row.append(el('span', 'Author assumption · not preselected', 'badge'));
         if (c.description) row.append(markdown(c.description));
         if (c.is_recommended_reason) row.append(el('p', `Recommended · ${c.is_recommended_reason}`, 'recommended'));
         if (c.prosAndCons) for (const [kind, items] of Object.entries(c.prosAndCons)) if (items?.length) row.append(markdown(`**${kind === 'pros' ? 'Pros' : 'Cons'}**\n${items.map(s => `- ${s}`).join('\n')}`));
-        row.append(notes(`Add note about ${c.label}`, `${q.id}_${c.id}_more_info`, values)); choiceNodes.set(c.id, row);
+        const note = notes(`Add note about ${c.label}`, `${q.id}_${c.id}_more_info`, values);
+        if (isOtherChoice(c)) {
+          note.querySelector('textarea')!.placeholder = 'Describe your other option';
+          input.addEventListener('change', () => {
+            if (input.checked) { note.querySelector('textarea')!.hidden = false; note.querySelector('button')!.setAttribute('aria-expanded', 'true'); }
+          });
+        }
+        row.append(note); choiceNodes.set(c.id, row);
       }
       for (const g of q.choiceGroups ?? []) {
         const block = el('section', undefined, 'choice-group'); if (g.title) block.append(el('h4', g.title));
         if (g.description) block.append(markdown(g.description));
-        if (g.mode !== 'any') block.append(el('p', g.mode === 'exactlyOne' ? 'Choose exactly one' : 'Choose at most one', 'muted'));
+        if (g.mode !== 'any') block.append(el('p', 'The author suggests one option; you may select several or choose Other.', 'muted'));
         for (const name of g.choiceIds) block.append(choiceNodes.get(name)!); fieldset.append(block);
       }
-      for (const c of q.choices) if (!grouped.has(c.id)) fieldset.append(choiceNodes.get(c.id)!);
+      for (const c of choices) if (!grouped.has(c.id)) fieldset.append(choiceNodes.get(c.id)!);
     } else {
       const input = q.type === 'text' ? el('input') : el('textarea');
       input.name = q.id; input.setAttribute('aria-label', q.title); input.placeholder = q.placeholder ?? ''; input.maxLength = 16000;
@@ -184,6 +195,8 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   const actions = el('div', undefined, 'actions');
   const config = typeof form.allowCodeFileChanges === 'object' ? form.allowCodeFileChanges : undefined;
   const preview = el('section', undefined, 'preview'); preview.hidden = true;
+  controller.isComposingResponse = () => !preview.hidden;
+  const viewChanged = () => window.dispatchEvent(new Event('gu-view-change'));
   const previewText = el('textarea'); previewText.readOnly = true; previewText.rows = 12; previewText.setAttribute('aria-label', 'Generated comment preview');
   const previewStatus = el('p'); previewStatus.setAttribute('role', 'status');
   function prepare(approved: boolean) {
@@ -193,6 +206,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     try {
       previewText.value = composeResponse(form, values, source, approved, { allowUnanswered: true }); preview.hidden = false;
       previewStatus.textContent = approved ? 'Approved next steps. Review the command, then place it in GitHub’s editor.' : 'Discussion only. This command explicitly disallows implementation.';
+      viewChanged();
       preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) { errors.textContent = String(e); }
   }
@@ -206,7 +220,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     if (!isCurrent()) { previewStatus.textContent = 'Source changed. Refresh and review again.'; return; }
     try { closeZen(); insertComment(previewText.value); previewStatus.textContent = 'Draft inserted. Click GitHub’s Comment button to submit. This is not submitted until the response is posted.'; }
     catch (e) { previewStatus.textContent = (e as Error).message; }
-  }, 'primary'), button('Copy comment', () => { void copyText(previewText.value).then(() => { previewStatus.textContent = 'Copied.'; }).catch(e => { previewStatus.textContent = e.message; }); }), button('Close preview', () => { preview.hidden = true; }));
+  }, 'primary'), button('Copy comment', () => { void copyText(previewText.value).then(() => { previewStatus.textContent = 'Copied.'; }).catch(e => { previewStatus.textContent = e.message; }); }), button('Close preview', () => { preview.hidden = true; viewChanged(); }));
   preview.append(previewActions); editor.append(preview);
   const questions = form.questions.filter(q => q.id !== 'additional_notes');
   const wizard = questions.length > 1;
@@ -216,7 +230,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   review.hidden = true;
   const stepButtons: HTMLButtonElement[] = [];
   const navigation: Array<{ previous: HTMLButtonElement; next: HTMLButtonElement }> = [];
-  function goTo(index: number) { step = Math.max(0, Math.min(index, questions.length)); renderStep(); save(); }
+  function goTo(index: number) { step = Math.max(0, Math.min(index, questions.length)); renderStep(); save(); viewChanged(); }
   function navigationRow() {
     const row = el('div', undefined, 'wizard-navigation');
     const previous = button('Previous', () => goTo(step - 1));
@@ -244,8 +258,7 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       if (omitted.length) review.append(el('p', `${omitted.length} requested question${omitted.length === 1 ? ' is' : 's are'} unanswered. You may still submit if they no longer apply; omissions are recorded.`, 'notice'));
       for (const q of form.questions) {
         const section = el('section', undefined, 'review-item');
-        const one = { ...form, questions: [q] };
-        section.append(markdown(answersMarkdown(one, values)));
+        section.append(markdown(answersMarkdown(form, values, q.id)));
         section.append(button(`Revisit ${q.title}`, () => {
           if (q.id === 'additional_notes') fields.get(q.id)?.querySelector('textarea')?.focus(); else goTo(questions.findIndex(item => item.id === q.id));
         })); review.append(section);
@@ -277,32 +290,14 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       editor.hidden = false; summary.hidden = true; badge.textContent = 'New response';
       // Starting a new submission never edits a posted response or its ID.
       for (const name of Object.keys(values)) delete values[name];
-      for (const q of form.questions) if (q.type === 'choices') values[q.id] = Object.fromEntries(q.choices.map(c => [c.id, false]));
+      for (const q of form.questions) if (q.type === 'choices') values[q.id] = Object.fromEntries(choiceOptions(form, q).map(c => [c.id, false]));
       for (const input of htmlForm.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('input, textarea')) { if (input instanceof HTMLInputElement && input.type === 'checkbox') input.checked = false; else input.value = ''; }
-      step = 0; renderStep(); save();
+      step = 0; preview.hidden = true; renderStep(); save(); viewChanged();
     }), answers);
   };
-  const flushDraft = () => {
-    clearTimeout(timer);
-    if (!remember || !dirty) return;
-    dirty = false;
-    const version = saveVersion;
-    void write(key, { values, step }).then(() => {
-      if (!disposed && version === saveVersion) status.textContent = 'Draft saved in this browser profile.';
-    }).catch(() => {
-      if (version === saveVersion) dirty = true;
-      if (!disposed && version === saveVersion) status.textContent = 'Could not save draft locally. Keep this page open or copy your answers.';
-    });
-  };
-  const save = () => {
-    changed = true; clearTimeout(timer);
-    ++saveVersion; dirty = true;
-    if (remember) {
-      status.textContent = 'Saving draft…';
-      timer = setTimeout(flushDraft, 250);
-    }
-  };
   htmlForm.addEventListener('input', save); htmlForm.addEventListener('change', save);
+  htmlForm.addEventListener('compositionstart', () => { composing = true; draft.change(true); });
+  htmlForm.addEventListener('compositionend', () => { composing = false; save(); });
   function restore(saved: Answers) {
     // Restore only declared form fields; stored drafts are never interpreted as HTML.
     for (const [name, input] of controls) {
@@ -316,25 +311,16 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       input.value = saved[input.name] as string; values[input.name] = input.value; input.hidden = !input.value;
       const toggle = input.parentElement!.querySelector('button')!; toggle.setAttribute('aria-expanded', String(!input.hidden)); toggle.classList.toggle('has-note', Boolean(input.value));
     }
-    status.textContent = 'Restored saved draft.';
   }
   if (remember) void read<Record<string, unknown> | null>(key, null).then(saved => {
-    if (!saved || changed || !root.host.isConnected) return;
+    if (!saved || draft.changed || !root.host.isConnected) return;
     restore((saved.values && typeof saved.values === 'object' ? saved.values : saved) as Answers);
     if (typeof saved.step === 'number') step = Math.max(0, Math.min(saved.step, questions.length));
     renderStep();
   });
-  // iOS can suspend a tab before the debounce fires. No unload/beforeunload
-  // handler: those are unreliable on mobile and can interfere with back/forward cache.
-  const onVisibility = () => { if (document.visibilityState === 'hidden') flushDraft(); };
-  document.addEventListener('visibilitychange', onVisibility);
-  window.addEventListener('pagehide', flushDraft);
   controller.dispose = () => {
     closeZen();
-    disposed = true; clearTimeout(timer);
-    document.removeEventListener('visibilitychange', onVisibility);
-    window.removeEventListener('pagehide', flushDraft);
-    flushDraft();
+    draft.dispose();
   };
   return controller;
 }

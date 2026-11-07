@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { parseRecord, composeResponse, validateAnswers, revisionOf, safeLink } from '../src/protocol';
 import { readFileSync } from 'node:fs';
+import { choiceOptions } from '../src/choices';
 
 const form = { format: 'standard', id: 'review', title: 'Review next steps', session_id: 'session-one', questions: [{ id: 'scope', type: 'choices', title: 'Scope', required: true, choices: [{ id: 'small', label: 'Small' }, { id: 'large', label: 'Large' }], choiceGroups: [{ id: 'one', mode: 'exactlyOne', choiceIds: ['small', 'large'] }] }, { id: 'notes', type: 'textarea', title: 'Explain', required: true }] };
 function parsed() { const result = parseRecord(JSON.stringify(form)); if (!('format' in result)) throw new Error('Expected form'); return result; }
@@ -34,15 +35,15 @@ describe('untrusted GitHub protocol', () => {
     expect(() => parseRecord(JSON.stringify({ ...form, version: 2 }))).toThrow();
     expect(() => parseRecord('x: '.repeat(25) + '1')).toThrow();
   });
-  it('requires answers and exclusive option membership', () => {
+  it('requests answers but treats author single-choice groups as guidance', () => {
     expect(validateAnswers(parsed(), {})).not.toHaveLength(0);
-    expect(validateAnswers(parsed(), { scope: { small: true, large: true }, notes: 'ok' })).toContain('Scope: select exactly one.');
+    expect(validateAnswers(parsed(), { scope: { small: true, large: true }, notes: 'ok' })).toEqual([]);
     expect(validateAnswers(parsed(), { scope: { small: true, large: false }, notes: 'ok' })).toEqual([]);
   });
-  it('permits explicit omissions while retaining type and exclusive-choice integrity', () => {
+  it('permits explicit omissions and multiple choices while retaining type integrity', () => {
     const source = { repository: 'owner/repo', number: 7, comment_id: 'issuecomment-42', revision: 'a'.repeat(64) };
     expect(validateAnswers(parsed(), {}, { allowUnanswered: true })).toEqual([]);
-    expect(validateAnswers(parsed(), { scope: { small: true, large: true } }, { allowUnanswered: true })).not.toEqual([]);
+    expect(validateAnswers(parsed(), { scope: { small: true, large: true } }, { allowUnanswered: true })).toEqual([]);
     expect(validateAnswers(parsed(), { scope: [] } as never, { allowUnanswered: true })).not.toEqual([]);
     expect(validateAnswers(parsed(), { scope: null } as never, { allowUnanswered: true })).not.toEqual([]);
     const body = composeResponse(parsed(), {}, source, false, { allowUnanswered: true });
@@ -51,6 +52,30 @@ describe('untrusted GitHub protocol', () => {
     expect(parseRecord(JSON.stringify(response))).toMatchObject({ kind: 'response', omitted_questions: ['scope', 'notes'] });
     expect(body).toContain('<summary>Submitted answers · GitHub Ultimate</summary>');
     expect(body).toContain('**Scope**');
+  });
+  it('adds Other without changing source data and round-trips its explanation in v1 answers', async () => {
+    const definition = parsed(), before = JSON.stringify(definition);
+    const source = { repository: 'owner/repo', number: 7, comment_id: 'issuecomment-42', revision: await revisionOf(before) };
+    const answers = { scope: { small: true, large: true, other: true }, scope_other_more_info: 'A third approach', notes: 'Discuss this combination.' };
+    expect(validateAnswers(definition, answers)).toEqual([]);
+    expect(validateAnswers(definition, { ...answers, scope: { other: true } })).toEqual([]);
+    expect(validateAnswers(definition, { ...answers, scope: { made_up: true } })).toContain('Scope: invalid choice answer.');
+    const comment = composeResponse(definition, answers, source, false);
+    expect(comment).toContain('Small, Large, Other');
+    expect(comment).toContain('Note on Other:');
+    const payload = JSON.parse(comment.split('```github-response\n')[1].split('\n```')[0]);
+    expect(parseRecord(JSON.stringify(payload))).toMatchObject({ schema_version: 1, source, answers });
+    expect(JSON.stringify(definition)).toBe(before);
+  });
+  it('reuses authored Other options and avoids collisions with existing answer fields', () => {
+    const definition = parsed(); const question = definition.questions[0];
+    if (question.type !== 'choices') throw new Error('Expected choices');
+    const authored = { ...question, choices: [...question.choices, { id: 'custom', label: 'Other (please explain)' }] };
+    expect(choiceOptions({ questions: [authored] }, authored)).toHaveLength(3);
+    const collision = { ...definition, questions: [...definition.questions, { id: 'scope_other_more_info', title: 'Existing field', type: 'textarea' as const, description: '' }] };
+    expect(choiceOptions(collision, question).at(-1)?.id).toBe('other_2');
+    const body = composeResponse(collision, { scope: { other_2: true }, scope_other_2_more_info: 'Collision-free', notes: 'ok' }, { repository: 'owner/repo', number: 7, comment_id: 'test', revision: 'a'.repeat(64) }, false);
+    expect(body).toContain('Collision-free');
   });
   it('binds stable source revision and resumes session while preserving submit intent', async () => {
     const source = { repository: 'owner/repo', number: 7, comment_id: 'issuecomment-42', revision: await revisionOf(JSON.stringify(form)) };
