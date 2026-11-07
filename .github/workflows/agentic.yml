@@ -10,9 +10,6 @@ on:
   # Route PR creation using the default-branch workflow definition.
   pull_request_target:
     types: [opened]
-  # Includes inline comments on PR diffs.
-  pull_request_review_comment:
-    types: [created]
 
 permissions:
   contents: read

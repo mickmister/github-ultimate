@@ -2,6 +2,7 @@ import { el, button, shadow, renderForm, renderRecordTools, renderSnapshot, rend
 import { parseRecord, revisionOf, type Answers, type ResponseRecord } from '../src/protocol';
 import { response, source } from './fixtures';
 import { githubEnvironment, type GitHubOptions } from './github';
+import { defaults, type Settings } from '../src/storage';
 
 export type StoryArgs = GitHubOptions & {
   source: string | object;
@@ -10,8 +11,9 @@ export type StoryArgs = GitHubOptions & {
   stage: 'edit' | 'question-two' | 'review' | 'preview' | 'zen' | 'submitted' | 'history' | 'new-response';
   seed?: Answers;
   storageFailure?: boolean;
+  showDiagnosticJson?: Settings['showDiagnosticJson'];
 };
-export const baseArgs = { theme: 'light', width: 'fluid', stage: 'edit', layout: 'github', thread: 'pull', conversation: 'short' } as const;
+export const baseArgs = { theme: 'light', width: 'fluid', stage: 'edit', layout: 'github', thread: 'pull', conversation: 'short', showDiagnosticJson: defaults.showDiagnosticJson } as const;
 export const controls = {
   source: { name: 'Raw JSON', control: 'object', description: 'Expand the record or toggle “Edit source as JSON” to view/edit raw JSON. This is the record rendered in the story; YAML and malformed-source examples retain their original text.' },
   theme: { control: 'inline-radio', options: ['light', 'dark'] },
@@ -19,6 +21,7 @@ export const controls = {
   stage: { control: 'select', options: ['edit', 'question-two', 'review', 'preview', 'zen', 'submitted', 'history', 'new-response'] },
   seed: { control: 'object' },
   storageFailure: { control: 'boolean' },
+  showDiagnosticJson: { name: 'Show original record button', control: 'boolean', description: 'Mirrors the extension’s showDiagnosticJson setting. Enables the “Show / hide original record” button; off by default.' },
   layout: { control: 'inline-radio', options: ['github', 'isolated'] },
   thread: { control: 'inline-radio', options: ['pull', 'issue'] },
   conversation: { control: 'inline-radio', options: ['short', 'long'] },
@@ -71,7 +74,7 @@ export function renderRecord(args: StoryArgs): HTMLElement {
       revision = await revisionOf(raw);
       if (disposed || !host.isConnected) return;
       const original = el('pre', raw, 'gh-source-data'); original.hidden = true;
-      const toggleOriginal = () => { original.hidden = !original.hidden; };
+      const toggleOriginal = args.showDiagnosticJson ? () => { original.hidden = !original.hidden; } : undefined;
       if ('format' in data) {
         formId = data.id;
         controller = renderForm(root, data, { ...source, revision }, () => !disposed, Boolean(args.storageFailure), toggleOriginal);
