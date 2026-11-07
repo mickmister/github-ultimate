@@ -1,4 +1,5 @@
 import type { Answers, ResponseRecord, Snapshot, TaskForm } from '../src/protocol';
+import { ADDITIONAL_NOTES_DESCRIPTION } from '../src/form-copy';
 
 export const form = {
   format: 'standard', version: 1, id: 'storybook_plan', task_id: 'storybook-task',
@@ -13,7 +14,7 @@ export const form = {
       ], choiceGroups: [{ id: 'suggested', title: 'Suggested direction', mode: 'exactlyOne', choiceIds: ['focused', 'investigate'] }] },
     { id: 'context', type: 'textarea', title: 'What context matters?', required: true, description: 'Use this field to try text selection, keyboard input, or the mobile software keyboard.', placeholder: 'Explain what you observed and what should happen.' },
     { id: 'verification', type: 'text', title: 'How should we verify it?', description: '', placeholder: 'For example: test in Chrome and Safari.' },
-    { id: 'additional_notes', type: 'textarea', title: 'Additional notes', description: 'Global notes stay outside the wizard question count.' },
+    { id: 'additional_notes', type: 'textarea', title: 'Additional notes', description: ADDITIONAL_NOTES_DESCRIPTION },
   ],
   nextInstructionPresets: [{ label: 'Discuss the approach', value: 'Ask follow-up questions before implementing.' }],
 } satisfies TaskForm;
