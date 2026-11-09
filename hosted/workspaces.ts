@@ -12,12 +12,13 @@ export class WorkspaceReader {
     if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace first.');
     return this.send<T>({ ...request, id: this.id, installationId: this.installationId, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
   }
-  async discover(): Promise<Workspace[]> {
+  async discover(progress?: (prefix: 'documents/' | 'dolt/') => void): Promise<Workspace[]> {
     const workspaces = new Map<string, Workspace>();
     // Matching refs is GitHub's complete, non-paginated custom-ref endpoint.
     // Keep distinct namespaces distinct; machine-local attachments aren't a
     // remotely available registry and a ref name isn't a workspace UUID.
     for (const prefix of ['documents/', 'dolt/'] as const) {
+      progress?.(prefix);
       const refs = await this.read<GitRef[]>({ operation: 'gitRefs', prefix });
       for (const ref of refs) {
         if (!ref.ref.startsWith(`refs/${prefix}`)) throw new Error('Unexpected workspace ref namespace.');

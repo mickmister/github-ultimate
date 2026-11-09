@@ -55,7 +55,8 @@ test('preview paths avoid branch slash/slug collisions and block oversized or li
 test('hosted production build uses relative subpath assets and no source maps', async () => {
   execFileSync(process.execPath, ['scripts/build-hosted.mjs'], { cwd: resolve('.'), env: { ...process.env, GITHUB_REF_NAME: 'test/subpath' } });
   const html = await readFile('hosted-dist/index.html', 'utf8');
-  expect(html).toContain('src="./main.js"'); expect(html).toContain('href="./main.css"');
+  expect(html).toMatch(/src="\.\/main-[A-Z0-9]+\.js"/); expect(html).toMatch(/href="\.\/main-[A-Z0-9]+\.css"/);
+  for (const [, asset] of html.matchAll(/(?:src|href)="\.\/([^"/]+\.(?:js|css))"/g)) expect(await readdir('hosted-dist')).toContain(asset);
   expect((await readdir('hosted-dist')).some(name => name.endsWith('.map'))).toBe(false);
   expect(JSON.parse(await readFile('hosted-dist/build.json', 'utf8')).branch).toBe('test/subpath');
   expect(await payloadSize('hosted-dist')).toBeLessThan(previewLimit);

@@ -11,7 +11,8 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   ...gitReadSchemas,
 ]);
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
-export const pageMessageSchema = z.object({ channel: z.literal(pageChannel), version: z.literal(1), requestId: z.string().uuid(), request: hostedRequestSchema }).strict();
+export const pageEnvelopeSchema = z.object({ channel: z.literal(pageChannel), version: z.literal(1), requestId: z.string().uuid(), request: z.unknown() }).strict();
+export const pageMessageSchema = pageEnvelopeSchema.extend({ request: hostedRequestSchema });
 
 export function trustedOrigin(input: string): string {
   const url = new URL(input);

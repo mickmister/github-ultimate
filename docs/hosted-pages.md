@@ -14,9 +14,12 @@ Hosted page UI -> window messages -> isolated content script
 2. Open a deployed hosted preview. It displays its actual origin. In connection
    settings, grant that exact origin read access and approve the browser host
    permission. Reload the hosted page.
-3. **Connect to extension**, explicitly choose a named connection, then list
-   repositories or read `mickmister/workspace-storage`. All requests specify a
-   connection; unavailable access never falls back to another one.
+3. The page connects to the extension automatically. It restores the saved
+   approved connection, or selects the only available connection on a first
+   visit. With multiple connections and no saved choice, choose one explicitly.
+   **Connect to extension** retries the handshake if needed. Then list
+   repositories or read `mickmister/workspace-storage`. Unavailable saved access
+   never falls back to another connection.
 4. **Discover workspaces**, choose a stored namespace, then **Browse documents**
    and **Read document**. JSON, Markdown, forms and other UTF-8 resources display
    as plain text. **Inspect Beads snapshot** reports its pinned storage metadata;
@@ -30,9 +33,35 @@ include the workspace namespace. Access follows the discovery connection without
 manual workspace bindings. Installation changes require reconnect/discovery.
 No tokens, login/device-flow operations,
 arbitrary HTTP or workflow dispatch are exposed. The page keeps results only in
-memory, does not save browser storage or install a service worker, and provides
-**Clear displayed data**. Generic query-only GraphQL, Dolt issue queries and
+memory and does not install a service worker. Only navigation selections are
+saved in browser storage, as described below. Generic query-only GraphQL, Dolt issue queries and
 separate dispatch grants are future slices.
+
+## Returning to a workspace and discovery diagnostics
+
+The page stores a small navigation record in localStorage, isolated by preview
+pathname: connection ID, selected installation ID, repository, workspace name
+and whether discovery had completed. It never persists tokens, document bodies,
+manifests, Git trees or read results. A return visit reconnects, confirms that the
+saved connection is still approved and signed in, refreshes refs, and restores
+the workspace's manifest/document list. Individual document contents require a
+new read. A changed installation or unavailable saved connection stops automatic
+restoration and asks for an explicit choice. Unavailable/corrupt browser storage
+does not prevent manual browsing.
+
+**Clear displayed data** clears in-memory workspace/read results while retaining
+the saved selection. **Forget saved selections** removes this preview's record
+and clears displayed data. Restoring a workspace performs bounded authenticated
+reads through the normal broker/rate limiter; there is no polling loop.
+
+Discovery progress and errors appear both in the global connection status and
+beside **Discover workspaces**. The isolated relay explicitly rejects incompatible
+requests rather than silently dropping them before the background/network layer.
+The page verifies a relay revision during the handshake, so an old injected script
+reports an actionable update/reload error. Extension startup/update refreshes
+existing dynamic script registrations; already-open tabs still need reloading
+after an extension update. Production HTML uses content-hashed JS/CSS URLs to
+avoid mixing cached assets from different deployments.
 
 ## Workspace storage contract
 
@@ -90,7 +119,7 @@ the actual sender origin from browser metadata, not a page-supplied claim.
 ## Build and publication
 
 `npm run hosted:build` writes only HTML, JS/CSS and public build metadata to
-`hosted-dist/`. Relative asset URLs work under branch preview paths. No runtime
+`hosted-dist/`. Content-hashed relative asset URLs work under branch preview paths. No runtime
 application backend is needed.
 
 After CI verification succeeds for a branch push, the `pages` job:
@@ -150,7 +179,8 @@ connection isolation, Git object bounds, integrity verification and revocation.
 Packaged Chrome tests run the production
 hosted build under a nested preview URL with actual extension messaging/storage
 and simulated GitHub network replies, including workspace discovery, document
-reading as inert text, Beads manifest inspection and revocation of an open
+reading as inert text, automatic reconnection/selection restoration, incompatible
+request/old-relay diagnostics, Beads manifest inspection and revocation of an open
 document tab. Browser host access is pre-granted only in
 the unattended test manifest; actual users approve it through browser UI. Signed
 iOS transport remains a real-device acceptance item.
