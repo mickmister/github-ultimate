@@ -1,4 +1,4 @@
-import { pageChannel, replyChannel } from '../src/bridge-channels';
+import { pageChannel, replyChannel, hostedRelayRevision } from '../src/bridge-channels';
 import type { HostedRequest } from '../src/hosted-protocol';
 
 export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000): Promise<T> {
@@ -10,6 +10,7 @@ export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000): Pro
       const message = event.data;
       if (event.source !== window || event.origin !== location.origin || !message || message.channel !== replyChannel || message.version !== 1 || message.requestId !== requestId || typeof message.ok !== 'boolean') return;
       cleanup();
+      if (message.relayRevision !== hostedRelayRevision) { reject(new Error('The hosted extension relay is outdated. Update the extension, then reload this page to replace its injected script.')); return; }
       if (message.ok) resolve(message.result as T);
       else reject(new Error(typeof message.error === 'string' ? message.error : 'Extension request failed.'));
     };

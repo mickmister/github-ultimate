@@ -1,6 +1,7 @@
 import { bridgeRequest } from './client';
 import type { HostedConnection } from '../src/hosted-protocol';
 import { WorkspaceReader, documents, documentText, type Snapshot, type Workspace } from './workspaces';
+import { loadNavigation, saveNavigation, forgetNavigation, type Navigation } from './navigation';
 import './style.css';
 
 declare const __HOSTED_BUILD__: { branch: string; sha: string };
@@ -22,12 +23,23 @@ const documentButton = document.getElementById('open-document') as HTMLButtonEle
 const content = document.getElementById('document-content')!;
 const snapshotInfo = document.getElementById('snapshot-info')!;
 const beadsInfo = document.getElementById('beads-info')!;
+const workspaceStatus = document.getElementById('workspace-status')!;
+const rememberedInfo = document.getElementById('remembered-info')!;
+let saved = loadNavigation();
+if (saved) repository.value = saved.repository;
 let workspaces: Workspace[] = [];
 let snapshot: Snapshot | undefined;
 let reader: WorkspaceReader | undefined;
 let connections: HostedConnection[] = [];
 let generation = 0;
 let busy = false;
+function report(message: string) { status.textContent = workspaceStatus.textContent = message; }
+function remember(discovered = workspaces.length > 0) {
+  const connection = connections.find(connection => connection.id === select.value);
+  if (!connection?.installation || !/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/.test(repository.value.trim())) return;
+  saved = { connectionId: connection.id, installationId: connection.installation.id, repository: repository.value.trim(), workspace: workspaceSelect.value || undefined, discovered };
+  rememberedInfo.textContent = saveNavigation(saved) ? 'Connection, repository and workspace selections are saved in this browser for this preview.' : 'Browser storage is unavailable. Selections will last for this visit only.';
+}
 function update() {
   const connection = connections.find(c => c.id === select.value);
   select.disabled = busy || !connections.length;
@@ -45,16 +57,20 @@ function update() {
 }
 async function action(work: () => Promise<void>) {
   if (busy) return;
-  busy = true; update(); status.textContent = 'Waiting for extension…';
+  const current = generation;
+  busy = true; update(); report('Waiting for extension…');
   try { await work(); }
-  catch (error) { result.textContent = 'No successful result.'; resetWorkspaces(); status.textContent = error instanceof Error ? error.message : 'Request failed.'; }
+  catch (error) { if (current === generation) { result.textContent = 'No successful result.'; resetWorkspaces(); report(error instanceof Error ? error.message : 'Request failed.'); } }
   finally { busy = false; update(); }
 }
-connectButton.addEventListener('click', () => void action(async () => {
-  generation++; result.textContent = 'No request yet.'; resetWorkspaces();
+async function connect() {
+  const current = generation, restore = saved;
+  result.textContent = 'No request yet.'; resetWorkspaces();
   connections = []; select.replaceChildren();
   await bridgeRequest({ operation: 'discover' }, 5000);
-  connections = await bridgeRequest<HostedConnection[]>({ operation: 'connections' });
+  const available = await bridgeRequest<HostedConnection[]>({ operation: 'connections' });
+  if (current !== generation) return;
+  connections = available;
   const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose a connection'; select.append(placeholder);
   for (const connection of connections) {
     const option = document.createElement('option'); option.value = connection.id;
@@ -62,9 +78,21 @@ connectButton.addEventListener('click', () => void action(async () => {
     select.append(option);
   }
   if (!connections.length) { const option = document.createElement('option'); option.textContent = 'No approved, signed-in connections'; select.append(option); }
-  status.textContent = connections.length ? `Connected. ${connections.length} approved connection(s). Choose one before reading.` : 'No usable connections. Sign in, select an installation and approve this origin in extension settings.';
-}));
-select.addEventListener('change', () => { generation++; result.textContent = 'No request yet.'; resetWorkspaces(); update(); });
+  const previous = restore && connections.find(connection => connection.id === restore.connectionId);
+  if (restore && !previous) { report('Connected, but the saved connection is unavailable or no longer approved. Choose a connection explicitly.'); return; }
+  const selected = previous ?? (connections.length === 1 ? connections[0] : undefined);
+  if (selected) select.value = selected.id;
+  if (!restore && selected) remember(false);
+  report(connections.length ? `Connected. ${connections.length} approved connection(s). ${selected ? 'Ready to discover workspaces.' : 'Choose one before reading.'}` : 'No usable connections. Sign in, select an installation and approve this origin in extension settings.');
+  if (restore && previous?.installation?.id !== restore.installationId) { report('Connected, but the saved installation changed. Discover workspaces explicitly to use the new installation.'); return; }
+  if (restore?.discovered && selected) {
+    report('Connected. Restoring your workspace selection…');
+    await discoverWorkspaces(current, restore);
+    if (current === generation && workspaceSelect.value) await openDocuments(current);
+  }
+}
+connectButton.addEventListener('click', () => void action(connect));
+select.addEventListener('change', () => { generation++; result.textContent = 'No request yet.'; resetWorkspaces(); remember(false); report('Connection selected. Discover workspaces to browse its storage.'); update(); });
 for (const [button, operation] of [[listButton, 'repositories'], [readButton, 'probe']] as const) {
   button.addEventListener('click', () => void action(async () => {
     const current = generation;
@@ -72,7 +100,7 @@ for (const [button, operation] of [[listButton, 'repositories'], [readButton, 'p
     const value = await bridgeRequest(operation === 'probe' ? { operation, id: select.value, repository: (document.getElementById('repository') as HTMLInputElement).value.trim() } : { operation, id: select.value });
     if (current !== generation) return;
     result.textContent = JSON.stringify(value, null, 2);
-    status.textContent = 'Read succeeded. Data is displayed only in this tab.';
+    report('Read succeeded. Data is displayed only in this tab.');
   }));
 }
 function clearSnapshot() {
@@ -82,33 +110,38 @@ function clearSnapshot() {
 function resetWorkspaces() {
   reader = undefined; workspaces = []; workspaceSelect.replaceChildren(); clearSnapshot();
 }
-repository.addEventListener('input', () => { generation++; resetWorkspaces(); result.textContent = 'No request yet.'; update(); });
-workspaceSelect.addEventListener('change', () => { generation++; clearSnapshot(); update(); });
+repository.addEventListener('input', () => { generation++; resetWorkspaces(); result.textContent = 'No request yet.'; remember(false); update(); });
+workspaceSelect.addEventListener('change', () => { generation++; clearSnapshot(); remember(); update(); });
 documentSelect.addEventListener('change', () => { generation++; content.textContent = 'No document selected.'; update(); });
 function option(select: HTMLSelectElement, value: string, label: string) {
   const element = document.createElement('option'); element.value = value; element.textContent = label; select.append(element);
 }
-scanButton.addEventListener('click', () => void action(async () => {
-  resetWorkspaces(); const current = generation;
-  const capabilities = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
-  if (!['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces'].every(capability => capabilities.capabilities.includes(capability))) throw new Error('Update the extension to enable workspace reads, then reload this page.');
+async function discoverWorkspaces(current = generation, restore?: Navigation) {
+  resetWorkspaces(); report('Checking extension support for workspace discovery…');
+  const capabilities = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' }, 5000);
+  if (current !== generation) return;
+  if (!Array.isArray(capabilities.capabilities) || !['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces'].every(capability => capabilities.capabilities.includes(capability))) throw new Error('Workspace discovery needs a newer extension. Update it and reload this page.');
   const connection = connections.find(connection => connection.id === select.value)!;
   const candidate = new WorkspaceReader(bridgeRequest, connection.id, repository.value.trim(), connection.installation!.id);
-  const found = await candidate.discover(); if (current !== generation) return;
+  const found = await candidate.discover(prefix => { if (current === generation) report(`Discovering workspaces: reading ${prefix} refs through the extension…`); });
+  if (current !== generation) return;
   reader = candidate; workspaces = found;
   option(workspaceSelect, '', 'Choose a workspace');
   for (const workspace of found) option(workspaceSelect, workspace.name, `${workspace.name} — ${[workspace.documents && 'documents', workspace.dolt && 'Dolt'].filter(Boolean).join(' + ')}${workspace.documents ? '' : ' (missing manifest ref)'}`);
-  status.textContent = found.length ? `${found.length} stored workspace namespace(s). Choose one; its manifest must be verified before opening.` : 'No document or Dolt workspace refs found in this repository.';
-}));
+  if (restore?.workspace && found.some(workspace => workspace.name === restore.workspace)) workspaceSelect.value = restore.workspace;
+  remember(true);
+  report(restore?.workspace && !workspaceSelect.value ? 'The previous workspace is no longer present in this repository. Choose another workspace.' : found.length ? `${found.length} stored workspace namespace(s). Choose one; its manifest must be verified before opening.` : 'No document or Dolt workspace refs found in this repository.');
+}
+scanButton.addEventListener('click', () => void action(() => discoverWorkspaces()));
 function workspaceReader() {
   const connection = connections.find(connection => connection.id === select.value)!;
   // The approved installation that discovered the namespace is its access
   // route. No separate workspace binding or cross-connection retry is needed.
   return new WorkspaceReader(bridgeRequest, connection.id, repository.value.trim(), connection.installation!.id, workspaceSelect.value);
 }
-documentsButton.addEventListener('click', () => void action(async () => {
+async function openDocuments(current = generation) {
   const workspace = workspaces.find(workspace => workspace.name === workspaceSelect.value)!;
-  const current = generation; clearSnapshot();
+  clearSnapshot(); report('Opening workspace: verifying its manifest and loading documents…');
   const activeReader = workspaceReader();
   const opened = await activeReader.open(workspace); if (current !== generation) return;
   const loaded = opened.snapshot;
@@ -117,15 +150,16 @@ documentsButton.addEventListener('click', () => void action(async () => {
   option(documentSelect, '', 'Choose a document');
   for (const entry of documents(loaded)) option(documentSelect, entry.sha + ':' + entry.path, `${entry.path.slice('documents/'.length)} (${entry.size ?? '?'} bytes)`);
   snapshotInfo.textContent = `${opened.manifest.purpose ?? `${opened.manifest.repositories?.length ?? 0} repository attachment(s)`} · Manifest verified. Documents pinned to Git ${loaded.commit}. ${documents(loaded).length} regular document(s).`;
-  status.textContent = 'Document list loaded. Select a document to read its verified contents.';
-}));
+  remember(); report('Document list loaded. Select a document to read its verified contents.');
+}
+documentsButton.addEventListener('click', () => void action(() => openDocuments()));
 documentButton.addEventListener('click', () => void action(async () => {
   const current = generation;
   const entry = documents(snapshot!).find(entry => entry.sha + ':' + entry.path === documentSelect.value)!;
   content.textContent = 'Reading…';
   const bytes = await reader!.blob(entry); if (current !== generation) return;
   content.textContent = documentText(bytes);
-  status.textContent = `Read verified: ${entry.path.slice('documents/'.length)} · Git blob ${entry.sha}.`;
+  report(`Read verified: ${entry.path.slice('documents/'.length)} · Git blob ${entry.sha}.`);
 }));
 beadsButton.addEventListener('click', () => void action(async () => {
   const workspace = workspaces.find(workspace => workspace.name === workspaceSelect.value)!;
@@ -140,6 +174,11 @@ beadsButton.addEventListener('click', () => void action(async () => {
   if (fields[0] !== '5' || fields[1] !== '__DOLT__' || !/^[0-9a-v]{32}$/.test(fields[3] ?? '')) throw new Error('Unsupported Dolt manifest format.');
   const files = loaded.tree.tree.filter(entry => entry.type === 'blob');
   beadsInfo.textContent = `Dolt storage verified at Git ${loaded.commit}. Manifest storage root ${fields[3]}. ${files.length} files, ${files.filter(entry => entry.path.endsWith('.darc')).length} archives, ${files.reduce((sum, entry) => sum + (entry.size ?? 0), 0).toLocaleString()} bytes. Only the manifest bytes were fetched and verified. Issue queries are not available yet.`;
-  status.textContent = 'Beads storage snapshot inspected; no issue query has run.';
+  remember(); report('Beads storage snapshot inspected; no issue query has run.');
 }));
-document.getElementById('clear')!.addEventListener('click', () => { generation++; resetWorkspaces(); update(); result.textContent = 'Displayed data cleared.'; status.textContent = 'Displayed data cleared.'; });
+document.getElementById('clear')!.addEventListener('click', () => { generation++; resetWorkspaces(); update(); result.textContent = 'Displayed data cleared.'; report('Displayed data cleared. Saved selections are retained.'); });
+document.getElementById('forget')!.addEventListener('click', () => {
+  generation++; forgetNavigation(); saved = undefined; resetWorkspaces(); select.value = ''; repository.value = 'mickmister/workspace-storage';
+  result.textContent = 'Displayed data cleared.'; rememberedInfo.textContent = ''; report('Saved selections forgotten and displayed data cleared.'); update();
+});
+void action(connect);

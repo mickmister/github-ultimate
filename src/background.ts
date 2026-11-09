@@ -20,6 +20,8 @@ function syncRegistrations() {
     const stale = current.filter(script => !scripts.some(next => next.id === script.id)).map(script => script.id);
     if (stale.length) await api.scripting.unregisterContentScripts({ ids: stale });
     const missing = scripts.filter(script => !current.some(old => old.id === script.id));
+    const existing = scripts.filter(script => current.some(old => old.id === script.id));
+    if (existing.length) await api.scripting.updateContentScripts(existing);
     if (missing.length) await api.scripting.registerContentScripts(missing);
   });
   registrationTail = work;
