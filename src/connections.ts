@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
 import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-reads';
+import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 
 export const defaultClient = { name: 'GitHub Ultimate client', appId: 5684700, clientId: 'Iv23liGu3PxdoBoqgLiD' };
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -20,6 +21,7 @@ export type ConnectionRecord = {
   id: string; name: string; appId: number; clientId: string; user?: Identity;
   installation?: { id: number; account: string }; tokens?: Tokens; pending?: Pending;
   origins?: string[];
+  apiCooldown?: ApiCooldown;
 };
 export interface ConnectionStore {
   all(): Promise<ConnectionRecord[]>;
@@ -55,6 +57,7 @@ export type PublicConnection = ReturnType<typeof publicConnection>;
 // message response, and callers cannot choose an endpoint, method or headers.
 export class Connections {
   private tail: Promise<unknown> = Promise.resolve();
+  private apiCache = new ApiReadCache();
   constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now()) {}
 
   handle(input: unknown): Promise<unknown> {
@@ -80,7 +83,8 @@ export class Connections {
         const gitRequest = gitReadSchema.parse(request);
         const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === gitRequest.repository.toLowerCase());
         if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
-        return readGit(gitRequest, repo.full_name, (path, maxBytes) => this.api(record, path, maxBytes));
+        try { return await readGit(gitRequest, repo.full_name, (path, maxBytes) => this.api(record, path, maxBytes, gitRequest.operation === 'gitRefs' ? 'conditional' : 'immutable')); }
+        catch (error) { this.apiCache.clearConnection(record.id); throw error; }
       }
       if (request.operation !== 'repositories' && request.operation !== 'probe') throw new ConnectionError('Unsupported hosted operation.');
       return this.execute(request);
@@ -89,10 +93,15 @@ export class Connections {
     return result;
   }
 
-  private async json(url: string, init: RequestInit, maxBytes = maxMetadataBytes) {
+  private async send(url: string, init: RequestInit) {
     let response: Response;
     try { response = await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(20000) }); }
     catch { throw new ConnectionError('GitHub request failed or timed out. Retry when online.'); }
+    return response;
+  }
+
+  private async json(url: string, init: RequestInit, maxBytes = maxMetadataBytes) {
+    const response = await this.send(url, init);
     if (!response.ok) throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`);
     try { return await boundedJSON(response, maxBytes) as any; }
     catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }
@@ -105,11 +114,38 @@ export class Connections {
     });
   }
 
-  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes): Promise<unknown> {
+  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'none'): Promise<unknown> {
+    const records = await this.store.all();
+    const related = records.filter(other => other.id === record.id || record.user && other.user?.id === record.user.id || other.apiCooldown?.scope === 'global');
+    const until = Math.max(0, ...related.map(other => other.apiCooldown?.until ?? 0));
+    if (until > this.now()) throw new ConnectionError(`GitHub API rate limit: retry after ${new Date(until).toISOString()}. No request was sent.`);
     const token = await this.accessToken(record);
-    return this.json(`https://api.github.com${path}`, {
-      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
-    }, maxBytes);
+    const key = `${record.id}:${record.installation?.id ?? 0}:${path}`;
+    const cached = cache === 'none' ? undefined : this.apiCache.get(key);
+    if (cache === 'immutable' && cached) return structuredClone(cached.value);
+    const response = await this.send(`https://api.github.com${path}`, {
+      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(cache === 'conditional' && cached?.etag ? { 'If-None-Match': cached.etag } : {}) },
+    });
+    const cooldown = await responseCooldown(response, this.now(), Math.max(0, ...related.map(other => other.apiCooldown?.failures ?? 0)));
+    // Keep the live record (possibly refreshed above) and persisted records in
+    // sync. Device-flow tokens share the user's budget, not installation budgets.
+    for (const other of records) {
+      const target = other.id === record.id ? record : other;
+      if (cooldown && (cooldown.scope === 'global' || target.id === record.id || record.user && target.user?.id === record.user.id)) {
+        target.apiCooldown = { ...cooldown, until: Math.max(cooldown.until, target.apiCooldown?.until ?? 0) };
+        await this.store.put(target);
+      } else if (!cooldown && (response.ok || response.status === 304) && target.apiCooldown && target.apiCooldown.until <= this.now()) {
+        delete target.apiCooldown; await this.store.put(target);
+      }
+    }
+    if (!response.ok && cooldown) throw new ConnectionError(`GitHub API rate limit: retry after ${new Date(cooldown.until).toISOString()}. Retry manually after the cooldown.`);
+    if (response.status === 304 && cached) return structuredClone(cached.value);
+    if (!response.ok) { this.apiCache.clearConnection(record.id); throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`); }
+    let value: unknown;
+    try { value = await boundedJSON(response, maxBytes); }
+    catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }
+    if (cache !== 'none') this.apiCache.put(key, value, response.headers.get('etag') ?? undefined);
+    return value;
   }
 
   private saveTokens(record: ConnectionRecord, data: unknown) {
@@ -159,7 +195,7 @@ export class Connections {
     if (!record.installation) throw new ConnectionError('Select an installation first.');
     const all: Repository[] = [];
     for (let page = 1; page <= 100; page++) {
-      const data = z.object({ repositories: z.array(repoSchema) }).parse(await this.api(record, `/user/installations/${record.installation.id}/repositories?per_page=100&page=${page}`));
+      const data = z.object({ repositories: z.array(repoSchema) }).parse(await this.api(record, `/user/installations/${record.installation.id}/repositories?per_page=100&page=${page}`, maxMetadataBytes, 'conditional'));
       all.push(...data.repositories);
       if (data.repositories.length < 100) return all;
     }
@@ -176,8 +212,9 @@ export class Connections {
     const record = await this.store.get(request.id);
     if (!record) throw new ConnectionError('Connection no longer exists.');
     switch (request.operation) {
-      case 'remove': await this.store.remove(record.id); return null;
+      case 'remove': this.apiCache.clearConnection(record.id); await this.store.remove(record.id); return null;
       case 'disconnect':
+        this.apiCache.clearConnection(record.id);
         delete record.tokens; delete record.pending; delete record.user; delete record.installation;
         delete record.origins;
         await this.store.put(record); return publicConnection(record);
@@ -238,6 +275,7 @@ export class Connections {
         if (Object.entries(installation.permissions).some(([key, value]) => value !== 'read' && value !== 'none' && !(key === 'actions' && value === 'write'))) {
           throw new ConnectionError('This installation grants writes beyond Actions. Use the read-only client App, not the CI App.');
         }
+        this.apiCache.clearConnection(record.id);
         record.installation = { id: installation.id, account: installation.account.login };
         await this.store.put(record); return publicConnection(record);
       }
