@@ -13,6 +13,8 @@ test('only navigation fields are saved and previews remain isolated', () => {
   expect(saveNavigation({ ...navigation, content: 'private document', token: 'secret' } as Navigation)).toBe(true);
   expect([...data.values()].join('')).not.toMatch(/private document|secret|content|token/);
   expect(loadNavigation()).toEqual(navigation);
+  location.pathname = '/previews/one/settings.html'; expect(loadNavigation()).toEqual(navigation);
+  location.pathname = '/previews/one/index.html'; expect(loadNavigation()).toEqual(navigation);
   location.pathname = '/previews/two/'; expect(loadNavigation()).toBeUndefined();
   saveNavigation({ ...navigation, workspace: 'other' }); forgetNavigation();
   location.pathname = '/previews/one/'; expect(loadNavigation()).toEqual(navigation);
