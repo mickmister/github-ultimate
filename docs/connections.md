@@ -75,6 +75,33 @@ Workflow dispatch still requires a future separate grant and operation.
 Actions write is broader than dispatch-only at GitHub's token layer;
 no Workflows/Contents write is needed for dispatching existing definitions.
 
+## API request budgets
+
+The broker serializes requests. It observes `Retry-After`, `X-RateLimit-Remaining`
+and `X-RateLimit-Reset`, including a successful response that consumes the last
+request. Primary cooldowns are shared across connections for the same GitHub
+user: these are **user access tokens**, not installation access tokens, so another
+App or installation does not provide a fresh independent user budget.
+Secondary limits conservatively pause all connections, for at least one minute
+and exponentially longer after repeated throttles. Cooldowns persist in
+extension-origin storage across background-worker restarts. No automatic retry
+loop runs: errors report a retry time, and requests during the cooldown do not
+contact GitHub. A normal permission-denied `403` is not treated as throttling.
+
+Repository membership and workspace-ref lists use ETag conditional requests.
+Unchanged authenticated `304` responses save primary quota. Immutable Git objects
+are reused from an in-memory LRU cache capped at 32 MiB / 256 entries, scoped by
+connection, installation and endpoint. Repository membership is still revalidated
+before cached objects are served; origin grants are checked on every hosted call.
+Disconnect/removal/installation changes clear the connection's cache. No private
+object cache is written to disk or shared with the hosted page's browser storage.
+Reads are user-initiated; a Dolt reader should reuse pinned object IDs rather than
+refetch all tablefiles. External clients can consume the shared user budget, so
+the returned headers remain authoritative rather than a hard-coded request count.
+
+References: [GitHub API best practices](https://docs.github.com/en/rest/using-the-rest-api/best-practices-for-using-the-rest-api)
+and [REST API rate limits](https://docs.github.com/en/rest/using-the-rest-api/rate-limits-for-the-rest-api).
+
 ## Verification and platform status
 
 Unit tests cover polling limits/slowdown/expiry, token rotation, concurrent

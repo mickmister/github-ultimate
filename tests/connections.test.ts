@@ -12,13 +12,16 @@ let store: MemoryStore, broker: Connections, clock: number;
 let calls: { url: string; init: RequestInit }[], oauthResults: unknown[];
 let permissions: Record<string, string>;
 let gitResponses: Map<string, unknown>;
+let apiOverride: ((url: string, init: RequestInit) => Response | undefined) | undefined;
 const credentials = (suffix = 'one') => ({ access_token: `ghu_access_${suffix}`, refresh_token: `ghr_refresh_${suffix}`, token_type: 'bearer', expires_in: 28800, refresh_token_expires_in: 15897600 });
 beforeEach(() => {
   store = new MemoryStore(); clock = 100000; calls = []; oauthResults = [];
   gitResponses = new Map();
+  apiOverride = undefined;
   permissions = { contents: 'read', metadata: 'read', actions: 'write' };
   broker = new Connections(store, vi.fn(async (input, init = {}) => {
     const url = String(input); calls.push({ url, init });
+    const override = apiOverride?.(url, init); if (override) return override;
     if (url.endsWith('/device/code')) return Response.json({ device_code: 'private-device-code', user_code: 'TEST-CODE', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 });
     if (url.endsWith('/oauth/access_token')) return Response.json(oauthResults.shift() ?? credentials());
     if (url.endsWith('/user')) return Response.json({ login: 'mickmister', id: 1 });
@@ -193,4 +196,61 @@ test('Git snapshot reads reject truncated trees, identity mismatches, oversized 
   gitResponses.set(`blobs/${oid}`, { sha: oid, size: 1, encoding: 'base64', content: 'YQ==', url: 'not-returned' });
   expect(await broker.handleHosted(origin, { ...base, operation: 'gitBlob' })).toEqual({ sha: oid, size: 1, encoding: 'base64', content: 'YQ==' });
   expect(calls.filter(call => call.url.includes('api.github.com')).every(call => !call.init.method)).toBe(true);
+});
+
+test('primary exhaustion persists across broker restart and blocks another App for the same user', async () => {
+  const first = await login(), second = await login({ name: 'Another app', appId: 999, clientId: 'OtherClient' });
+  const until = clock + 120000;
+  apiOverride = url => url.includes('/user/installations?') ? Response.json({ installations: [] }, { headers: { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(until / 1000) } }) : undefined;
+  await broker.handle({ operation: 'installations', id: first.id });
+  expect((await store.get(second.id))!.apiCooldown!.until).toBe(until + 1000);
+  const count = calls.length;
+  // A new broker with the same persistent store must not forget the budget.
+  const restarted = new Connections(store, vi.fn(async () => { throw new Error('Must not fetch'); }), () => clock);
+  await expect(restarted.handle({ operation: 'installations', id: second.id })).rejects.toThrow('No request was sent');
+  expect(calls).toHaveLength(count);
+  clock = until + 1001; apiOverride = undefined;
+  await broker.handle({ operation: 'installations', id: first.id });
+  expect((await store.get(first.id))!.apiCooldown).toBeUndefined();
+});
+
+test('secondary throttles honor Retry-After, back off repeated errors, and do not retry automatically', async () => {
+  const connection = await login();
+  apiOverride = url => url.includes('/user/installations?') ? Response.json({ message: 'secondary rate limit' }, { status: 429, headers: { 'retry-after': '90' } }) : undefined;
+  const count = calls.length;
+  await expect(broker.handle({ operation: 'installations', id: connection.id })).rejects.toThrow('retry after');
+  expect(calls).toHaveLength(count + 1);
+  const first = (await store.get(connection.id))!.apiCooldown!;
+  expect(first.until).toBe(clock + 90000);
+  await expect(broker.handle({ operation: 'installations', id: connection.id })).rejects.toThrow('No request was sent');
+  expect(calls).toHaveLength(count + 1);
+  clock = first.until + 1;
+  apiOverride = url => url.includes('/user/installations?') ? Response.json({ message: 'You have exceeded a secondary rate limit.' }, { status: 403 }) : undefined;
+  await expect(broker.handle({ operation: 'installations', id: connection.id })).rejects.toThrow('retry after');
+  expect((await store.get(connection.id))!.apiCooldown!.until).toBe(clock + 120000);
+});
+
+test('conditional membership reads and immutable object reuse save API work without serving revoked access', async () => {
+  const connection = await login(), origin = 'https://mickmister.github.io', oid = 'a'.repeat(40);
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
+  let memberships = 0, revoked = false;
+  apiOverride = (url, init) => {
+    if (!url.includes('/user/installations/1/repositories?')) return;
+    memberships++;
+    if (revoked) return Response.json({}, { status: 403 });
+    if (memberships > 1) {
+      expect((init.headers as Record<string, string>)['If-None-Match']).toBe('"repos-v1"');
+      return new Response(null, { status: 304 });
+    }
+    return Response.json({ repositories: [{ full_name: 'mickmister/workspace-storage', private: true, default_branch: 'main' }] }, { headers: { etag: '"repos-v1"' } });
+  };
+  gitResponses.set(`commits/${oid}`, { sha: oid, tree: { sha: oid } });
+  const request = { operation: 'gitCommit', id: connection.id, repository: 'mickmister/workspace-storage', oid };
+  await broker.handleHosted(origin, request); await broker.handleHosted(origin, request);
+  expect(memberships).toBe(2);
+  expect(calls.filter(call => call.url.includes(`/git/commits/${oid}`))).toHaveLength(1);
+  revoked = true;
+  await expect(broker.handleHosted(origin, request)).rejects.toThrow('HTTP 403');
+  expect((await store.get(connection.id))!.apiCooldown).toBeUndefined();
 });
