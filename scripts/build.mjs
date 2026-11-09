@@ -6,7 +6,7 @@ if (!['chrome', 'safari'].includes(browser)) throw new Error(`Unknown browser ta
 const outdir = browser === 'safari' ? 'dist-safari' : 'dist';
 await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });
-await build({ entryPoints: ['src/content.ts', 'src/popup.ts', 'src/background.ts', 'src/connections-page.ts'], outdir, bundle: true, format: 'iife', target: browser === 'safari' ? 'safari16.4' : 'chrome120', minify: true, legalComments: 'eof', loader: { '.css': 'text' } });
+await build({ entryPoints: ['src/content.ts', 'src/popup.ts', 'src/background.ts', 'src/connections-page.ts', 'src/hosted-content.ts'], outdir, bundle: true, format: 'iife', target: browser === 'safari' ? 'safari16.4' : 'chrome120', minify: true, legalComments: 'eof', loader: { '.css': 'text' } });
 const pkg = JSON.parse(await readFile('package.json', 'utf8'));
 const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
 manifest.version = pkg.version;

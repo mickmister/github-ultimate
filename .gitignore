@@ -7,3 +7,5 @@ playwright-report/
 *.tsbuildinfo
 playground-dist/
 storybook-static/
+hosted-dist/
+pages-site/

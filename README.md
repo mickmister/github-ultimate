@@ -71,6 +71,14 @@ Dashboard links accept private `https://node.tailnet.ts.net/` hosts without quer
 
 ## Development and verification
 
+### Hosted bridge demo
+
+`npm run hosted:build` builds the independent hosted read-test app in `hosted/`.
+CI maintains one current preview per branch in `gh-pages` and publishes the
+assembled site through GitHub Pages. Origin-to-connection grants are configured
+in the extension; hosted pages never receive credentials. See
+[hosted demo, deployment and storage policy](docs/hosted-pages.md).
+
 ### Storybook
 
 ```sh

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
 
 export const defaultClient = { name: 'GitHub Ultimate client', appId: 5684700, clientId: 'Iv23liGu3PxdoBoqgLiD' };
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -8,6 +9,7 @@ const requestSchema = z.discriminatedUnion('operation', [
   ...(['start', 'poll', 'refresh', 'installations', 'repositories', 'disconnect', 'remove'] as const).map(operation => z.object({ operation: z.literal(operation), id: z.string().uuid() }).strict()),
   z.object({ operation: z.literal('selectInstallation'), id: z.string().uuid(), installationId: z.number().int().positive() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
+  z.object({ operation: z.enum(['grantOrigin', 'revokeOrigin']), id: z.string().uuid(), origin: z.string().max(300) }).strict(),
 ]);
 export type ConnectionRequest = z.infer<typeof requestSchema>;
 type Identity = { login: string; id: number };
@@ -16,6 +18,7 @@ type Pending = { deviceCode: string; userCode: string; expiresAt: number; interv
 export type ConnectionRecord = {
   id: string; name: string; appId: number; clientId: string; user?: Identity;
   installation?: { id: number; account: string }; tokens?: Tokens; pending?: Pending;
+  origins?: string[];
 };
 export interface ConnectionStore {
   all(): Promise<ConnectionRecord[]>;
@@ -37,10 +40,11 @@ export type Repository = z.infer<typeof repoSchema>;
 export class ConnectionError extends Error {}
 
 function publicConnection(record: ConnectionRecord) {
-  const { id, name, appId, clientId, user, installation, tokens, pending } = record;
+  const { id, name, appId, clientId, user, installation, tokens, pending, origins } = record;
   return {
     id, name, appId, clientId, user, installation, connected: Boolean(tokens), expiresAt: tokens?.expiresAt,
     refreshExpiresAt: tokens?.refreshExpiresAt,
+    origins: origins ?? [],
     pending: pending && { userCode: pending.userCode, expiresAt: pending.expiresAt, nextPollAt: pending.nextPollAt },
   };
 }
@@ -57,6 +61,22 @@ export class Connections {
     // Serialize refresh rotation, disconnect and polling, including concurrent
     // requests from multiple settings tabs. Persist each transition before reply.
     const result = this.tail.catch(() => {}).then(() => this.execute(request));
+    this.tail = result;
+    return result;
+  }
+
+  handleHosted(origin: string, input: unknown): Promise<unknown> {
+    const source = trustedOrigin(origin);
+    const request = hostedRequestSchema.parse(input);
+    const result = this.tail.catch(() => {}).then(async () => {
+      const approved = (await this.store.all()).filter(record => record.origins?.includes(source));
+      if (!approved.length) throw new ConnectionError('This origin has no approved connections. Grant access in extension settings and reload the page.');
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe'] };
+      if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
+      const record = approved.find(record => record.id === request.id);
+      if (!record) throw new ConnectionError('This connection is not approved for this origin.');
+      return this.execute(request);
+    });
     this.tail = result;
     return result;
   }
@@ -151,6 +171,16 @@ export class Connections {
       case 'remove': await this.store.remove(record.id); return null;
       case 'disconnect':
         delete record.tokens; delete record.pending; delete record.user; delete record.installation;
+        delete record.origins;
+        await this.store.put(record); return publicConnection(record);
+      case 'grantOrigin': {
+        const origin = trustedOrigin(request.origin);
+        if (!record.tokens || !record.installation) throw new ConnectionError('Sign in and select an installation before granting hosted access.');
+        record.origins = [...new Set([...(record.origins ?? []), origin])];
+        await this.store.put(record); return publicConnection(record);
+      }
+      case 'revokeOrigin':
+        record.origins = (record.origins ?? []).filter(origin => origin !== trustedOrigin(request.origin));
         await this.store.put(record); return publicConnection(record);
       case 'start': {
         if (record.tokens) throw new ConnectionError('Disconnect this connection before signing in again.');

@@ -1,16 +1,18 @@
 name: Browser extension
 on:
   push:
-    branches: ['**']
+    branches: ['**', '!gh-pages']
     tags: ['v*']
   pull_request:
   workflow_dispatch:
+  delete:
 
 permissions:
   contents: read
 
 jobs:
   verify:
+    if: github.event_name != 'delete'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -24,6 +26,7 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run build:safari
+      - run: npm run hosted:build
       - run: npm run playground:build
       - run: npm run storybook:build
       - run: npx playwright install --with-deps chromium webkit
@@ -37,6 +40,12 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: node -e "if ('v' + JSON.parse(require('fs').readFileSync('package.json')).version !== process.env.TAG) process.exit(1)"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: hosted-page
+          path: hosted-dist/
+          retention-days: 1
+          if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: chrome-extension
@@ -101,3 +110,52 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GITHUB_EVENT_DELETED: ${{ github.event.deleted }}
         run: node --experimental-strip-types cli/prerelease.ts
+  pages:
+    if: >-
+      always() && github.repository == 'mickmister/github-ultimate' &&
+      ((github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.ref_name != 'gh-pages' && needs.verify.result == 'success') ||
+       (github.event_name == 'delete' && github.event.ref_type == 'branch' && github.event.ref != 'gh-pages'))
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    concurrency:
+      group: github-ultimate-pages-publication
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '22'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: github.event_name != 'delete'
+        with:
+          name: hosted-page
+          path: hosted-dist
+      - name: Replace branch preview and prune deleted branches
+        id: publish
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node scripts/publish-hosted.mjs
+      - uses: actions/upload-pages-artifact@56afc609e74202658d3ffba0e8f6dda462b719fa # v3
+        if: steps.publish.outputs.skipped != 'true'
+        with:
+          path: pages-site
+          retention-days: 1
+      - uses: actions/deploy-pages@d6db90164ac5ed86f2b6aed7e0febac5b3c0c03e # v4
+        if: steps.publish.outputs.skipped != 'true'
+        id: deploy
+      - name: Report branch preview
+        if: steps.publish.outputs.skipped != 'true' && github.event_name != 'delete'
+        env:
+          PAGE_URL: ${{ steps.deploy.outputs.page_url }}
+          PREVIEW_PATH: ${{ steps.publish.outputs.preview_path }}
+        run: node -e 'require("node:fs").appendFileSync(process.env.GITHUB_STEP_SUMMARY, `[Open hosted branch preview](${process.env.PAGE_URL.replace(/\/$/, "")}/${process.env.PREVIEW_PATH}/)\n`);'
