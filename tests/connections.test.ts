@@ -129,3 +129,26 @@ test('expired refresh and non-expiring device credentials require a new sign-in'
   await expect(broker.handle({ operation: 'poll', id: connection.id })).rejects.toThrow('Expected expiring');
   expect((await store.get(connection.id))!.tokens).toBeUndefined();
 });
+
+test('hosted access is exact-origin and connection scoped, read-only, revocable and credential-free', async () => {
+  const first = await login(), second = await login();
+  for (const connection of [first, second]) await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  const origin = 'https://mickmister.github.io';
+  await expect(broker.handleHosted(origin, { operation: 'connections' })).rejects.toThrow('no approved');
+  await broker.handle({ operation: 'grantOrigin', id: first.id, origin });
+  const result = await broker.handleHosted(origin, { operation: 'connections' });
+  expect(result).toMatchObject([{ id: first.id }]);
+  expect(result).toHaveLength(1);
+  expect(JSON.stringify(result)).not.toMatch(/ghu_|ghr_|userCode|clientId|device/);
+  await expect(broker.handleHosted(origin, { operation: 'probe', id: second.id, repository: 'mickmister/workspace-storage' })).rejects.toThrow('not approved');
+  await expect(broker.handleHosted('https://other.github.io', { operation: 'connections' })).rejects.toThrow('no approved');
+  expect(() => broker.handleHosted(origin, { operation: 'refresh', id: first.id })).toThrow();
+  expect(() => broker.handleHosted(origin, { operation: 'probe', id: first.id, repository: 'mickmister/workspace-storage', url: 'https://evil.example' })).toThrow();
+  expect(await broker.handleHosted(origin, { operation: 'probe', id: first.id, repository: 'mickmister/workspace-storage' })).toMatchObject({ private: true });
+  await broker.handle({ operation: 'grantOrigin', id: second.id, origin });
+  expect(await broker.handleHosted(origin, { operation: 'connections' })).toHaveLength(2);
+  await broker.handle({ operation: 'revokeOrigin', id: first.id, origin });
+  expect(await broker.handleHosted(origin, { operation: 'connections' })).toMatchObject([{ id: second.id }]);
+  await broker.handle({ operation: 'disconnect', id: second.id });
+  await expect(broker.handleHosted(origin, { operation: 'connections' })).rejects.toThrow('no approved');
+});

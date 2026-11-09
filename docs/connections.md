@@ -55,9 +55,9 @@ OAuth requests and fixed read-only GitHub API calls run in the background
 broker. Expiring tokens, refresh tokens and pending device codes live in
 extension-origin IndexedDB, not the `chrome.storage.local` area available to
 existing content scripts. They are local browser-profile data, not a hardware
-vault. Only the exact top-level extension connections page can message this
-prototype broker; GitHub content scripts, hosted pages and external extensions
-cannot invoke it. Responses contain connection metadata and selected read
+vault. Only the exact top-level extension connections page can invoke settings
+operations. Approved hosted content scripts may use the bounded read bridge;
+external extensions cannot invoke it. Responses contain connection metadata and selected read
 results, never tokens or device codes (the non-secret *user* code is displayed).
 
 Each named connection records App ID/client ID, authenticated user and an
@@ -66,9 +66,13 @@ automatic cross-connection fallback. Reads check the installation's current
 repository list, not a locally maintained repository allowlist. OAuth calls
 omit cookies, reject redirects, time out, and do not log response bodies.
 
-This slice does not expose a hosted-origin bridge or dispatch operations. A
-later bridge must add per-origin connection grants and a separate dispatch
-grant. Actions write is broader than dispatch-only at GitHub's token layer;
+The [hosted bridge demo](hosted-pages.md) exposes approved-connection discovery,
+repository listing and a default-branch Git-ref read. Add/revoke exact origin
+grants in settings; multiple connections may approve the same origin. Disconnect
+also clears that connection's grants. Browser host permission alone does not
+grant a connection. Revocation blocks subsequent requests in already-open tabs.
+Workflow dispatch still requires a future separate grant and operation.
+Actions write is broader than dispatch-only at GitHub's token layer;
 no Workflows/Contents write is needed for dispatching existing definitions.
 
 ## Verification and platform status

@@ -1,5 +1,6 @@
 import { defaultClient, type ConnectionRequest, type PublicConnection, type Installation, type Repository } from './connections';
 import { extensionAPI } from './extension-api';
+import { trustedOrigin, originPattern } from './hosted-protocol';
 
 const status = document.getElementById('status')!;
 const container = document.getElementById('connections')!;
@@ -72,6 +73,21 @@ function render() {
           status.textContent = 'Repository read succeeded using this connection. This checks the default-branch Git ref, not raw Dolt data yet.';
         });
         card.append(output);
+        const originLabel = element('label', 'Hosted origin to approve (all paths)');
+        const originInput = element('input'); originInput.value = 'https://mickmister.github.io'; originLabel.append(originInput); card.append(originLabel);
+        card.append(element('small', 'Read access covers every app and branch preview on this origin, not just this repository path. Workflow dispatch is not granted. Reload the hosted page after approval.'));
+        button(card, 'Grant hosted read access', async () => {
+          const origin = trustedOrigin(originInput.value.trim());
+          // Must be the first asynchronous call after the user gesture.
+          if (!await extensionAPI().permissions.request({ origins: [originPattern(origin)] })) throw new Error('Browser host access was declined.');
+          await request({ operation: 'grantOrigin', id: record.id, origin });
+          await reload(); status.textContent = 'Hosted read access granted. Reload the hosted page, then connect.';
+        });
+        for (const origin of record.origins) {
+          const row = element('p', `Hosted reads approved: ${origin}`);
+          button(row, `Revoke ${origin}`, async () => { await request({ operation: 'revokeOrigin', id: record.id, origin }); await reload(); status.textContent = 'Hosted access revoked for this connection.'; });
+          card.append(row);
+        }
       }
     } else if (record.pending) {
       card.append(element('p', `Enter code ${record.pending.userCode} on GitHub. Expires ${new Date(record.pending.expiresAt).toLocaleTimeString()}.`));

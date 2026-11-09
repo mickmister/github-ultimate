@@ -9,6 +9,7 @@
     "github-ultimate-form": "bin/github-ultimate-form"
   },
   "scripts": {
+    "hosted:build": "node scripts/build-hosted.mjs",
     "form": "node --experimental-strip-types cli/form.ts",
     "playground": "vite --config playground/vite.config.ts",
     "storybook": "storybook dev --host 127.0.0.1 --port ${PORT:-6006} --ci --no-open --disable-telemetry",
