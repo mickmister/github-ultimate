@@ -1,6 +1,6 @@
 # GitHub Ultimate
 
-**Your pull request, a human–agent workspace.** A browser extension that turns ordinary GitHub comments into decision forms, saved workflow views and bead progress. Chrome is installable today; Safari iOS compatibility code and build resources are available for later Xcode packaging. GitHub remains the persistent workspace; no application backend or API token is needed for this release.
+**Your pull request, a human–agent workspace.** A browser extension that turns ordinary GitHub comments into decision forms, saved workflow views and bead progress. Chrome is installable today; Safari iOS compatibility code and build resources are available for later Xcode packaging. GitHub remains the persistent workspace; the comment renderer needs no application backend or API token. An optional [GitHub App connections proof](docs/connections.md) adds device login, refresh and authenticated repository reads.
 
 ## Install
 
@@ -65,7 +65,7 @@ Records are untrusted presentation data. A saved response/run does not prove who
 
 ## Privacy and permissions
 
-The extension has only the `storage` permission and injects on `https://github.com/*` so navigation into a PR works. It does not use API tokens, analytics, background network polling or external executable code. Settings and form drafts stay in your browser profile and are not encrypted; use the toolbar popup to disable persistence or clear saved drafts. Do not enter credentials into public forms. Drafts are scoped by repository, thread, comment, form and source revision, not by signed-in GitHub account; users sharing a browser profile share its drafts. Generated response IDs and canonical comments are stored only when **you** submit through GitHub.
+The extension uses `storage` and host access to `https://github.com/*` and `https://api.github.com/*`. It injects on GitHub for PR navigation; the optional connections page uses a privileged broker for device authentication and fixed read-only API operations. There is no telemetry or external executable code. Device authorization polling runs while the connections page is open; there is no account-wide background polling. Settings and form drafts stay in your browser profile and are not encrypted; use the toolbar popup to disable persistence or clear saved drafts. Connection credentials are stored separately in extension-origin IndexedDB and are not exposed to content scripts. Do not enter credentials into public forms. Drafts are scoped by repository, thread, comment, form and source revision, not by signed-in GitHub account; users sharing a browser profile share its drafts. Generated response IDs and canonical comments are stored only when **you** submit through GitHub.
 
 Dashboard links accept private `https://node.tailnet.ts.net/` hosts without query strings/credentials; run links must point into the current repository's Actions runs. The extension doesn't create tunnels or make private links public. Native GitHub content stays available if you disable the extension.
 

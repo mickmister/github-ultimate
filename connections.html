@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>GitHub Ultimate connections</title>
+<style>
+:root{color-scheme:light dark;font:16px system-ui;line-height:1.5}body{max-width:900px;margin:0 auto;padding:24px}h1{font-size:1.6rem}h2{font-size:1.2rem}form,article{border:1px solid #8887;border-radius:8px;padding:20px;margin:20px 0}label{display:block;margin:12px 0}input,select{display:block;box-sizing:border-box;width:100%;padding:10px;font:inherit}button,a{min-height:44px}button{font:inherit;padding:10px;margin:6px 8px 6px 0;cursor:pointer}button:disabled{cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#8881}a{display:inline-block;overflow-wrap:anywhere}#status{min-height:1.5em}code{overflow-wrap:anywhere}small{display:block} @media(max-width:480px){body{padding:12px}form,article{padding:12px}}
+</style></head><body>
+<h1>GitHub App connections — authentication proof</h1>
+<p>Add a named client App connection. Tokens stay in extension-origin credential storage, outside GitHub content scripts and hosted pages. This prototype supports sign-in, refresh and read tests; it does not dispatch workflows.</p>
+<p>Configure the App with device flow and expiring user tokens enabled, Contents read, Actions write, and no Workflows permission. Keep this page open during sign-in; reopening it resumes an unexpired device authorization. No client secret or private key is needed.</p>
+<form id="add"><h2>Add connection</h2>
+<label>Name<input id="name" required maxlength="80"></label>
+<label>App ID<input id="appId" type="number" required min="1" step="1"></label>
+<label>Public Client ID<input id="clientId" required maxlength="100" pattern="[a-zA-Z0-9_-]+" autocomplete="off"></label>
+<button type="submit">Add connection</button></form>
+<p id="status" role="status" aria-live="polite"></p>
+<main id="connections" aria-label="Connections"></main>
+<p>Disconnect removes local credentials only. To revoke the GitHub authorization, visit <a href="https://github.com/settings/apps/authorizations" target="_blank" rel="noopener noreferrer">GitHub authorized Apps</a>. Multiple local connections to the same App can share its upstream authorization; revoking it can affect all of them.</p>
+<script src="connections-page.js"></script></body></html>
