@@ -59,4 +59,6 @@ test('hosted production build uses relative subpath assets and no source maps', 
   expect((await readdir('hosted-dist')).some(name => name.endsWith('.map'))).toBe(false);
   expect(JSON.parse(await readFile('hosted-dist/build.json', 'utf8')).branch).toBe('test/subpath');
   expect(await payloadSize('hosted-dist')).toBeLessThan(previewLimit);
+  // The hosted app must not accidentally import Zod/the privileged broker.
+  expect(await payloadSize('hosted-dist')).toBeLessThan(20 * 1024);
 });
