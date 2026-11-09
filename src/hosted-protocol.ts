@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { pageChannel } from './bridge-channels';
+import { gitReadSchemas } from './git-reads';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -7,6 +8,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('connections') }).strict(),
   z.object({ operation: z.literal('repositories'), id: z.string().uuid() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
+  ...gitReadSchemas,
 ]);
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 export const pageMessageSchema = z.object({ channel: z.literal(pageChannel), version: z.literal(1), requestId: z.string().uuid(), request: hostedRequestSchema }).strict();

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
+import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-reads';
 
 export const defaultClient = { name: 'GitHub Ultimate client', appId: 5684700, clientId: 'Iv23liGu3PxdoBoqgLiD' };
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
@@ -71,23 +72,30 @@ export class Connections {
     const result = this.tail.catch(() => {}).then(async () => {
       const approved = (await this.store.all()).filter(record => record.origins?.includes(source));
       if (!approved.length) throw new ConnectionError('This origin has no approved connections. Grant access in extension settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe'] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob'] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for this origin.');
+      if (gitReadSchema.safeParse(request).success) {
+        const gitRequest = gitReadSchema.parse(request);
+        const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === gitRequest.repository.toLowerCase());
+        if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
+        return readGit(gitRequest, repo.full_name, (path, maxBytes) => this.api(record, path, maxBytes));
+      }
+      if (request.operation !== 'repositories' && request.operation !== 'probe') throw new ConnectionError('Unsupported hosted operation.');
       return this.execute(request);
     });
     this.tail = result;
     return result;
   }
 
-  private async json(url: string, init: RequestInit) {
+  private async json(url: string, init: RequestInit, maxBytes = maxMetadataBytes) {
     let response: Response;
     try { response = await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(20000) }); }
     catch { throw new ConnectionError('GitHub request failed or timed out. Retry when online.'); }
     if (!response.ok) throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`);
-    try { return await response.json(); }
-    catch { throw new ConnectionError('GitHub returned an unreadable response.'); }
+    try { return await boundedJSON(response, maxBytes) as any; }
+    catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }
   }
 
   private oauth(path: 'device/code' | 'oauth/access_token', parameters: Record<string, string>) {
@@ -97,11 +105,11 @@ export class Connections {
     });
   }
 
-  private async api(record: ConnectionRecord, path: string): Promise<unknown> {
+  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes): Promise<unknown> {
     const token = await this.accessToken(record);
     return this.json(`https://api.github.com${path}`, {
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
-    });
+    }, maxBytes);
   }
 
   private saveTokens(record: ConnectionRecord, data: unknown) {

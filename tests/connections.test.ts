@@ -11,9 +11,11 @@ class MemoryStore implements ConnectionStore {
 let store: MemoryStore, broker: Connections, clock: number;
 let calls: { url: string; init: RequestInit }[], oauthResults: unknown[];
 let permissions: Record<string, string>;
+let gitResponses: Map<string, unknown>;
 const credentials = (suffix = 'one') => ({ access_token: `ghu_access_${suffix}`, refresh_token: `ghr_refresh_${suffix}`, token_type: 'bearer', expires_in: 28800, refresh_token_expires_in: 15897600 });
 beforeEach(() => {
   store = new MemoryStore(); clock = 100000; calls = []; oauthResults = [];
+  gitResponses = new Map();
   permissions = { contents: 'read', metadata: 'read', actions: 'write' };
   broker = new Connections(store, vi.fn(async (input, init = {}) => {
     const url = String(input); calls.push({ url, init });
@@ -26,6 +28,8 @@ beforeEach(() => {
     ] });
     if (url.includes('/user/installations/1/repositories?')) return Response.json({ repositories: [{ full_name: 'mickmister/workspace-storage', private: true, default_branch: 'feature/test' }] });
     if (url.endsWith('/git/ref/heads/feature/test')) return Response.json({ object: { sha: 'a'.repeat(40), type: 'commit' } });
+    const route = url.split('/git/')[1];
+    if (gitResponses.has(route)) return Response.json(gitResponses.get(route));
     throw new Error(`Unexpected request ${url}`);
   }), () => clock);
 });
@@ -151,4 +155,42 @@ test('hosted access is exact-origin and connection scoped, read-only, revocable 
   expect(await broker.handleHosted(origin, { operation: 'connections' })).toMatchObject([{ id: second.id }]);
   await broker.handle({ operation: 'disconnect', id: second.id });
   await expect(broker.handleHosted(origin, { operation: 'connections' })).rejects.toThrow('no approved');
+});
+
+test('Git object reads recheck repository authorization, restrict ref prefixes and strip API metadata', async () => {
+  const connection = await login();
+  const origin = 'https://mickmister.github.io';
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
+  const request = { operation: 'gitRefs', id: connection.id, repository: 'mickmister/workspace-storage', prefix: 'documents/' };
+  const ref = { ref: 'refs/documents/workspace-a', object: { sha: 'a'.repeat(40), type: 'commit', url: 'not-returned' }, url: 'not-returned' };
+  gitResponses.set('matching-refs/documents/', [ref]);
+  expect(await broker.handleHosted(origin, request)).toEqual([{ ref: ref.ref, object: { sha: ref.object.sha, type: 'commit' } }]);
+  const count = calls.filter(call => call.url.includes('/git/')).length;
+  await expect(broker.handleHosted(origin, { ...request, repository: 'other/private' })).rejects.toThrow('not available');
+  expect(calls.filter(call => call.url.includes('/git/'))).toHaveLength(count);
+  for (const prefix of ['heads/', '../', 'documents/workspace-a?x=y']) expect(() => broker.handleHosted(origin, { ...request, prefix })).toThrow();
+  expect(() => broker.handleHosted(origin, { ...request, url: 'https://other.invalid' })).toThrow();
+  gitResponses.set('matching-refs/documents/', [{ ...ref, ref: 'refs/heads/main' }]);
+  await expect(broker.handleHosted(origin, request)).rejects.toThrow('outside');
+  await broker.handle({ operation: 'revokeOrigin', id: connection.id, origin });
+  await expect(broker.handleHosted(origin, request)).rejects.toThrow('no approved');
+});
+
+test('Git snapshot reads reject truncated trees, identity mismatches, oversized and malformed blobs', async () => {
+  const connection = await login(); const origin = 'https://mickmister.github.io', oid = 'a'.repeat(40);
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
+  const base = { id: connection.id, repository: 'mickmister/workspace-storage', oid };
+  gitResponses.set(`commits/${oid}`, { sha: 'b'.repeat(40), tree: { sha: oid } });
+  await expect(broker.handleHosted(origin, { ...base, operation: 'gitCommit' })).rejects.toThrow('identity');
+  gitResponses.set(`trees/${oid}?recursive=1`, { sha: oid, truncated: true, tree: [] });
+  await expect(broker.handleHosted(origin, { ...base, operation: 'gitTree' })).rejects.toThrow('truncated');
+  gitResponses.set(`blobs/${oid}`, { sha: oid, size: 16 * 1024 * 1024 + 1, encoding: 'base64', content: '' });
+  await expect(broker.handleHosted(origin, { ...base, operation: 'gitBlob' })).rejects.toThrow();
+  gitResponses.set(`blobs/${oid}`, { sha: oid, size: 1, encoding: 'utf-8', content: 'a' });
+  await expect(broker.handleHosted(origin, { ...base, operation: 'gitBlob' })).rejects.toThrow();
+  gitResponses.set(`blobs/${oid}`, { sha: oid, size: 1, encoding: 'base64', content: 'YQ==', url: 'not-returned' });
+  expect(await broker.handleHosted(origin, { ...base, operation: 'gitBlob' })).toEqual({ sha: oid, size: 1, encoding: 'base64', content: 'YQ==' });
+  expect(calls.filter(call => call.url.includes('api.github.com')).every(call => !call.init.method)).toBe(true);
 });
