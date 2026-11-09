@@ -144,6 +144,9 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
   await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
+  await card.getByLabel('Workspace namespace to bind').fill('workspace-a');
+  await card.getByRole('button', { name: 'Bind workspace', exact: true }).click();
+  await expect(settings.getByRole('status')).toContainText('Workspace bound');
   await page.reload(); await page.getByRole('button', { name: 'Connect to extension' }).click();
   await expect(page.getByRole('status')).toContainText('1 approved connection');
   await expect(page.getByRole('button', { name: 'Read repository', exact: true })).toBeDisabled();

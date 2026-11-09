@@ -4,14 +4,14 @@ import { WorkspaceReader, documents, documentText, type GitTransport } from '../
 import { boundedJSON, gitReadSchema } from '../src/git-reads';
 import type { GitRead } from '../src/git-reads';
 
-const scope = { id: crypto.randomUUID(), repository: 'owner/storage' };
+const scope = { id: crypto.randomUUID(), repository: 'owner/storage', workspace: 'workspace-a' };
 const oid = 'a'.repeat(40);
 test('workspace discovery unions ref namespaces without merging unrelated identities', async () => {
   const send = vi.fn(async (request: Extract<GitRead, { operation: 'gitRefs' }>) => [
     { ref: `refs/${request.prefix}shared`, object: { sha: oid, type: 'commit' } },
     { ref: `refs/${request.prefix}${request.prefix === 'dolt/' ? 'recovery' : 'documents-only'}`, object: { sha: oid, type: 'commit' } },
   ]);
-  const reader = new WorkspaceReader(send as GitTransport, scope.id, scope.repository);
+  const reader = new WorkspaceReader(send as GitTransport, scope.id, scope.repository, scope.workspace);
   expect(await reader.discover()).toEqual([{ name: 'documents-only', documents: oid }, { name: 'recovery', dolt: oid }, { name: 'shared', documents: oid, dolt: oid }]);
   expect(send.mock.calls.every(([request]) => request.id === scope.id && request.repository === scope.repository)).toBe(true);
 });
@@ -22,7 +22,7 @@ test('snapshot pins the commit tree and excludes symlinks and non-document files
     { path: 'other.json', type: 'blob', mode: '100644', sha: oid, size: 10 },
   ];
   const send = vi.fn(async (request: GitRead) => request.operation === 'gitCommit' ? { sha: oid, tree: { sha: 'b'.repeat(40) } } : { sha: 'b'.repeat(40), tree: entries, truncated: false });
-  const reader = new WorkspaceReader(send as GitTransport, scope.id, scope.repository);
+  const reader = new WorkspaceReader(send as GitTransport, scope.id, scope.repository, scope.workspace);
   const snapshot = await reader.snapshot(oid);
   expect(documents(snapshot).map(entry => entry.path)).toEqual(['documents/workspace/manifest.json']);
   expect(send.mock.calls[1][0]).toMatchObject({ oid: 'b'.repeat(40) });
@@ -32,7 +32,7 @@ test('document reads verify Git object bytes, size and text encoding before prev
   const sha = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
   const blob = { sha, size: bytes.length, encoding: 'base64', content: bytes.toString('base64') };
   const send = vi.fn(async () => blob);
-  const reader = new WorkspaceReader(send as GitTransport, scope.id, scope.repository);
+  const reader = new WorkspaceReader(send as GitTransport, scope.id, scope.repository, scope.workspace);
   const entry = { sha, size: bytes.length, type: 'blob' as const, mode: '100644', path: 'documents/private.md' };
   expect(documentText(await reader.blob(entry))).toBe(bytes.toString());
   blob.content = Buffer.from('x'.repeat(bytes.length)).toString('base64');

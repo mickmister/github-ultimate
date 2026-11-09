@@ -4,12 +4,14 @@ export const gitOid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
 export const maxBlobBytes = 16 * 1024 * 1024;
 export const maxMetadataBytes = 2 * 1024 * 1024;
 export const maxBlobResponseBytes = 24 * 1024 * 1024;
+export const workspaceName = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
 const scope = { id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) };
+const workspaceScope = { ...scope, workspace: workspaceName };
 export const gitReadSchemas = [
   z.object({ operation: z.literal('gitRefs'), ...scope, prefix: z.enum(['documents/', 'dolt/']) }).strict(),
-  z.object({ operation: z.literal('gitCommit'), ...scope, oid: gitOid }).strict(),
-  z.object({ operation: z.literal('gitTree'), ...scope, oid: gitOid }).strict(),
-  z.object({ operation: z.literal('gitBlob'), ...scope, oid: gitOid }).strict(),
+  z.object({ operation: z.literal('gitCommit'), ...workspaceScope, oid: gitOid }).strict(),
+  z.object({ operation: z.literal('gitTree'), ...workspaceScope, oid: gitOid }).strict(),
+  z.object({ operation: z.literal('gitBlob'), ...workspaceScope, oid: gitOid }).strict(),
 ] as const;
 export const gitReadSchema = z.discriminatedUnion('operation', gitReadSchemas);
 export type GitRead = z.infer<typeof gitReadSchema>;

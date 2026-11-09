@@ -17,7 +17,9 @@ Hosted page UI -> window messages -> isolated content script
 3. **Connect to extension**, explicitly choose a named connection, then list
    repositories or read `mickmister/workspace-storage`. All requests specify a
    connection; unavailable access never falls back to another one.
-4. **Discover workspaces**, choose a stored namespace, then **Browse documents**
+4. In extension settings, bind the storage repository + workspace namespace to
+   its intended App connection and installation using **Bind workspace**.
+   **Discover workspaces**, choose that stored namespace, then **Browse documents**
    and **Read document**. JSON, Markdown, forms and other UTF-8 resources display
    as plain text. **Inspect Beads snapshot** reports its pinned storage metadata;
    Beads issue queries still require an in-browser Dolt engine.
@@ -25,6 +27,8 @@ Hosted page UI -> window messages -> isolated content script
 
 The reference operations are bounded: `discover`, `connections`, `repositories`,
 `probe` (default-branch ref), `gitRefs`, `gitCommit`, `gitTree` and `gitBlob`.
+`workspaceConnection` resolves the explicitly configured workspace route;
+commit/tree/blob requests include and validate the workspace namespace.
 No tokens, login/device-flow operations,
 arbitrary HTTP or workflow dispatch are exposed. The page keeps results only in
 memory, does not save browser storage or install a service worker, and provides
@@ -48,7 +52,9 @@ source-publication guarantee. No storage ref, manifest or data is migrated.
 Discovery captures full commit IDs. Browsing follows their immutable commit/tree
 IDs, so concurrent publication cannot mix document versions. Re-run discovery to
 refresh. Selecting another connection, repository or workspace clears displayed
-workspace data; errors and **Clear displayed data** do likewise. Every Git read
+workspace data; errors and **Clear displayed data** do likewise. Workspace reads
+use their saved App/connection/installation binding, never an inferred default or
+credential fallback. Every Git read
 rechecks the selected installation's repository access and the exact origin grant.
 
 Only the `documents/` and `dolt/` matching-ref prefixes are accepted. Object reads

@@ -66,6 +66,45 @@ automatic cross-connection fallback. Reads check the installation's current
 repository list, not a locally maintained repository allowlist. OAuth calls
 omit cookies, reject redirects, time out, and do not log response bodies.
 
+## Multiple Apps, installations and workspace routing
+
+App ID and Client ID identify the **App registration**. Installation ID identifies
+one installation of that App on a personal account or organization. Installing
+the same App in two organizations does not create new App IDs or Client IDs.
+Device flow issues a **user access token** for the App/user authorization. It is
+not an installation access token. The broker lists the user's accessible
+installations, filters them by App ID, and saves the installation selected with
+**Use account**. Repository checks use that saved installation's endpoint.
+
+Each connection currently has one selected installation. Add separate named
+connections for multiple installations of the same App (same App ID/Client ID),
+or for different Apps. They can coexist. The same App/user may share an upstream
+authorization, so revoking it can affect more than one local connection.
+
+Bind each workspace before reading its documents or Beads:
+
+1. Select the intended installation in its connection card.
+2. Enter **Repository to read** and **Workspace namespace to bind** (the suffix
+   after `refs/documents/` or `refs/dolt/`).
+3. Click **Bind workspace**. The settings page shows the saved App and installation.
+
+The key is `(storage repository, namespace)`, avoiding collisions between
+identically named workspaces in different repositories. Exactly one connection
+and installation can own that key; the App is fixed by the connection. Rebinding
+requires an explicit **Unbind** first. Changing an installation never silently
+retargets existing workspace bindings. Disconnect keeps bindings inactive;
+removing a connection removes its bindings. Missing, inactive or unapproved
+bindings fail rather than falling back to another connection.
+
+The hosted page uses the chosen connection to discover refs, then resolves a
+selected workspace through the saved binding before object reads. Its connection
+display updates to the explicitly bound connection. Every object request carries
+the namespace, and the broker rechecks the binding and selected installation.
+Bindings live in extension-origin settings, not in nugs' portable workspace
+manifest. They route credentials; they are not a Git-object-level ACL within an
+otherwise approved repository. Exact-origin grants and GitHub repository access
+remain the authorization boundaries.
+
 The [hosted bridge demo](hosted-pages.md) exposes approved-connection discovery,
 repository listing and a default-branch Git-ref read. Add/revoke exact origin
 grants in settings; multiple connections may approve the same origin. Disconnect

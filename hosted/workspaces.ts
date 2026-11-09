@@ -6,9 +6,10 @@ export type Snapshot = { commit: string; tree: GitTree };
 const maxBlobBytes = 16 * 1024 * 1024;
 
 export class WorkspaceReader {
-  constructor(private send: GitTransport, private id: string, private repository: string) {}
+  constructor(private send: GitTransport, private id: string, private repository: string, private workspace?: string) {}
   private read<T>(request: Omit<GitRead, 'id' | 'repository'> & { prefix?: 'documents/' | 'dolt/'; oid?: string }) {
-    return this.send<T>({ ...request, id: this.id, repository: this.repository } as GitRead);
+    if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace with an explicit connection binding first.');
+    return this.send<T>({ ...request, id: this.id, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
   }
   async discover(): Promise<Workspace[]> {
     const workspaces = new Map<string, Workspace>();

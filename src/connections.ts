@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
-import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-reads';
+import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit, workspaceName } from './git-reads';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 
 export const defaultClient = { name: 'GitHub Ultimate client', appId: 5684700, clientId: 'Iv23liGu3PxdoBoqgLiD' };
@@ -12,6 +12,7 @@ const requestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('selectInstallation'), id: z.string().uuid(), installationId: z.number().int().positive() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   z.object({ operation: z.enum(['grantOrigin', 'revokeOrigin']), id: z.string().uuid(), origin: z.string().max(300) }).strict(),
+  z.object({ operation: z.enum(['bindWorkspace', 'unbindWorkspace']), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220), workspace: workspaceName }).strict(),
 ]);
 export type ConnectionRequest = z.infer<typeof requestSchema>;
 type Identity = { login: string; id: number };
@@ -22,6 +23,7 @@ export type ConnectionRecord = {
   installation?: { id: number; account: string }; tokens?: Tokens; pending?: Pending;
   origins?: string[];
   apiCooldown?: ApiCooldown;
+  workspaces?: { repository: string; workspace: string; installationId: number }[];
 };
 export interface ConnectionStore {
   all(): Promise<ConnectionRecord[]>;
@@ -48,6 +50,7 @@ function publicConnection(record: ConnectionRecord) {
     id, name, appId, clientId, user, installation, connected: Boolean(tokens), expiresAt: tokens?.expiresAt,
     refreshExpiresAt: tokens?.refreshExpiresAt,
     origins: origins ?? [],
+    workspaces: record.workspaces ?? [],
     pending: pending && { userCode: pending.userCode, expiresAt: pending.expiresAt, nextPollAt: pending.nextPollAt },
   };
 }
@@ -73,14 +76,24 @@ export class Connections {
     const source = trustedOrigin(origin);
     const request = hostedRequestSchema.parse(input);
     const result = this.tail.catch(() => {}).then(async () => {
-      const approved = (await this.store.all()).filter(record => record.origins?.includes(source));
+      const records = await this.store.all();
+      const approved = records.filter(record => record.origins?.includes(source));
       if (!approved.length) throw new ConnectionError('This origin has no approved connections. Grant access in extension settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob'] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'workspaceConnection'] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
+      if (request.operation === 'workspaceConnection') {
+        const { record } = this.workspaceBinding(records, request.repository, request.workspace);
+        if (!record.origins?.includes(source) || !record.tokens) throw new ConnectionError('The workspace connection is not signed in and approved for this origin.');
+        const { id, name, appId, user, installation } = record;
+        return { id, name, appId, user, installation } satisfies HostedConnection;
+      }
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for this origin.');
       if (gitReadSchema.safeParse(request).success) {
         const gitRequest = gitReadSchema.parse(request);
+        if (gitRequest.operation !== 'gitRefs' && this.workspaceBinding(records, gitRequest.repository, gitRequest.workspace).record.id !== record.id) {
+          throw new ConnectionError('This workspace is bound to a different connection. Select its bound connection; no fallback is allowed.');
+        }
         const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === gitRequest.repository.toLowerCase());
         if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
         try { return await readGit(gitRequest, repo.full_name, (path, maxBytes) => this.api(record, path, maxBytes, gitRequest.operation === 'gitRefs' ? 'conditional' : 'immutable')); }
@@ -91,6 +104,14 @@ export class Connections {
     });
     this.tail = result;
     return result;
+  }
+
+  private workspaceBinding(records: ConnectionRecord[], repository: string, workspace: string) {
+    const matches = records.flatMap(record => (record.workspaces ?? []).filter(binding => binding.repository.toLowerCase() === repository.toLowerCase() && binding.workspace === workspace).map(binding => ({ record, binding })));
+    if (matches.length !== 1) throw new ConnectionError('Workspace needs exactly one connection binding. Configure it in extension settings.');
+    const match = matches[0];
+    if (!match.record.tokens || match.record.installation?.id !== match.binding.installationId) throw new ConnectionError('The workspace installation changed or disconnected. Restore it or explicitly unbind and rebind the workspace in extension settings.');
+    return match;
   }
 
   private async send(url: string, init: RequestInit) {
@@ -212,6 +233,19 @@ export class Connections {
     const record = await this.store.get(request.id);
     if (!record) throw new ConnectionError('Connection no longer exists.');
     switch (request.operation) {
+      case 'bindWorkspace': {
+        if (!record.tokens || !record.installation) throw new ConnectionError('Sign in and select an installation before binding a workspace.');
+        const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
+        if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
+        const matches = (await this.store.all()).flatMap(other => (other.workspaces ?? []).filter(binding => binding.repository.toLowerCase() === repo.full_name.toLowerCase() && binding.workspace === request.workspace).map(binding => ({ id: other.id, binding })));
+        if (matches.some(match => match.id !== record.id || match.binding.installationId !== record.installation!.id)) throw new ConnectionError('Workspace already has a connection/installation binding. Explicitly unbind it before reassignment.');
+        if (!matches.length) record.workspaces = [...(record.workspaces ?? []), { repository: repo.full_name, workspace: request.workspace, installationId: record.installation.id }];
+        await this.store.put(record); return publicConnection(record);
+      }
+      case 'unbindWorkspace':
+        record.workspaces = (record.workspaces ?? []).filter(binding => !(binding.repository.toLowerCase() === request.repository.toLowerCase() && binding.workspace === request.workspace));
+        this.apiCache.clearConnection(record.id);
+        await this.store.put(record); return publicConnection(record);
       case 'remove': this.apiCache.clearConnection(record.id); await this.store.remove(record.id); return null;
       case 'disconnect':
         this.apiCache.clearConnection(record.id);
