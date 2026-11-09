@@ -17,14 +17,52 @@ Hosted page UI -> window messages -> isolated content script
 3. **Connect to extension**, explicitly choose a named connection, then list
    repositories or read `mickmister/workspace-storage`. All requests specify a
    connection; unavailable access never falls back to another one.
-4. Revoke that origin in settings. New reads in the already-open page must fail.
+4. **Discover workspaces**, choose a stored namespace, then **Browse documents**
+   and **Read document**. JSON, Markdown, forms and other UTF-8 resources display
+   as plain text. **Inspect Beads snapshot** reports its pinned storage metadata;
+   Beads issue queries still require an in-browser Dolt engine.
+5. Revoke that origin in settings. New reads in the already-open page must fail.
 
 The reference operations are bounded: `discover`, `connections`, `repositories`,
-and `probe` (default-branch ref). No tokens, login/device-flow operations,
+`probe` (default-branch ref), `gitRefs`, `gitCommit`, `gitTree` and `gitBlob`.
+No tokens, login/device-flow operations,
 arbitrary HTTP or workflow dispatch are exposed. The page keeps results only in
 memory, does not save browser storage or install a service worker, and provides
-**Clear displayed data**. Generic query-only GraphQL, binary Dolt reads and
+**Clear displayed data**. Generic query-only GraphQL, Dolt issue queries and
 separate dispatch grants are future slices.
+
+## Workspace storage contract
+
+Discovery unions `refs/documents/<namespace>` and `refs/dolt/<namespace>` in the
+chosen repository. These are candidate storage namespaces, not a new canonical
+workspace registry. Dolt-only recovery refs remain visible, and distinct names
+are never merged heuristically. The nugs attachment registry is machine-private;
+the `nugs-storage` bootstrap branch is not a workspace catalog.
+
+Documents are regular files below `documents/` in the documents ref's tree.
+`documents/workspace/manifest.json`, when present, is the existing optional
+workspace membership resource and can be read like any other document. Its
+observation timestamp describes a historical observation, not a freshness or
+source-publication guarantee. No storage ref, manifest or data is migrated.
+
+Discovery captures full commit IDs. Browsing follows their immutable commit/tree
+IDs, so concurrent publication cannot mix document versions. Re-run discovery to
+refresh. Selecting another connection, repository or workspace clears displayed
+workspace data; errors and **Clear displayed data** do likewise. Every Git read
+rechecks the selected installation's repository access and the exact origin grant.
+
+Only the `documents/` and `dolt/` matching-ref prefixes are accepted. Object reads
+require full hexadecimal IDs; callers cannot select URLs, headers or methods.
+Metadata JSON is capped at 2 MiB while streaming, refs at 5,000, and recursive
+trees at 10,000 entries. Truncated trees fail rather than return partial data.
+Blob JSON is capped at 24 MiB and decoded blobs at 16 MiB. The hosted reader
+checks size and Git blob hash before displaying bytes, previews only regular
+UTF-8 text files, and never executes stored HTML or JavaScript.
+
+The Beads inspector reads the Dolt manifest and reports the Git snapshot, storage
+root, file count, archive count and aggregate size. It does not interpret NBS,
+`.darc` archives or issue rows. Authoritative Dolt querying belongs in the hosted
+application; archived JSONL is not used as its Beads data source.
 
 Approval applies to scheme + hostname + port, not a path. GitHub Pages project
 paths and all branch previews share an origin. Only approve it if you trust all
@@ -83,21 +121,21 @@ cleanup, size limits and stale-build handling explicit and testable.
 
 ## Current domain setup
 
-Enabling this repository's Pages site revealed an inherited account-level custom
-domain: GitHub reports `http://kochellsoftware.com/github-ultimate/`. At initial
-setup it did not resolve, and GitHub could not enable HTTPS because its certificate
-did not exist. The github.io URL redirects there. This is a DNS/account Pages
-configuration issue, not a hosted build failure. Restore/configure an HTTPS
-domain, or remove the obsolete account-level custom domain, before using the
-hosted bridge live. Do not approve an insecure remote HTTP origin or silently
-modify another repository's domain configuration to bypass it.
+The obsolete inherited account-level custom domain has been removed. The project
+is served at `https://mickmister.github.io/github-ultimate/` with HTTPS enforced.
+Approve `https://mickmister.github.io` in connection settings, including the
+browser host permission. All projects and branch previews on this origin share
+that approval boundary.
 
 ## Verification boundary
 
 Tests cover branch replacement, peer preservation, deleted-branch pruning, stale
 builds, size limits, symlink rejection, relative assets, exact origin grants,
-connection isolation and revocation. Packaged Chrome tests run the production
+connection isolation, Git object bounds, integrity verification and revocation.
+Packaged Chrome tests run the production
 hosted build under a nested preview URL with actual extension messaging/storage
-and simulated GitHub network replies. Browser host access is pre-granted only in
+and simulated GitHub network replies, including workspace discovery, document
+reading as inert text, Beads manifest inspection and revocation of an open
+document tab. Browser host access is pre-granted only in
 the unattended test manifest; actual users approve it through browser UI. Signed
 iOS transport remains a real-device acceptance item.

@@ -23,6 +23,15 @@ async function launch(hosted = false) {
 async function mockGitHub(worker: Worker) {
   await worker.evaluate(() => {
     let serial = 0;
+    const document = '<script>window.__unsafeDocument = true</script>\nPrivate workspace note';
+    const manifest = `5:__DOLT__:${'0'.repeat(32)}:${'1'.repeat(32)}:${'0'.repeat(32)}`;
+    const blob = async (content: string) => {
+      const bytes = new TextEncoder().encode(content);
+      const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
+      const object = new Uint8Array(header.length + bytes.length); object.set(header); object.set(bytes, header.length);
+      const hash = await crypto.subtle.digest('SHA-1', object);
+      return { sha: [...new Uint8Array(hash)].map(byte => byte.toString(16).padStart(2, '0')).join(''), size: bytes.length, encoding: 'base64', content: btoa(content) };
+    };
     globalThis.fetch = async (input, init = {}) => {
       const url = String(input);
       if (url === 'https://github.com/login/device/code') return Response.json({ device_code: 'private-device-secret', user_code: 'BROW-SER1', verification_uri: 'https://github.com/login/device', expires_in: 900, interval: 5 });
@@ -35,6 +44,16 @@ async function mockGitHub(worker: Worker) {
       if (url.startsWith('https://api.github.com/user/installations?')) return Response.json({ installations: [{ id: 123, app_id: 5684700, account: { login: 'mickmister' }, permissions: { contents: 'read', metadata: 'read', actions: 'write' } }] });
       if (url.startsWith('https://api.github.com/user/installations/123/repositories?')) return Response.json({ repositories: [{ full_name: 'mickmister/workspace-storage', private: true, default_branch: 'main' }] });
       if (url === 'https://api.github.com/repos/mickmister/workspace-storage/git/ref/heads/main') return Response.json({ object: { sha: 'b'.repeat(40), type: 'commit' } });
+      const git = 'https://api.github.com/repos/mickmister/workspace-storage/git/';
+      if (url === git + 'matching-refs/documents/') return Response.json([{ ref: 'refs/documents/workspace-a', object: { sha: 'c'.repeat(40), type: 'commit' } }]);
+      if (url === git + 'matching-refs/dolt/') return Response.json([{ ref: 'refs/dolt/workspace-a', object: { sha: 'e'.repeat(40), type: 'commit' } }]);
+      if (url === git + 'commits/' + 'c'.repeat(40)) return Response.json({ sha: 'c'.repeat(40), tree: { sha: 'd'.repeat(40) } });
+      if (url === git + 'commits/' + 'e'.repeat(40)) return Response.json({ sha: 'e'.repeat(40), tree: { sha: 'f'.repeat(40) } });
+      const note = await blob(document), storage = await blob(manifest);
+      if (url === git + 'trees/' + 'd'.repeat(40) + '?recursive=1') return Response.json({ sha: 'd'.repeat(40), truncated: false, tree: [{ path: 'documents/notes/private.md', mode: '100644', type: 'blob', sha: note.sha, size: note.size }] });
+      if (url === git + 'trees/' + 'f'.repeat(40) + '?recursive=1') return Response.json({ sha: 'f'.repeat(40), truncated: false, tree: [{ path: 'manifest', mode: '100644', type: 'blob', sha: storage.sha, size: storage.size }] });
+      if (url === git + 'blobs/' + note.sha) return Response.json(note);
+      if (url === git + 'blobs/' + storage.sha) return Response.json(storage);
       return Response.json({}, { status: 404 });
     };
   });
@@ -132,9 +151,24 @@ test('hosted branch page reads through an approved connection and revocation tak
   await page.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(page.getByLabel('Read result')).toContainText('"private": true');
   await expect(page.getByLabel('Read result')).toContainText('b'.repeat(40));
+  await page.getByRole('button', { name: 'Discover workspaces' }).click();
+  await expect(page.getByRole('status')).toContainText('1 stored workspace');
+  await page.getByLabel('Stored workspace').selectOption('workspace-a');
+  await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Document list loaded');
+  await page.getByLabel('Document or nugget').selectOption({ index: 1 });
+  await page.getByRole('button', { name: 'Read document', exact: true }).click();
+  await expect(page.getByLabel('Document content')).toContainText('<script>window.__unsafeDocument = true</script>');
+  expect(await page.evaluate(() => '__unsafeDocument' in window)).toBe(false);
+  await page.getByRole('button', { name: 'Inspect Beads snapshot' }).click();
+  await expect(page.locator('#beads-info')).toContainText('Only the manifest bytes were fetched and verified');
+  await expect(page.locator('#beads-info')).toContainText('Issue queries are not available yet');
   await expect(page.locator('body')).not.toContainText('ghu_browser_secret');
   expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
   await settings.getByRole('button', { name: 'Revoke https://mickmister.github.io' }).click();
+  await page.getByRole('button', { name: 'Read document', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('no approved connections');
+  await expect(page.getByLabel('Document content')).not.toContainText('Private workspace note');
   await page.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('no approved connections');
   await expect(page.getByLabel('Read result')).not.toContainText('"private": true');
