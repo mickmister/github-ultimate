@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { pageChannel } from './bridge-channels';
-import { gitReadSchemas, workspaceName } from './git-reads';
+import { gitReadSchemas } from './git-reads';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -8,7 +8,6 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('connections') }).strict(),
   z.object({ operation: z.literal('repositories'), id: z.string().uuid() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
-  z.object({ operation: z.literal('workspaceConnection'), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220), workspace: workspaceName }).strict(),
   ...gitReadSchemas,
 ]);
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;

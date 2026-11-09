@@ -81,29 +81,23 @@ connections for multiple installations of the same App (same App ID/Client ID),
 or for different Apps. They can coexist. The same App/user may share an upstream
 authorization, so revoking it can affect more than one local connection.
 
-Bind each workspace before reading its documents or Beads:
+Workspace access is implicit in the approved installation's access to the
+storage repository. There is no **Bind workspace** setup step or workspace-to-App
+assignment. The hosted page carries the selected connection and installation
+from discovery into every Git request. Changing that connection's installation
+invalidates an already-open route and requires reconnect/discovery; denied or
+revoked access never silently switches to another App. If multiple connections
+can access the same storage repository, the user's connection choice selects the
+route rather than inventing exclusive ownership from overlapping permissions.
+Old local workspace-binding metadata is ignored.
 
-1. Select the intended installation in its connection card.
-2. Enter **Repository to read** and **Workspace namespace to bind** (the suffix
-   after `refs/documents/` or `refs/dolt/`).
-3. Click **Bind workspace**. The settings page shows the saved App and installation.
-
-The key is `(storage repository, namespace)`, avoiding collisions between
-identically named workspaces in different repositories. Exactly one connection
-and installation can own that key; the App is fixed by the connection. Rebinding
-requires an explicit **Unbind** first. Changing an installation never silently
-retargets existing workspace bindings. Disconnect keeps bindings inactive;
-removing a connection removes its bindings. Missing, inactive or unapproved
-bindings fail rather than falling back to another connection.
-
-The hosted page uses the chosen connection to discover refs, then resolves a
-selected workspace through the saved binding before object reads. Its connection
-display updates to the explicitly bound connection. Every object request carries
-the namespace, and the broker rechecks the binding and selected installation.
-Bindings live in extension-origin settings, not in nugs' portable workspace
-manifest. They route credentials; they are not a Git-object-level ACL within an
-otherwise approved repository. Exact-origin grants and GitHub repository access
-remain the authorization boundaries.
+Workspace identity remains `(storage repository, namespace)`, with a required
+`workspace/manifest.json` document in `refs/documents/<namespace>`. The hosted app
+verifies it before opening documents or inspecting Beads storage. Source-repo
+memberships are optional; standalone workspaces need a nonblank `purpose`.
+Member source repositories do not have to be GitHub repositories, and their
+presence does not authorize access to private workspace storage. Exact-origin
+grants and GitHub storage-repository access remain the authorization boundaries.
 
 The [hosted bridge demo](hosted-pages.md) exposes approved-connection discovery,
 repository listing and a default-branch Git-ref read. Add/revoke exact origin

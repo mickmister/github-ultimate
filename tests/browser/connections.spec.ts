@@ -25,6 +25,7 @@ async function mockGitHub(worker: Worker) {
     let serial = 0;
     const document = '<script>window.__unsafeDocument = true</script>\nPrivate workspace note';
     const manifest = `5:__DOLT__:${'0'.repeat(32)}:${'1'.repeat(32)}:${'0'.repeat(32)}`;
+    const workspaceManifest = JSON.stringify({ schema_version: 1, workspace: 'workspace-a', observed_at: '2026-11-09T00:00:00Z', purpose: 'Explore product requirements before choosing source repositories' });
     const blob = async (content: string) => {
       const bytes = new TextEncoder().encode(content);
       const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
@@ -49,11 +50,12 @@ async function mockGitHub(worker: Worker) {
       if (url === git + 'matching-refs/dolt/') return Response.json([{ ref: 'refs/dolt/workspace-a', object: { sha: 'e'.repeat(40), type: 'commit' } }]);
       if (url === git + 'commits/' + 'c'.repeat(40)) return Response.json({ sha: 'c'.repeat(40), tree: { sha: 'd'.repeat(40) } });
       if (url === git + 'commits/' + 'e'.repeat(40)) return Response.json({ sha: 'e'.repeat(40), tree: { sha: 'f'.repeat(40) } });
-      const note = await blob(document), storage = await blob(manifest);
-      if (url === git + 'trees/' + 'd'.repeat(40) + '?recursive=1') return Response.json({ sha: 'd'.repeat(40), truncated: false, tree: [{ path: 'documents/notes/private.md', mode: '100644', type: 'blob', sha: note.sha, size: note.size }] });
+      const note = await blob(document), storage = await blob(manifest), workspace = await blob(workspaceManifest);
+      if (url === git + 'trees/' + 'd'.repeat(40) + '?recursive=1') return Response.json({ sha: 'd'.repeat(40), truncated: false, tree: [{ path: 'documents/notes/private.md', mode: '100644', type: 'blob', sha: note.sha, size: note.size }, { path: 'documents/workspace/manifest.json', mode: '100644', type: 'blob', sha: workspace.sha, size: workspace.size }] });
       if (url === git + 'trees/' + 'f'.repeat(40) + '?recursive=1') return Response.json({ sha: 'f'.repeat(40), truncated: false, tree: [{ path: 'manifest', mode: '100644', type: 'blob', sha: storage.sha, size: storage.size }] });
       if (url === git + 'blobs/' + note.sha) return Response.json(note);
       if (url === git + 'blobs/' + storage.sha) return Response.json(storage);
+      if (url === git + 'blobs/' + workspace.sha) return Response.json(workspace);
       return Response.json({}, { status: 404 });
     };
   });
@@ -144,9 +146,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
   await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
-  await card.getByLabel('Workspace namespace to bind').fill('workspace-a');
-  await card.getByRole('button', { name: 'Bind workspace', exact: true }).click();
-  await expect(settings.getByRole('status')).toContainText('Workspace bound');
+  await expect(card.getByRole('button', { name: 'Bind workspace', exact: true })).toHaveCount(0);
   await page.reload(); await page.getByRole('button', { name: 'Connect to extension' }).click();
   await expect(page.getByRole('status')).toContainText('1 approved connection');
   await expect(page.getByRole('button', { name: 'Read repository', exact: true })).toBeDisabled();
@@ -159,6 +159,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await page.getByLabel('Stored workspace').selectOption('workspace-a');
   await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Document list loaded');
+  await expect(page.locator('#snapshot-info')).toContainText('Explore product requirements before choosing source repositories');
   await page.getByLabel('Document or nugget').selectOption({ index: 1 });
   await page.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(page.getByLabel('Document content')).toContainText('<script>window.__unsafeDocument = true</script>');

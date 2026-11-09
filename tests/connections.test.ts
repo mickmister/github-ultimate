@@ -165,7 +165,7 @@ test('Git object reads recheck repository authorization, restrict ref prefixes a
   const origin = 'https://mickmister.github.io';
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
   await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
-  const request = { operation: 'gitRefs', id: connection.id, repository: 'mickmister/workspace-storage', prefix: 'documents/' };
+  const request = { operation: 'gitRefs', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', prefix: 'documents/' };
   const ref = { ref: 'refs/documents/workspace-a', object: { sha: 'a'.repeat(40), type: 'commit', url: 'not-returned' }, url: 'not-returned' };
   gitResponses.set('matching-refs/documents/', [ref]);
   expect(await broker.handleHosted(origin, request)).toEqual([{ ref: ref.ref, object: { sha: ref.object.sha, type: 'commit' } }]);
@@ -184,8 +184,7 @@ test('Git snapshot reads reject truncated trees, identity mismatches, oversized 
   const connection = await login(); const origin = 'https://mickmister.github.io', oid = 'a'.repeat(40);
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
   await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
-  await broker.handle({ operation: 'bindWorkspace', id: connection.id, repository: 'mickmister/workspace-storage', workspace: 'workspace-a' });
-  const base = { id: connection.id, repository: 'mickmister/workspace-storage', oid, workspace: 'workspace-a' };
+  const base = { id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', oid, workspace: 'workspace-a' };
   gitResponses.set(`commits/${oid}`, { sha: 'b'.repeat(40), tree: { sha: oid } });
   await expect(broker.handleHosted(origin, { ...base, operation: 'gitCommit' })).rejects.toThrow('identity');
   gitResponses.set(`trees/${oid}?recursive=1`, { sha: oid, truncated: true, tree: [] });
@@ -235,7 +234,6 @@ test('conditional membership reads and immutable object reuse save API work with
   const connection = await login(), origin = 'https://mickmister.github.io', oid = 'a'.repeat(40);
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
   await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
-  await broker.handle({ operation: 'bindWorkspace', id: connection.id, repository: 'mickmister/workspace-storage', workspace: 'workspace-a' });
   let memberships = 0, revoked = false;
   apiOverride = (url, init) => {
     if (!url.includes('/user/installations/1/repositories?')) return;
@@ -248,7 +246,7 @@ test('conditional membership reads and immutable object reuse save API work with
     return Response.json({ repositories: [{ full_name: 'mickmister/workspace-storage', private: true, default_branch: 'main' }] }, { headers: { etag: '"repos-v1"' } });
   };
   gitResponses.set(`commits/${oid}`, { sha: oid, tree: { sha: oid } });
-  const request = { operation: 'gitCommit', id: connection.id, repository: 'mickmister/workspace-storage', oid, workspace: 'workspace-a' };
+  const request = { operation: 'gitCommit', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', oid, workspace: 'workspace-a' };
   await broker.handleHosted(origin, request); await broker.handleHosted(origin, request);
   expect(memberships).toBe(2);
   expect(calls.filter(call => call.url.includes(`/git/commits/${oid}`))).toHaveLength(1);
@@ -257,28 +255,29 @@ test('conditional membership reads and immutable object reuse save API work with
   expect((await store.get(connection.id))!.apiCooldown).toBeUndefined();
 });
 
-test('workspace belongs to exactly one explicit App connection and never falls back', async () => {
-  const first = await login(), second = await login({ name: 'Organization App', appId: 999, clientId: 'OtherClient' });
+test('workspace access follows the requested App installation without manual binding or credential fallback', async () => {
+  const first = await login(); oauthResults.push(credentials('other-app'));
+  const second = await login({ name: 'Organization App', appId: 999, clientId: 'OtherClient' });
   const origin = 'https://mickmister.github.io', repository = 'mickmister/workspace-storage', workspace = 'workspace-a';
   apiOverride = url => url.includes('/user/installations/2/repositories?') ? Response.json({ repositories: [{ full_name: repository, private: true, default_branch: 'main' }] }) : undefined;
   for (const connection of [first, second]) {
     await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: connection.appId === defaultClient.appId ? 1 : 2 });
     await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
   }
-  const binding = { repository, workspace };
-  await broker.handle({ operation: 'bindWorkspace', id: first.id, ...binding });
-  await expect(broker.handle({ operation: 'bindWorkspace', id: second.id, ...binding })).rejects.toThrow('already has');
-  expect(await broker.handleHosted(origin, { operation: 'workspaceConnection', ...binding })).toMatchObject({ id: first.id, appId: first.appId, installation: { id: 1 } });
-  await expect(broker.handleHosted(origin, { operation: 'gitCommit', id: second.id, ...binding, oid: 'a'.repeat(40) })).rejects.toThrow('different connection');
+  const oid = 'a'.repeat(40);
+  gitResponses.set(`commits/${oid}`, { sha: oid, tree: { sha: oid } });
+  const request = { operation: 'gitCommit', repository, workspace, oid };
+  await broker.handleHosted(origin, { ...request, id: first.id, installationId: 1 });
+  await broker.handleHosted(origin, { ...request, id: second.id, installationId: 2 });
+  expect(calls.filter(call => call.url.endsWith(`/git/commits/${oid}`)).map(call => (call.init.headers as Record<string, string>).Authorization)).toEqual(['Bearer ghu_access_one', 'Bearer ghu_access_other-app']);
   await broker.handle({ operation: 'revokeOrigin', id: first.id, origin });
-  await expect(broker.handleHosted(origin, { operation: 'workspaceConnection', ...binding })).rejects.toThrow('not signed in and approved');
-  // The second connection remains approved but must never be used as fallback.
-  await broker.handle({ operation: 'unbindWorkspace', id: first.id, ...binding });
-  await broker.handle({ operation: 'bindWorkspace', id: second.id, ...binding });
-  expect(await broker.handleHosted(origin, { operation: 'workspaceConnection', ...binding })).toMatchObject({ id: second.id });
+  const count = calls.length;
+  await expect(broker.handleHosted(origin, { ...request, id: first.id, installationId: 1 })).rejects.toThrow('not approved');
+  expect(calls).toHaveLength(count);
+  expect(() => broker.handle({ operation: 'bindWorkspace', id: second.id, repository, workspace })).toThrow();
 });
 
-test('same App supports two installations with separate workspace bindings; installation changes are detected', async () => {
+test('same App supports two workspace access routes; changed installation provenance is rejected', async () => {
   const first = await login(), second = await login();
   const origin = 'https://mickmister.github.io', repository = 'mickmister/workspace-storage';
   apiOverride = url => {
@@ -288,13 +287,14 @@ test('same App supports two installations with separate workspace bindings; inst
     ] });
     if (url.includes('/user/installations/3/repositories?')) return Response.json({ repositories: [{ full_name: repository, private: true, default_branch: 'main' }] });
   };
+  const oid = 'a'.repeat(40); gitResponses.set(`commits/${oid}`, { sha: oid, tree: { sha: oid } });
   for (const [connection, installationId, workspace] of [[first, 1, 'personal-work'], [second, 3, 'organization-work']] as const) {
     await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId });
     await broker.handle({ operation: 'grantOrigin', id: connection.id, origin });
-    await broker.handle({ operation: 'bindWorkspace', id: connection.id, repository, workspace });
-    expect(await broker.handleHosted(origin, { operation: 'workspaceConnection', repository, workspace })).toMatchObject({ id: connection.id, appId: defaultClient.appId, installation: { id: installationId } });
+    expect(await broker.handleHosted(origin, { operation: 'gitCommit', id: connection.id, installationId, repository, workspace, oid })).toMatchObject({ sha: oid });
   }
   await broker.handle({ operation: 'selectInstallation', id: second.id, installationId: 1 });
-  await expect(broker.handleHosted(origin, { operation: 'workspaceConnection', repository, workspace: 'organization-work' })).rejects.toThrow('installation changed');
-  await expect(broker.handle({ operation: 'bindWorkspace', id: second.id, repository, workspace: 'organization-work' })).rejects.toThrow('Explicitly unbind');
+  const count = calls.length;
+  await expect(broker.handleHosted(origin, { operation: 'gitCommit', id: second.id, installationId: 3, repository, workspace: 'organization-work', oid })).rejects.toThrow('installation changed');
+  expect(calls).toHaveLength(count);
 });

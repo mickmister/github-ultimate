@@ -1,4 +1,5 @@
 import type { GitBlob, GitCommit, GitRead, GitRef, GitTree } from '../src/git-reads';
+import { parseWorkspaceManifest } from './manifest';
 
 export type Workspace = { name: string; documents?: string; dolt?: string };
 export type GitTransport = <T>(request: GitRead) => Promise<T>;
@@ -6,10 +7,10 @@ export type Snapshot = { commit: string; tree: GitTree };
 const maxBlobBytes = 16 * 1024 * 1024;
 
 export class WorkspaceReader {
-  constructor(private send: GitTransport, private id: string, private repository: string, private workspace?: string) {}
-  private read<T>(request: Omit<GitRead, 'id' | 'repository'> & { prefix?: 'documents/' | 'dolt/'; oid?: string }) {
-    if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace with an explicit connection binding first.');
-    return this.send<T>({ ...request, id: this.id, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
+  constructor(private send: GitTransport, private id: string, private repository: string, private installationId: number, private workspace?: string) {}
+  private read<T>(request: Omit<GitRead, 'id' | 'repository' | 'installationId' | 'workspace'> & { prefix?: 'documents/' | 'dolt/'; oid?: string }) {
+    if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace first.');
+    return this.send<T>({ ...request, id: this.id, installationId: this.installationId, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
   }
   async discover(): Promise<Workspace[]> {
     const workspaces = new Map<string, Workspace>();
@@ -35,6 +36,14 @@ export class WorkspaceReader {
     const tree = await this.read<GitTree>({ operation: 'gitTree', oid: commit.tree.sha });
     if (tree.truncated || tree.sha !== commit.tree.sha) throw new Error('Incomplete or mismatched snapshot tree.');
     return { commit: oid, tree };
+  }
+  async open(workspace: Workspace) {
+    if (!workspace.documents || workspace.name !== this.workspace) throw new Error('Workspace manifest is required: this namespace has no matching documents ref.');
+    const snapshot = await this.snapshot(workspace.documents);
+    const entry = documents(snapshot).find(entry => entry.path === 'documents/workspace/manifest.json');
+    if (!entry) throw new Error('Workspace manifest is required. Provision workspace/manifest.json with repositories or a purpose.');
+    const manifest = parseWorkspaceManifest(documentText(await this.blob(entry)), workspace.name);
+    return { snapshot, manifest, version: entry.sha };
   }
   async blob(entry: GitTree['tree'][number]): Promise<Uint8Array<ArrayBuffer>> {
     if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) throw new Error('Only regular files can be read.');

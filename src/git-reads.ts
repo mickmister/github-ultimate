@@ -5,7 +5,7 @@ export const maxBlobBytes = 16 * 1024 * 1024;
 export const maxMetadataBytes = 2 * 1024 * 1024;
 export const maxBlobResponseBytes = 24 * 1024 * 1024;
 export const workspaceName = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
-const scope = { id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) };
+const scope = { id: z.string().uuid(), installationId: z.number().int().positive(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) };
 const workspaceScope = { ...scope, workspace: workspaceName };
 export const gitReadSchemas = [
   z.object({ operation: z.literal('gitRefs'), ...scope, prefix: z.enum(['documents/', 'dolt/']) }).strict(),
