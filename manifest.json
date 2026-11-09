@@ -5,6 +5,9 @@
   "description": "Forms, bead progress and saved workflow sessions directly in your GitHub PR workspace.",
   "minimum_chrome_version": "120",
   "permissions": ["storage"],
+  "host_permissions": ["https://github.com/*", "https://api.github.com/*"],
+  "background": { "service_worker": "background.js" },
+  "options_ui": { "page": "connections.html", "open_in_tab": true },
   "content_scripts": [{
     "matches": ["https://github.com/*"],
     "js": ["content.js"],
