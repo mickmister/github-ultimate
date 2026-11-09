@@ -91,32 +91,32 @@ function option(select: HTMLSelectElement, value: string, label: string) {
 scanButton.addEventListener('click', () => void action(async () => {
   resetWorkspaces(); const current = generation;
   const capabilities = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
-  if (!['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'workspaceConnection'].every(capability => capabilities.capabilities.includes(capability))) throw new Error('Update the extension to enable workspace reads, then reload this page.');
-  const candidate = new WorkspaceReader(bridgeRequest, select.value, repository.value.trim());
+  if (!['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces'].every(capability => capabilities.capabilities.includes(capability))) throw new Error('Update the extension to enable workspace reads, then reload this page.');
+  const connection = connections.find(connection => connection.id === select.value)!;
+  const candidate = new WorkspaceReader(bridgeRequest, connection.id, repository.value.trim(), connection.installation!.id);
   const found = await candidate.discover(); if (current !== generation) return;
   reader = candidate; workspaces = found;
   option(workspaceSelect, '', 'Choose a workspace');
-  for (const workspace of found) option(workspaceSelect, workspace.name, `${workspace.name} — ${[workspace.documents && 'documents', workspace.dolt && 'Dolt'].filter(Boolean).join(' + ')}`);
-  status.textContent = found.length ? `${found.length} stored workspace namespace(s). Choose one to browse.` : 'No document or Dolt workspace refs found in this repository.';
+  for (const workspace of found) option(workspaceSelect, workspace.name, `${workspace.name} — ${[workspace.documents && 'documents', workspace.dolt && 'Dolt'].filter(Boolean).join(' + ')}${workspace.documents ? '' : ' (missing manifest ref)'}`);
+  status.textContent = found.length ? `${found.length} stored workspace namespace(s). Choose one; its manifest must be verified before opening.` : 'No document or Dolt workspace refs found in this repository.';
 }));
-async function boundReader() {
-  const binding = await bridgeRequest<HostedConnection>({ operation: 'workspaceConnection', repository: repository.value.trim(), workspace: workspaceSelect.value });
-  // A saved explicit binding chooses credentials. Never infer from whichever
-  // connection happened to enumerate this repository or try another on failure.
-  if (!connections.some(connection => connection.id === binding.id)) throw new Error('Reconnect to load the workspace’s approved connection.');
-  select.value = binding.id; update();
-  return new WorkspaceReader(bridgeRequest, binding.id, repository.value.trim(), workspaceSelect.value);
+function workspaceReader() {
+  const connection = connections.find(connection => connection.id === select.value)!;
+  // The approved installation that discovered the namespace is its access
+  // route. No separate workspace binding or cross-connection retry is needed.
+  return new WorkspaceReader(bridgeRequest, connection.id, repository.value.trim(), connection.installation!.id, workspaceSelect.value);
 }
 documentsButton.addEventListener('click', () => void action(async () => {
   const workspace = workspaces.find(workspace => workspace.name === workspaceSelect.value)!;
   const current = generation; clearSnapshot();
-  const activeReader = await boundReader(); if (current !== generation) return;
-  const loaded = await activeReader.snapshot(workspace.documents!); if (current !== generation) return;
+  const activeReader = workspaceReader();
+  const opened = await activeReader.open(workspace); if (current !== generation) return;
+  const loaded = opened.snapshot;
   reader = activeReader;
   snapshot = loaded;
   option(documentSelect, '', 'Choose a document');
   for (const entry of documents(loaded)) option(documentSelect, entry.sha + ':' + entry.path, `${entry.path.slice('documents/'.length)} (${entry.size ?? '?'} bytes)`);
-  snapshotInfo.textContent = `Documents pinned to Git ${loaded.commit}. ${documents(loaded).length} regular document(s).`;
+  snapshotInfo.textContent = `${opened.manifest.purpose ?? `${opened.manifest.repositories?.length ?? 0} repository attachment(s)`} · Manifest verified. Documents pinned to Git ${loaded.commit}. ${documents(loaded).length} regular document(s).`;
   status.textContent = 'Document list loaded. Select a document to read its verified contents.';
 }));
 documentButton.addEventListener('click', () => void action(async () => {
@@ -129,7 +129,9 @@ documentButton.addEventListener('click', () => void action(async () => {
 }));
 beadsButton.addEventListener('click', () => void action(async () => {
   const workspace = workspaces.find(workspace => workspace.name === workspaceSelect.value)!;
-  const current = generation, activeReader = await boundReader(); if (current !== generation) return;
+  const current = generation, activeReader = workspaceReader();
+  const opened = await activeReader.open(workspace); if (current !== generation) return;
+  snapshotInfo.textContent = `${opened.manifest.purpose ?? `${opened.manifest.repositories?.length ?? 0} repository attachment(s)`} · Manifest verified at Git ${opened.snapshot.commit}.`;
   const loaded = await activeReader.snapshot(workspace.dolt!);
   const manifest = loaded.tree.tree.find(entry => entry.path === 'manifest');
   if (!manifest) throw new Error('Dolt snapshot has no manifest.');

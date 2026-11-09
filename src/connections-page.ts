@@ -73,13 +73,6 @@ function render() {
           status.textContent = 'Repository read succeeded using this connection. This checks the default-branch Git ref, not raw Dolt data yet.';
         });
         card.append(output);
-        const workspaceLabel = element('label', 'Workspace namespace to bind');
-        const workspace = element('input'); workspace.autocomplete = 'off'; workspaceLabel.append(workspace); card.append(workspaceLabel);
-        card.append(element('small', 'Each storage repository + workspace namespace uses exactly one App connection and installation. Bind before browsing documents or Beads in the hosted page.'));
-        button(card, 'Bind workspace', async () => {
-          await request({ operation: 'bindWorkspace', id: record.id, repository: repository.value.trim(), workspace: workspace.value.trim() });
-          await reload(); status.textContent = 'Workspace bound to this App connection and installation.';
-        });
         const originLabel = element('label', 'Hosted origin to approve (all paths)');
         const originInput = element('input'); originInput.value = 'https://mickmister.github.io'; originLabel.append(originInput); card.append(originLabel);
         card.append(element('small', 'Read access covers every app and branch preview on this origin, not just this repository path. Workflow dispatch is not granted. Reload the hosted page after approval.'));
@@ -104,14 +97,6 @@ function render() {
       button(card, 'Check sign-in', async () => { paused.delete(record.id); await request({ operation: 'poll', id: record.id }); await reload(); });
     } else {
       button(card, 'Sign in with device code', async () => { paused.delete(record.id); await request({ operation: 'start', id: record.id }); await reload(); });
-    }
-    for (const binding of record.workspaces) {
-      const row = element('p', `Workspace: ${binding.repository} / ${binding.workspace} · App ${record.appId} · installation ${binding.installationId}${binding.installationId !== record.installation?.id ? ' (inactive: installation changed or disconnected)' : ''}`);
-      button(row, `Unbind ${binding.workspace}`, async () => {
-        await request({ operation: 'unbindWorkspace', id: record.id, repository: binding.repository, workspace: binding.workspace });
-        await reload(); status.textContent = 'Workspace binding removed.';
-      });
-      card.append(row);
     }
     button(card, 'Disconnect locally', async () => { paused.delete(record.id); await request({ operation: 'disconnect', id: record.id }); await reload(); status.textContent = 'Local credentials removed. GitHub authorization has not been revoked.'; });
     button(card, 'Remove connection', async () => { paused.delete(record.id); await request({ operation: 'remove', id: record.id }); await reload(); status.textContent = 'Connection and its local credentials removed.'; });

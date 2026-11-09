@@ -17,9 +17,7 @@ Hosted page UI -> window messages -> isolated content script
 3. **Connect to extension**, explicitly choose a named connection, then list
    repositories or read `mickmister/workspace-storage`. All requests specify a
    connection; unavailable access never falls back to another one.
-4. In extension settings, bind the storage repository + workspace namespace to
-   its intended App connection and installation using **Bind workspace**.
-   **Discover workspaces**, choose that stored namespace, then **Browse documents**
+4. **Discover workspaces**, choose a stored namespace, then **Browse documents**
    and **Read document**. JSON, Markdown, forms and other UTF-8 resources display
    as plain text. **Inspect Beads snapshot** reports its pinned storage metadata;
    Beads issue queries still require an in-browser Dolt engine.
@@ -27,8 +25,9 @@ Hosted page UI -> window messages -> isolated content script
 
 The reference operations are bounded: `discover`, `connections`, `repositories`,
 `probe` (default-branch ref), `gitRefs`, `gitCommit`, `gitTree` and `gitBlob`.
-`workspaceConnection` resolves the explicitly configured workspace route;
-commit/tree/blob requests include and validate the workspace namespace.
+Git reads carry the selected installation ID; commit/tree/blob requests also
+include the workspace namespace. Access follows the discovery connection without
+manual workspace bindings. Installation changes require reconnect/discovery.
 No tokens, login/device-flow operations,
 arbitrary HTTP or workflow dispatch are exposed. The page keeps results only in
 memory, does not save browser storage or install a service worker, and provides
@@ -44,8 +43,12 @@ are never merged heuristically. The nugs attachment registry is machine-private;
 the `nugs-storage` bootstrap branch is not a workspace catalog.
 
 Documents are regular files below `documents/` in the documents ref's tree.
-`documents/workspace/manifest.json`, when present, is the existing optional
-workspace membership resource and can be read like any other document. Its
+`documents/workspace/manifest.json` is the required workspace identity resource.
+The hosted app verifies its bytes and schema before opening documents or Beads
+storage. Repository membership data may be omitted or empty; in that case a
+nonblank `purpose` explains why the workspace exists. Existing schema-v1 manifests
+with repository observations remain valid. The purpose is displayed when opening
+the workspace. Its
 observation timestamp describes a historical observation, not a freshness or
 source-publication guarantee. No storage ref, manifest or data is migrated.
 
@@ -53,8 +56,8 @@ Discovery captures full commit IDs. Browsing follows their immutable commit/tree
 IDs, so concurrent publication cannot mix document versions. Re-run discovery to
 refresh. Selecting another connection, repository or workspace clears displayed
 workspace data; errors and **Clear displayed data** do likewise. Workspace reads
-use their saved App/connection/installation binding, never an inferred default or
-credential fallback. Every Git read
+use the approved connection/installation through which they were discovered,
+without a separate assignment or credential fallback. Every Git read
 rechecks the selected installation's repository access and the exact origin grant.
 
 Only the `documents/` and `dolt/` matching-ref prefixes are accepted. Object reads
@@ -69,6 +72,12 @@ The Beads inspector reads the Dolt manifest and reports the Git snapshot, storag
 root, file count, archive count and aggregate size. It does not interpret NBS,
 `.darc` archives or issue rows. Authoritative Dolt querying belongs in the hosted
 application; archived JSONL is not used as its Beads data source.
+
+Raw ref discovery can include unprovisioned document namespaces and Dolt-only
+recovery snapshots. A namespace with a missing/invalid workspace manifest is
+reported as incomplete when opened, rather than treated as a valid workspace or
+silently assigned a purpose. Repair uses nugs document/provision operations; the
+hosted browser remains read-only and does not migrate existing refs.
 
 Approval applies to scheme + hostname + port, not a path. GitHub Pages project
 paths and all branch previews share an origin. Only approve it if you trust all
