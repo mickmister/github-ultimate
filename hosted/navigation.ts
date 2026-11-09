@@ -1,7 +1,7 @@
 export type Navigation = { connectionId: string; installationId: number; repository: string; workspace?: string; discovered: boolean };
 const repositoryPattern = /^(?!\.{1,2}\/)[a-zA-Z0-9_.-]+\/(?!\.{1,2}$)[a-zA-Z0-9_.-]+$/;
 const namespacePattern = /^[a-zA-Z0-9_-]{1,200}$/;
-const key = () => `github-ultimate-navigation-v1:${location.pathname}`;
+const key = () => `github-ultimate-navigation-v1:${location.pathname.replace(/(?:index|settings)\.html$/, '')}`;
 
 export function loadNavigation(): Navigation | undefined {
   try {

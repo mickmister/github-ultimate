@@ -1,6 +1,8 @@
 # Hosted bridge and branch previews
 
-`hosted/` is a small independently deployed web app. It proves the intended split:
+`hosted/` is an independently deployed workspace dashboard with an advanced
+settings/read demo. [Dashboard v2](dashboard.md) describes its views and app seam.
+It uses the intended split:
 
 ```text
 Hosted page UI -> window messages -> isolated content script
@@ -14,16 +16,15 @@ Hosted page UI -> window messages -> isolated content script
 2. Open a deployed hosted preview. It displays its actual origin. In connection
    settings, grant that exact origin read access and approve the browser host
    permission. Reload the hosted page.
-3. The page connects to the extension automatically. It restores the saved
-   approved connection, or selects the only available connection on a first
-   visit. With multiple connections and no saved choice, choose one explicitly.
-   **Connect to extension** retries the handshake if needed. Then list
-   repositories or read `mickmister/workspace-storage`. Unavailable saved access
-   never falls back to another connection.
-4. **Discover workspaces**, choose a stored namespace, then **Browse documents**
-   and **Read document**. JSON, Markdown, forms and other UTF-8 resources display
-   as plain text. **Inspect Beads snapshot** reports its pinned storage metadata;
-   Beads issue queries still require an in-browser Dolt engine.
+3. The landing page connects automatically and lists manifest-backed workspaces
+   discovered through approved installation repositories. Open a workspace card
+   to navigate to its detail page. Ambiguous access routes require a choice;
+   unavailable saved access never falls back to another connection.
+4. The detail page prioritizes **Beads** and provides **Open in github.dev** for
+   documents. Beads currently inspects pinned storage metadata; issue queries
+   still require an in-browser Dolt engine. **Settings** opens the former page,
+   including connection selection, private-read proof, raw discovery, document
+   text diagnostics and saved-selection controls.
 5. Revoke that origin in settings. New reads in the already-open page must fail.
 
 The reference operations are bounded: `discover`, `connections`, `repositories`,
@@ -40,22 +41,22 @@ separate dispatch grants are future slices.
 ## Returning to a workspace and discovery diagnostics
 
 The page stores a small navigation record in localStorage, isolated by preview
-pathname: connection ID, selected installation ID, repository, workspace name
+directory: connection ID, selected installation ID, repository, workspace name
 and whether discovery had completed. It never persists tokens, document bodies,
-manifests, Git trees or read results. A return visit reconnects, confirms that the
-saved connection is still approved and signed in, refreshes refs, and restores
-the workspace's manifest/document list. Individual document contents require a
-new read. A changed installation or unavailable saved connection stops automatic
-restoration and asks for an explicit choice. Unavailable/corrupt browser storage
-does not prevent manual browsing.
+manifests, Git trees or read results. The v2 landing page always shows the chooser
+and highlights the last workspace. A detail deep link reconnects and verifies its
+access route; Settings also retains the prior automatic manifest/document-list
+restoration. Individual document contents are not restored from browser storage.
+A changed installation or unavailable saved connection asks for an explicit
+choice. Unavailable/corrupt browser storage does not prevent manual browsing.
 
 **Clear displayed data** clears in-memory workspace/read results while retaining
 the saved selection. **Forget saved selections** removes this preview's record
 and clears displayed data. Restoring a workspace performs bounded authenticated
 reads through the normal broker/rate limiter; there is no polling loop.
 
-Discovery progress and errors appear both in the global connection status and
-beside **Discover workspaces**. The isolated relay explicitly rejects incompatible
+Discovery progress/errors appear on the chooser and in Settings beside
+**Discover workspaces**. The isolated relay explicitly rejects incompatible
 requests rather than silently dropping them before the background/network layer.
 The page verifies a relay revision during the handshake, so an old injected script
 reports an actionable update/reload error. Extension startup/update refreshes
@@ -119,7 +120,8 @@ the actual sender origin from browser metadata, not a page-supplied claim.
 ## Build and publication
 
 `npm run hosted:build` writes only HTML, JS/CSS and public build metadata to
-`hosted-dist/`. Content-hashed relative asset URLs work under branch preview paths. No runtime
+`hosted-dist/`. Both HTML entries and lazy workspace apps use content-hashed
+relative asset URLs under branch preview paths. No runtime
 application backend is needed.
 
 After CI verification succeeds for a branch push, the `pages` job:

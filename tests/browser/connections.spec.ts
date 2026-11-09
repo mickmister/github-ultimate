@@ -68,7 +68,7 @@ test.afterEach(async () => { await context?.close(); await rm(profile, { recursi
 async function serveHosted() {
   await context.route('https://mickmister.github.io/**', async route => {
     const name = new URL(route.request().url()).pathname.split('/').pop() || 'index.html';
-    if (!['index.html', 'build.json'].includes(name) && !/^main-[A-Z0-9]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
+    if (!['index.html', 'settings.html', 'build.json'].includes(name) && !/^(main|settings|shared|beads|documents)-[A-Z0-9]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
     await route.fulfill({ path: resolve('hosted-dist', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.json') ? 'application/json' : 'text/html' });
   });
 }
@@ -147,7 +147,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await card.getByRole('button', { name: 'Sign in with device code' }).click();
   await expect(card).toContainText('Signed in as mickmister', { timeout: 15000 });
   await card.getByRole('button', { name: 'Load installations' }).click(); await card.getByRole('button', { name: 'Use mickmister' }).click();
-  const page = await context.newPage(); await page.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/');
+  const page = await context.newPage(); await page.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/settings.html');
   await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
   await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
@@ -201,6 +201,22 @@ test('hosted branch page reads through an approved connection and revocation tak
   await page.getByLabel('Document or nugget').selectOption({ index: 1 });
   await page.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(page.getByLabel('Document content')).toContainText('Private workspace note');
+  const dashboard = await context.newPage();
+  await dashboard.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/');
+  await expect(dashboard.getByRole('status')).toContainText('1 available workspace');
+  await expect(dashboard.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
+  await expect(dashboard.getByLabel('Approved connection')).toHaveCount(0);
+  await dashboard.getByRole('link', { name: 'Open workspace-a', exact: true }).click();
+  await expect(dashboard.getByRole('heading', { name: 'workspace-a', exact: true })).toBeVisible();
+  await expect(dashboard.getByRole('heading', { name: 'Beads', exact: true })).toBeVisible();
+  await expect(dashboard.locator('.app-view')).toContainText('Storage manifest verified');
+  await expect(dashboard.locator('.app-view')).toContainText('no issue query has run');
+  await expect(dashboard.getByRole('link', { name: 'Open in github.dev', exact: true })).toHaveAttribute('href', `https://github.dev/mickmister/workspace-storage/tree/${'c'.repeat(40)}/documents`);
+  await dashboard.getByRole('link', { name: 'Documents', exact: true }).click();
+  await expect(dashboard.getByRole('link', { name: 'notes/private.md', exact: true })).toHaveAttribute('href', `https://github.dev/mickmister/workspace-storage/blob/${'c'.repeat(40)}/documents/notes/private.md`);
+  await dashboard.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(dashboard.getByRole('heading', { name: 'Connection & storage settings', exact: true })).toBeVisible();
+  await dashboard.close();
   await settings.getByRole('button', { name: 'Revoke https://mickmister.github.io' }).click();
   await page.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('no approved connections');
@@ -221,7 +237,7 @@ test('an older injected relay fails visibly during automatic connection before a
       window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, requestId: event.data.requestId, ok: true, result: { protocolVersion: 1, capabilities: [] } }, location.origin);
     });
   });
-  await page.goto('https://mickmister.github.io/github-ultimate/previews/old-relay/');
+  await page.goto('https://mickmister.github.io/github-ultimate/previews/old-relay/settings.html');
   await expect(page.locator('#workspace-status')).toContainText('relay is outdated');
   await expect(page.getByRole('button', { name: 'Discover workspaces' })).toBeDisabled();
   expect(await context.serviceWorkers()[0].evaluate(() => (globalThis as typeof globalThis & { __githubRequests: string[] }).__githubRequests.length)).toBe(0);
@@ -232,14 +248,14 @@ test('automatic restore does not replace an unavailable saved connection with an
   const page = await context.newPage();
   await page.addInitScript(() => {
     const saved = { connectionId: '11111111-1111-4111-8111-111111111111', installationId: 123, repository: 'owner/storage', workspace: 'planning', discovered: true };
-    localStorage.setItem(`github-ultimate-navigation-v1:${location.pathname}`, JSON.stringify(saved));
+    localStorage.setItem(`github-ultimate-navigation-v1:${location.pathname.replace(/settings\.html$/, '')}`, JSON.stringify(saved));
     window.addEventListener('message', event => {
       if (event.data?.channel !== 'github-ultimate-page-v1') return;
       const result = event.data.request.operation === 'connections' ? [{ id: '22222222-2222-4222-8222-222222222222', name: 'Other App', appId: 999, installation: { id: 456, account: 'other' } }] : { protocolVersion: 1, capabilities: [] };
       window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision: 2, requestId: event.data.requestId, ok: true, result }, location.origin);
     });
   });
-  await page.goto('https://mickmister.github.io/github-ultimate/previews/saved-connection/');
+  await page.goto('https://mickmister.github.io/github-ultimate/previews/saved-connection/settings.html');
   await expect(page.locator('#workspace-status')).toContainText('saved connection is unavailable');
   await expect(page.getByLabel('Approved connection')).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Discover workspaces' })).toBeDisabled();
