@@ -1,7 +1,7 @@
 import { z } from 'zod';
+import { pageChannel } from './bridge-channels';
+export { pageChannel, replyChannel } from './bridge-channels';
 
-export const pageChannel = 'github-ultimate-page-v1';
-export const replyChannel = 'github-ultimate-extension-v1';
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('discover') }).strict(),
   z.object({ operation: z.literal('connections') }).strict(),

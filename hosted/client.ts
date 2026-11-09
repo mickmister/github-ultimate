@@ -1,4 +1,5 @@
-import { pageChannel, replyChannel, type HostedRequest } from '../src/hosted-protocol';
+import { pageChannel, replyChannel } from '../src/bridge-channels';
+import type { HostedRequest } from '../src/hosted-protocol';
 
 export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000): Promise<T> {
   if (!window.isSecureContext) return Promise.reject(new Error('Open this page over HTTPS (or HTTP localhost for development).'));
