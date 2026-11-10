@@ -31,6 +31,9 @@
     "webapp:dev": "pnpm --dir webapp dev",
     "webapp:build": "pnpm --dir webapp build",
     "webapp:check": "pnpm --dir webapp check",
+    "webapp:storybook": "pnpm --dir webapp storybook",
+    "webapp:storybook:build": "pnpm --dir webapp storybook:build",
+    "test:webapp-storybook": "playwright test --config playwright.webapp-storybook.config.ts",
     "package": "pnpm run build && node scripts/package.mjs"
   },
   "dependencies": {

@@ -65,6 +65,31 @@ view-boundary rules run on this source in CI. They do not themselves enforce
 all import/API restrictions; keep privileged dependencies in the host adapter.
 Compare candidates using the same model fixtures and interaction scenarios.
 
+## Mock-data Storybook
+
+```sh
+pnpm run webapp:storybook         # http://127.0.0.1:6010/
+pnpm run webapp:storybook:build   # webapp/storybook-static/
+pnpm run test:webapp-storybook
+```
+
+Open **Web app → Document browser → Interactive** to exercise the production
+controller with deterministic in-memory `AppHooksV1` capabilities. Discover a
+workspace, browse documents, select one, and filter the list. No extension,
+GitHub credentials, network API, or browser storage is used. The story runs in
+React Strict Mode to exercise the container's mount/disposal lifecycle.
+
+Presentation fixtures open directly in reading, choose-document, loading,
+read-error, no-connections, empty-workspace, and long-content states. They use
+the same `DocumentBrowserView` and CSS as the deployed app. Fixture interactions
+are local demonstration callbacks; use Interactive for the real state machine.
+
+The React Storybook uses its own config in `webapp/.storybook/`, bypassing the
+TanStack Start Vite plugin. The existing HTML Storybook remains available via
+`pnpm run storybook`. Set `PORT` for a managed preview slot; `STORYBOOK_PREVIEW=1`
+disables HMR for proxies without WebSocket support. The server binds to localhost
+and allows the managed `*.jamtools.dev` preview hostnames.
+
 The browser integration test exercises the built SPA as static files under its
 branch base path through a real extension with fixture GitHub responses. It
 checks manifest/blob verification, safe text rendering, filtering, narrow
