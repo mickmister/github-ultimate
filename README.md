@@ -14,7 +14,7 @@ For updates, replace the extracted files and click **Reload** on the extension c
 
 Open the extension's toolbar popup to identify the installed build, for example **Version 0.1.1+abc12345**. Generated manifests also carry this display string in `version_name`; the browser-required numeric `version` stays `0.1.1`. The hash identifies the source commit. Local builds with uncommitted changes add `-dirty` so they can be distinguished from a clean release build.
 
-**Safari on iPhone/iPad:** `npm run build:safari` produces `dist-safari/` for later Xcode conversion/signing. See [Safari iOS preparation and verification](docs/safari-ios.md). These resources are not an installable iOS app.
+**Safari on iPhone/iPad:** `pnpm run build:safari` produces `dist-safari/` for later Xcode conversion/signing. See [Safari iOS preparation and verification](docs/safari-ios.md). These resources are not an installable iOS app.
 
 ## What works
 
@@ -48,7 +48,7 @@ Only comments loaded in the GitHub page are included. Use GitHub's **Load more**
 
 ```sh
 ./bin/github-ultimate-form path/to/form.json
-# or: npm run form -- --file path/to/form.yaml
+# or: pnpm run form --file path/to/form.yaml
 ```
 
 The publisher validates the DSL, uses `gh` to find the current repository/PR,
@@ -73,7 +73,8 @@ Dashboard links accept private `https://node.tailnet.ts.net/` hosts without quer
 
 ### Hosted bridge demo
 
-`npm run hosted:build` builds the independent hosted read-test app in `hosted/`.
+`pnpm run hosted:build` builds the existing hosted pages in `hosted/` and the
+new [TanStack Start SPA](docs/webapp.md) at `app/` inside each branch preview.
 CI maintains one current preview per branch in `gh-pages` and publishes the
 assembled site through GitHub Pages. Origin-to-connection grants are configured
 in the extension; hosted pages never receive credentials. See
@@ -82,8 +83,8 @@ in the extension; hosted pages never receive credentials. See
 ### Storybook
 
 ```sh
-npm ci
-npm run storybook
+pnpm install --frozen-lockfile
+pnpm run storybook
 ```
 
 Open `http://127.0.0.1:6006`. Storybook uses the **shipping parser, Shadow DOM
@@ -125,7 +126,7 @@ history without making GitHub requests. Draft fixtures are seeded; normal storie
 extension storage. The unavailable-storage story deliberately exercises the
 real save-failure message. This is a UI test environment, not an agent runner.
 
-`npm run storybook:build` creates `storybook-static/`. `npm run test:storybook`
+`pnpm run storybook:build` creates `storybook-static/`. `pnpm run test:storybook`
 checks every story and exercises composition/history, native preview/posting,
 workspace/pending navigation, phone/zen and inert
 fallbacks. Set `STORYBOOK_URL` to test a running preview instead of starting a
@@ -135,8 +136,8 @@ local server. The managed preview uses the injected `PORT` and
 ### Styling playground
 
 ```sh
-npm ci
-npm run playground
+pnpm install --frozen-lockfile
+pnpm run playground
 ```
 
 Open `http://localhost:5173`. The Vite playground uses the extension's **actual**
@@ -155,8 +156,8 @@ share link** includes your current source/styles in its URL fragment, so only
 share non-sensitive example data. Add exported rules to `src/workspace.css` when
 you want the extension build to include them.
 
-`npm run playground:build` creates a standalone static `playground-dist/` site;
-`npm run test:playground` tests it in a normal browser. In a managed preview,
+`pnpm run playground:build` creates a standalone static `playground-dist/` site;
+`pnpm run test:playground` tests it in a normal browser. In a managed preview,
 the server uses the assigned `PORT` and supports the `*.jamtools.dev` host.
 
 ### Extension checks
@@ -164,13 +165,14 @@ the server uses the assigned `PORT` and supports the `*.jamtools.dev` host.
 Requires Node 22 and Chrome/Chromium 120+.
 
 ```sh
-npm ci
-npm run check
-npm test
-npm run build
-npx playwright install chromium
-npm run test:browser
-npm run package
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run check
+pnpm test
+pnpm run build
+pnpm exec playwright install chromium
+pnpm run test:browser
+pnpm run package
 ```
 
 Load `dist/` unpacked for development. `release/` contains the ZIP and checksum. Packaging is deterministic with a fixed archive timestamp and a locked dependency graph. Each extension ZIP contains MIT project licensing and complete runtime dependency licenses.

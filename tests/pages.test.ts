@@ -52,7 +52,7 @@ test('preview paths avoid branch slash/slug collisions and block oversized or li
     await expect(payloadSize(root)).rejects.toThrow('regular files');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
-test('hosted production build uses relative subpath assets and no source maps', async () => {
+test('hosted build preserves legacy pages and adds a client-only Start shell under the preview base', async () => {
   execFileSync(process.execPath, ['scripts/build-hosted.mjs'], { cwd: resolve('.'), env: { ...process.env, GITHUB_REF_NAME: 'test/subpath' } });
   const html = await readFile('hosted-dist/index.html', 'utf8');
   expect(html).toMatch(/src="\.\/main-[A-Z0-9]+\.js"/); expect(html).toMatch(/href="\.\/main-[A-Z0-9]+\.css"/);
@@ -64,6 +64,12 @@ test('hosted production build uses relative subpath assets and no source maps', 
   expect((await readdir('hosted-dist')).some(name => name.endsWith('.map'))).toBe(false);
   expect(JSON.parse(await readFile('hosted-dist/build.json', 'utf8')).branch).toBe('test/subpath');
   expect(await payloadSize('hosted-dist')).toBeLessThan(previewLimit);
-  // The hosted app must not accidentally import Zod/the privileged broker.
-  expect(await payloadSize('hosted-dist')).toBeLessThan(64 * 1024);
-});
+  const app = await readFile('hosted-dist/app/index.html', 'utf8');
+  expect(app).toContain(`/previews/${previewDirectory('test/subpath')}/app/assets/`);
+  expect(app).not.toContain('Choose your workspace');
+  expect(app).not.toContain('<main');
+  expect(await readdir('hosted-dist/app')).not.toContain('server');
+  expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.map'))).toBe(false);
+  // Keep the original app's size boundary separate from the new React bundle.
+  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app')).toBeLessThan(64 * 1024);
+}, 60000);

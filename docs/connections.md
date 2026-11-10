@@ -21,7 +21,7 @@ the private `mickmister/workspace-storage` repository, with public
 `mickmister/workspace-nuggets` also installed. Repository authorization comes from
 GitHub; this list is test context, not an extension repository allowlist.
 
-1. Build with `npm run build` and reload the unpacked extension from `dist/`.
+1. Build with `pnpm run build` and reload the unpacked extension from `dist/`.
    The new GitHub/API host permissions may need browser approval.
 2. Open the popup's **GitHub App connections** link. Add the default connection.
 3. Click **Sign in with device code**, then open GitHub device authorization and
@@ -144,7 +144,7 @@ settings page/background/IndexedDB with simulated GitHub replies. They do not
 claim a real GitHub login or private-read acceptance; the steps above require the
 user's authorization.
 
-`npm run build:safari` produces a Safari bundle using a non-persistent background
+`pnpm run build:safari` produces a Safari bundle using a non-persistent background
 script. The page uses the Safari `browser` namespace when available. Real signed
 iPhone testing remains required: device login, polling after foreground/resume,
 credential persistence, refresh and private read. Safari build success is not

@@ -11,7 +11,7 @@ Runtime dependencies bundled in the extension:
 
 The build includes the complete installed dependency license texts in
 `THIRD_PARTY_LICENSES.txt` in the extension ZIP. Exact versions are pinned by
-`package-lock.json`. Bundled legal comments are retained.
+`pnpm-lock.yaml`. Bundled legal comments are retained.
 
 The form protocol and interaction design were reviewed against
 `vibe-dashboard/vibe-dashboard` / the local `vibe-kanban-vscode-web` checkout,

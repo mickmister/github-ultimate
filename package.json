@@ -2,6 +2,7 @@
   "name": "github-ultimate",
   "version": "0.1.1",
   "private": true,
+  "packageManager": "pnpm@12.18.0",
   "type": "module",
   "description": "A comment-powered GitHub PR workspace for human-agent collaboration",
   "license": "MIT",
@@ -9,10 +10,10 @@
     "github-ultimate-form": "bin/github-ultimate-form"
   },
   "scripts": {
-    "lint:tsx-view-boundary": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset tsx-view-boundary --target . src hosted",
+    "lint:tsx-view-boundary": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset tsx-view-boundary --target . src hosted webapp/src",
     "lint:tsx-view-boundary:changed": "OPENLINT_POLICY_DIR=.github/openlint ol check --changed --preset tsx-view-boundary --target .",
     "lint:tsx-view-boundary:last-commit": "OPENLINT_POLICY_DIR=.github/openlint ol check --last-commit --preset tsx-view-boundary --target .",
-    "lint:ui-customization-fences": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset ui-customization-fences --target . src hosted",
+    "lint:ui-customization-fences": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset ui-customization-fences --target . src hosted webapp/src",
     "hosted:build": "node scripts/build-hosted.mjs",
     "form": "node --experimental-strip-types cli/form.ts",
     "playground": "vite --config playground/vite.config.ts",
@@ -27,7 +28,10 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:browser": "playwright test",
-    "package": "npm run build && node scripts/package.mjs"
+    "webapp:dev": "pnpm --dir webapp dev",
+    "webapp:build": "pnpm --dir webapp build",
+    "webapp:check": "pnpm --dir webapp check",
+    "package": "pnpm run build && node scripts/package.mjs"
   },
   "dependencies": {
     "dompurify": "^3.3.0",
@@ -36,6 +40,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@ast-grep/cli": "0.45.3",
     "@mickmister/openlint": "0.1.0",
     "@playwright/test": "^1.56.1",
     "@storybook/html-vite": "^10.6.6",

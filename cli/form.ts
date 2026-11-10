@@ -8,7 +8,7 @@ Usage:
   github-ultimate-form form.json
   github-ultimate-form --file form.yaml
   github-ultimate-form < form.json
-  npm run form -- --file form.json
+  pnpm run form --file form.json
 
 Options:
   --file <path>          Read JSON/YAML DSL or a single fenced example (- = stdin)

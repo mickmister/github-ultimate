@@ -5,5 +5,5 @@ export default defineConfig({
   testDir: '../tests/playground', workers: 1,
   outputDir: '../test-results/playground',
   use: { baseURL: external ?? `http://127.0.0.1:${port}`, trace: 'retain-on-failure' },
-  webServer: external ? undefined : { command: `npm run playground -- --port ${port}`, url: `http://127.0.0.1:${port}`, reuseExistingServer: !process.env.CI },
+  webServer: external ? undefined : { command: `pnpm run playground --port ${port}`, url: `http://127.0.0.1:${port}`, reuseExistingServer: !process.env.CI },
 });

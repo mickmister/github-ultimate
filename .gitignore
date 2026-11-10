@@ -9,3 +9,6 @@ playground-dist/
 storybook-static/
 hosted-dist/
 pages-site/
+webapp/.tanstack/
+webapp/.output/
+webapp/.nitro/

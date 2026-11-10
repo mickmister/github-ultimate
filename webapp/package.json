@@ -1,0 +1,24 @@
+{
+  "name": "github-ultimate-webapp",
+  "private": true,
+  "engines": { "node": ">=22.12.0" },
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1 --port 3100",
+    "build": "vite build",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "1.170.42",
+    "@tanstack/react-start": "1.168.61",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "@vitejs/plugin-react": "5.2.0",
+    "typescript": "5.9.3",
+    "vite": "7.3.7"
+  }
+}
