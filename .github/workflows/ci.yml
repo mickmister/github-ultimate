@@ -31,11 +31,13 @@ jobs:
       - run: pnpm run lint:tsx-view-boundary
       - run: pnpm run playground:build
       - run: pnpm run storybook:build
+      - run: pnpm run webapp:storybook:build
       - run: pnpm exec playwright install --with-deps chromium webkit
       - run: pnpm run test:browser
       - run: pnpm run test:mobile
       - run: pnpm run test:playground
       - run: pnpm run test:storybook
+      - run: pnpm run test:webapp-storybook
       - run: pnpm run package
       - name: Verify release version matches tag
         if: startsWith(github.ref, 'refs/tags/v')
