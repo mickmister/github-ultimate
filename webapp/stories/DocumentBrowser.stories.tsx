@@ -5,6 +5,7 @@ import { DocumentBrowserView } from '../src/features/documents/DocumentBrowser.v
 import type { DocumentBrowserActions, DocumentBrowserModel } from '../src/features/documents/contracts';
 import { createMockAppHooks, mockDocumentContents, mockSnapshot, readyModel } from './documents.fixtures';
 import { ancestorFolders } from '../src/features/documents/document-tree';
+import { isMarkdown } from '../src/features/documents/document-format';
 
 function InteractiveBrowser() {
   const appHooks = useMemo(createMockAppHooks, []);
@@ -17,17 +18,21 @@ function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }
   const [model, setModel] = useState<DocumentBrowserModel>(() => ({ ...initialModel, expandedFolders: ancestorFolders(initialModel.snapshot?.documents.find(document => document.id === initialModel.documentId)?.path ?? '') }));
   const patch = (value: Partial<DocumentBrowserModel>) => setModel(current => ({ ...current, ...value }));
   const actions: DocumentBrowserActions = {
-    connect() { patch({ ...readyModel, snapshot: null, content: null, documentId: '' }); },
+    connect() { patch({ ...readyModel, snapshot: null, content: null, documentId: '', documentFullscreen: false }); },
     selectConnection(connectionId) { patch({ connectionId }); },
     setRepository(repository) { patch({ repository }); },
     discoverWorkspaces() { patch({ workspaces: readyModel.workspaces, busy: false, error: null }); },
     selectWorkspace(workspaceId) { patch({ workspaceId }); },
-    browseDocuments() { patch({ snapshot: mockSnapshot, content: null, documentId: '', busy: false, error: null }); },
+    browseDocuments() { patch({ snapshot: mockSnapshot, content: null, documentId: '', documentFullscreen: false, busy: false, error: null }); },
     setQuery(query) { patch({ query }); },
     setExpandedFolders(expandedFolders) { if (!model.query.trim()) patch({ expandedFolders }); },
     setTreeAppearance(treeAppearance) { patch({ treeAppearance }); },
-    selectDocument(documentId) { patch({ documentId, expandedFolders: [...new Set([...model.expandedFolders, ...ancestorFolders(model.snapshot?.documents.find(document => document.id === documentId)?.path ?? '')])], content: mockDocumentContents[documentId] ?? 'Long-content fixture document.', documentMode: 'source', busy: false, error: null }); },
+    selectDocument(documentId) {
+      const path = model.snapshot?.documents.find(document => document.id === documentId)?.path ?? '';
+      patch({ documentId, expandedFolders: [...new Set([...model.expandedFolders, ...ancestorFolders(path)])], content: mockDocumentContents[documentId] ?? 'Long-content fixture document.', documentMode: isMarkdown(path) ? 'markdown' : 'source', documentFullscreen: true, busy: false, error: null });
+    },
     setDocumentMode(documentMode) { patch({ documentMode }); },
+    setDocumentFullscreen(documentFullscreen) { patch({ documentFullscreen }); },
   };
   return <DocumentBrowserView model={model} actions={actions} />;
 }
@@ -42,12 +47,13 @@ type Story = StoryObj;
 
 export const Interactive: Story = { render: () => <InteractiveBrowser /> };
 export const ReadingDocument: Story = { render: () => <FixtureBrowser initialModel={readyModel} /> };
+export const SourceDocument: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'source' }} /> };
 export const MarkdownPreview: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown' }} /> };
 export const UntrustedMarkdown: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'unsafeMarkdown', content: mockDocumentContents.unsafeMarkdown, documentMode: 'markdown' }} /> };
-export const JsonSource: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'config', content: mockDocumentContents.config }} /> };
-export const NestedFolders: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'interview', content: mockDocumentContents.interview }} /> };
-export const FilteredDocuments: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, query: 'notes.md' }} /> };
-export const CompactTealTree: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, treeAppearance: { density: 'compact', accent: 'teal' } }} /> };
+export const JsonSource: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'config', content: mockDocumentContents.config, documentMode: 'source' }} /> };
+export const NestedFolders: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'interview', content: mockDocumentContents.interview, documentFullscreen: false }} /> };
+export const FilteredDocuments: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, query: 'notes.md', documentFullscreen: false }} /> };
+export const CompactTealTree: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, treeAppearance: { density: 'compact', accent: 'teal' }, documentFullscreen: false }} /> };
 export const ChooseDocument: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: '', content: null }} /> };
 export const Loading: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, busy: true, canDiscover: false, canBrowse: false, status: 'Reading and verifying document…' }} /> };
 export const ReadError: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, error: 'The approved access route is no longer available. Reconnect your extension and try again.', status: 'Document request failed.' }} /> };

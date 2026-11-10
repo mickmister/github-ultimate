@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { AppHooksV1 } from '../../app-hooks/contracts';
 import { createHostedAppHooks } from '../../app-hooks/host';
 import { createDocumentBrowserController } from './controller';
@@ -31,5 +31,23 @@ function SubscribedBrowser({ controller, presentation: Presentation }: {
   presentation: DocumentBrowserPresentation;
 }) {
   const model = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  const wasFullscreen = useRef(false);
+  useEffect(() => {
+    if (wasFullscreen.current && !model.documentFullscreen) {
+      document.querySelector<HTMLElement>('.document-tree [data-selected]')?.focus();
+    }
+    wasFullscreen.current = model.documentFullscreen;
+  }, [model.documentFullscreen]);
+  useEffect(() => {
+    if (!model.documentFullscreen) return;
+    const escape = (event: KeyboardEvent) => {
+      // Monaco owns Escape for its find widget and other editor interactions.
+      if (event.key === 'Escape' && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('.monaco-editor'))) {
+        controller.actions.setDocumentFullscreen(false);
+      }
+    };
+    window.addEventListener('keydown', escape);
+    return () => window.removeEventListener('keydown', escape);
+  }, [controller, model.documentFullscreen]);
   return <Presentation model={model} actions={controller.actions} />;
 }

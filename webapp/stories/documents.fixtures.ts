@@ -35,7 +35,7 @@ export const mockSnapshot: DocumentSnapshotDTO = Object.freeze({
 export const readyModel: DocumentBrowserModel = Object.freeze({
   connections: [mockConnection], connectionId: mockConnection.id, repository: 'octo-example/workspace-storage',
   workspaces: mockWorkspaces, workspaceId: 'product-research', snapshot: mockSnapshot,
-  documentId: 'brief', query: '', expandedFolders: ['planning'], treeAppearance: defaultTreeAppearance, content: mockDocumentContents.brief, documentMode: 'source', busy: false,
+  documentId: 'brief', query: '', expandedFolders: ['planning'], treeAppearance: defaultTreeAppearance, content: mockDocumentContents.brief, documentMode: 'markdown', documentFullscreen: true, busy: false,
   status: 'Mock document loaded. No extension or GitHub connection is used.', error: null,
   canDiscover: true, canBrowse: true,
 });

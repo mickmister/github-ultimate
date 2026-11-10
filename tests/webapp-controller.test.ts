@@ -54,6 +54,8 @@ describe('document browser behavior independent of presentation', () => {
     await ready(controller, value);
     controller.actions.selectDocument('note-a');
     await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', documentFullscreen: true });
+    controller.actions.setDocumentMode('source');
     controller.actions.setDocumentMode('markdown');
     expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', content: 'Hello' });
     expect(controller.module.read).toHaveBeenCalledTimes(1);
@@ -62,7 +64,25 @@ describe('document browser behavior independent of presentation', () => {
     controller.actions.setDocumentMode('markdown');
     expect(controller.getSnapshot().documentMode).toBe('source');
     controller.actions.setRepository('other/storage');
-    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'source', snapshot: null, content: null });
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'source', documentFullscreen: false, snapshot: null, content: null });
+  });
+
+  it('opens every selection fullscreen with the appropriate format and keeps browsing context on return', async () => {
+    const controller = setup();
+    await ready(controller);
+    controller.actions.setQuery('a.md');
+    controller.actions.selectDocument('note-a');
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', documentFullscreen: true, content: null });
+    controller.actions.setDocumentFullscreen(false); // Returning while loading must not reopen the reader on completion.
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.getSnapshot()).toMatchObject({ documentFullscreen: false, documentId: 'note-a', query: 'a.md', expandedFolders: ['notes'] });
+    controller.actions.setDocumentMode('source');
+    controller.actions.setDocumentFullscreen(true);
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+    controller.actions.selectDocument('note-a');
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', documentFullscreen: true });
+    controller.actions.selectDocument('unknown');
+    expect(controller.getSnapshot().documentId).toBe('note-a');
   });
 
   it('guards commands, binds the selected installation, and rejects missing-document workspaces', async () => {

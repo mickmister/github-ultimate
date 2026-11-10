@@ -52,6 +52,12 @@ label:not(.monaco-editor *) { display: grid; gap: 6px; font-size: .875rem; font-
 @media (pointer: coarse) { .document-tree { --tree-density-height: 44px; } }
 @media (prefers-reduced-motion: reduce) { .tree-chevron { transition: none; } }
 .document-preview { min-width: 0; padding: 24px; }
+.document-fullscreen { max-width: none; width: 100%; min-height: 100dvh; padding: 0; display: flex; flex-direction: column; }
+.document-fullscreen > .request-status { padding: 8px 24px 0; margin: 0; font-size: .875rem; }
+.document-fullscreen .browser { flex: 1; grid-template-columns: minmax(0, 1fr); border: 0; border-radius: 0; }
+.document-fullscreen .markdown-preview { max-width: 90ch; margin-inline: auto; }
+.document-fullscreen .monaco-host { height: max(320px, calc(100dvh - 300px)); }
+.reading-navigation { margin-bottom: 16px; }
 .document-preview header { border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-wrap: anywhere; }
 .source-fallback { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875rem; }
 .document-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }

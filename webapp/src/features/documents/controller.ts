@@ -13,7 +13,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
   let generation = 0, disposed = false;
   let state: DocumentBrowserModel = {
     connections: [], connectionId: '', repository: 'mickmister/workspace-storage', workspaces: [], workspaceId: '',
-    snapshot: null, documentId: '', query: '', expandedFolders: [], treeAppearance, content: null, documentMode: 'source', busy: false, error: null,
+    snapshot: null, documentId: '', query: '', expandedFolders: [], treeAppearance, content: null, documentMode: 'source', documentFullscreen: false, busy: false, error: null,
     status: 'Connect to your approved extension to browse workspace documents.', canDiscover: false, canBrowse: false,
   };
   function patch(next: Partial<DocumentBrowserModel>) {
@@ -25,7 +25,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     });
     listeners.forEach(listener => listener());
   }
-  const emptyDocuments = { snapshot: null, documentId: '', query: '', expandedFolders: [], content: null, documentMode: 'source' } as const;
+  const emptyDocuments = { snapshot: null, documentId: '', query: '', expandedFolders: [], content: null, documentMode: 'source', documentFullscreen: false } as const;
   function invalidate(next: Partial<DocumentBrowserModel>) {
     generation++;
     patch({ busy: false, error: null, ...next });
@@ -97,7 +97,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       const document = state.snapshot?.documents.find(document => document.id === id);
       if (disposed || !state.snapshot || !document) return;
       const snapshot = state.snapshot;
-      patch({ documentId: id, expandedFolders: [...new Set([...state.expandedFolders, ...ancestorFolders(document.path)])], content: null, documentMode: isMarkdown(document.path) ? state.documentMode : 'source' });
+      patch({ documentId: id, expandedFolders: [...new Set([...state.expandedFolders, ...ancestorFolders(document.path)])], content: null, documentMode: isMarkdown(document.path) ? 'markdown' : 'source', documentFullscreen: true });
       void run('Reading and verifying document…', async () => ({ content: await api.read(snapshot.id, id), status: 'Document bytes verified against the Git blob.' }));
     },
     setDocumentMode(documentMode) {
@@ -105,6 +105,10 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       const document = state.snapshot?.documents.find(document => document.id === state.documentId);
       if (!document || documentMode === 'markdown' && !isMarkdown(document.path)) return;
       patch({ documentMode });
+    },
+    setDocumentFullscreen(documentFullscreen) {
+      if (disposed || !state.snapshot?.documents.some(document => document.id === state.documentId)) return;
+      patch({ documentFullscreen });
     },
   });
   return {
