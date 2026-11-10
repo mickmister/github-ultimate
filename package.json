@@ -9,6 +9,10 @@
     "github-ultimate-form": "bin/github-ultimate-form"
   },
   "scripts": {
+    "lint:tsx-view-boundary": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset tsx-view-boundary --target . src hosted",
+    "lint:tsx-view-boundary:changed": "OPENLINT_POLICY_DIR=.github/openlint ol check --changed --preset tsx-view-boundary --target .",
+    "lint:tsx-view-boundary:last-commit": "OPENLINT_POLICY_DIR=.github/openlint ol check --last-commit --preset tsx-view-boundary --target .",
+    "lint:ui-customization-fences": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset ui-customization-fences --target . src hosted",
     "hosted:build": "node scripts/build-hosted.mjs",
     "form": "node --experimental-strip-types cli/form.ts",
     "playground": "vite --config playground/vite.config.ts",
@@ -32,6 +36,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@mickmister/openlint": "0.1.0",
     "@playwright/test": "^1.56.1",
     "@storybook/html-vite": "^10.6.6",
     "@types/chrome": "^0.1.24",
