@@ -1,5 +1,6 @@
 import type { AppHooksV1, DocumentSnapshotDTO } from '../src/app-hooks/contracts';
 import type { DocumentBrowserModel } from '../src/features/documents/contracts';
+import { defaultTreeAppearance } from '../src/features/documents/tree-appearance';
 
 export const mockConnection = Object.freeze({ id: 'mock-personal', name: 'Personal GitHub App', installationId: 123, account: 'octo-example' });
 export const mockWorkspaces = Object.freeze([
@@ -14,6 +15,8 @@ export const mockDocumentContents: Readonly<Record<string, string>> = Object.fre
   unsafe: '<script>window.__unsafeDocument = true</script>\n\nDocuments are displayed as text, including this deliberately literal script tag.',
   unsafeMarkdown: '# Untrusted Markdown\n\n<script>window.__unsafeDocument = true</script>\n<img src="https://example.invalid/tracker" onerror="window.__unsafeDocument = true">\n\n[Unsafe link](javascript:alert(1))\n\n**Safe document text**',
   config: '{\n  "workspace": "product-research",\n  "readOnly": true\n}',
+  interview: '# Interview notes\n\nNested research notes for the document browser.',
+  planningNotes: '# Planning notes\n\nA different document with the same basename.',
 });
 export const mockSnapshot: DocumentSnapshotDTO = Object.freeze({
   id: 'mock-snapshot', commit: 'a1b2c3d4'.repeat(5),
@@ -25,12 +28,14 @@ export const mockSnapshot: DocumentSnapshotDTO = Object.freeze({
     { id: 'unsafe', path: 'examples/literal-html.txt', size: 149 },
     { id: 'unsafeMarkdown', path: 'examples/untrusted.md', size: 220 },
     { id: 'config', path: 'workspace/config.json', size: 64 },
+    { id: 'interview', path: 'research/interviews/notes.md', size: 70 },
+    { id: 'planningNotes', path: 'planning/notes.md', size: 68 },
   ],
 });
 export const readyModel: DocumentBrowserModel = Object.freeze({
   connections: [mockConnection], connectionId: mockConnection.id, repository: 'octo-example/workspace-storage',
   workspaces: mockWorkspaces, workspaceId: 'product-research', snapshot: mockSnapshot,
-  documentId: 'brief', query: '', content: mockDocumentContents.brief, documentMode: 'source', busy: false,
+  documentId: 'brief', query: '', expandedFolders: ['planning'], treeAppearance: defaultTreeAppearance, content: mockDocumentContents.brief, documentMode: 'source', busy: false,
   status: 'Mock document loaded. No extension or GitHub connection is used.', error: null,
   canDiscover: true, canBrowse: true,
 });

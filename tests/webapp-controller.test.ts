@@ -28,6 +28,25 @@ async function ready(controller: ReturnType<typeof setup>, expected = snapshot) 
 }
 
 describe('document browser behavior independent of presentation', () => {
+  it('keeps expansion separate from reads, reveals selected ancestors and resets navigation on scope changes', async () => {
+    const controller = setup();
+    await ready(controller);
+    controller.actions.setExpandedFolders(['notes', 'not-a-folder']);
+    expect(controller.getSnapshot().expandedFolders).toEqual(['notes']);
+    expect(controller.module.read).not.toHaveBeenCalled();
+    controller.actions.setQuery('a.md');
+    controller.actions.setExpandedFolders([]);
+    controller.actions.setQuery('');
+    expect(controller.getSnapshot().expandedFolders).toEqual(['notes']);
+    controller.actions.setExpandedFolders([]);
+    controller.actions.selectDocument('note-a');
+    expect(controller.getSnapshot().expandedFolders).toEqual(['notes']);
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    controller.actions.setTreeAppearance({ density: 'compact', accent: 'teal' });
+    controller.actions.selectWorkspace('');
+    expect(controller.getSnapshot()).toMatchObject({ expandedFolders: [], snapshot: null, treeAppearance: { density: 'compact', accent: 'teal' } });
+  });
+
   it('switches Markdown/source without another read and resets the mode for non-Markdown or a new scope', async () => {
     const controller = setup();
     const value = { ...snapshot, documents: [...snapshot.documents, { id: 'config', path: 'config.json', size: 2 }] };

@@ -240,7 +240,8 @@ test('hosted branch page reads through an approved connection and revocation tak
   await modern.getByLabel('Stored workspace').selectOption('workspace-a');
   await modern.getByRole('button', { name: 'Browse documents', exact: true }).click();
   await expect(modern.getByRole('status')).toContainText('2 document(s)');
-  await modern.getByRole('button', { name: 'notes/private.md', exact: false }).click();
+  await modern.getByRole('treeitem', { name: 'notes', exact: true }).click();
+  await modern.getByRole('treeitem', { name: 'notes/private.md', exact: true }).click();
   await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
   await expect(modern.getByLabel('Document content')).toContainText('Private workspace note');
   expect(await modern.evaluate(() => '__unsafeDocument' in window)).toBe(false);
@@ -249,7 +250,8 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(modern.getByLabel('Markdown preview', { exact: true }).locator('script')).toHaveCount(0);
   await modern.getByRole('button', { name: 'Source', exact: true }).click();
   await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
-  await modern.getByRole('button', { name: 'workspace/manifest.json', exact: false }).click();
+  await modern.getByRole('treeitem', { name: 'workspace', exact: true }).click();
+  await modern.getByRole('treeitem', { name: 'workspace/manifest.json', exact: true }).click();
   await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
   await expect.poll(() => workerURLs.some(url => url.includes('json.worker'))).toBe(true);
   expect(workerURLs.every(url => url.startsWith('https://mickmister.github.io/'))).toBe(true);

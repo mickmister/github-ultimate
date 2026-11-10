@@ -1,17 +1,19 @@
 import type { AppHooksV1 } from '../../app-hooks/contracts';
 import type { DocumentBrowserActions, DocumentBrowserModel } from './contracts';
 import { isMarkdown } from './document-format';
+import { ancestorFolders } from './document-tree';
+import { defaultTreeAppearance, type TreeAppearance } from './tree-appearance';
 
 const validRepository = (value: string) => /^(?!\.{1,2}\/)[a-zA-Z0-9_.-]+\/(?!\.{1,2}$)[a-zA-Z0-9_.-]+$/.test(value) && value.length <= 220;
 
-export function createDocumentBrowserController(appHooks: AppHooksV1) {
+export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppearance: TreeAppearance = defaultTreeAppearance) {
   if (appHooks.contractVersion !== 1 || appHooks.modules.documents.version !== 1) throw new Error('Incompatible document browser host.');
   const api = appHooks.modules.documents;
   const listeners = new Set<() => void>();
   let generation = 0, disposed = false;
   let state: DocumentBrowserModel = {
     connections: [], connectionId: '', repository: 'mickmister/workspace-storage', workspaces: [], workspaceId: '',
-    snapshot: null, documentId: '', query: '', content: null, documentMode: 'source', busy: false, error: null,
+    snapshot: null, documentId: '', query: '', expandedFolders: [], treeAppearance, content: null, documentMode: 'source', busy: false, error: null,
     status: 'Connect to your approved extension to browse workspace documents.', canDiscover: false, canBrowse: false,
   };
   function patch(next: Partial<DocumentBrowserModel>) {
@@ -23,7 +25,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1) {
     });
     listeners.forEach(listener => listener());
   }
-  const emptyDocuments = { snapshot: null, documentId: '', query: '', content: null, documentMode: 'source' } as const;
+  const emptyDocuments = { snapshot: null, documentId: '', query: '', expandedFolders: [], content: null, documentMode: 'source' } as const;
   function invalidate(next: Partial<DocumentBrowserModel>) {
     generation++;
     patch({ busy: false, error: null, ...next });
@@ -82,11 +84,20 @@ export function createDocumentBrowserController(appHooks: AppHooksV1) {
       });
     },
     setQuery(query) { patch({ query }); },
+    setExpandedFolders(paths) {
+      if (state.query.trim()) return; // Search expansion is temporary, preserving the user's browsing state.
+      const valid = new Set(state.snapshot?.documents.flatMap(document => ancestorFolders(document.path)) ?? []);
+      patch({ expandedFolders: [...new Set(paths.filter(path => valid.has(path)))] });
+    },
+    setTreeAppearance(appearance) {
+      if (!['comfortable', 'compact'].includes(appearance.density) || !['default', 'blue', 'teal'].includes(appearance.accent)) return;
+      patch({ treeAppearance: Object.freeze({ density: appearance.density, accent: appearance.accent }) });
+    },
     selectDocument(id) {
       const document = state.snapshot?.documents.find(document => document.id === id);
       if (disposed || !state.snapshot || !document) return;
       const snapshot = state.snapshot;
-      patch({ documentId: id, content: null, documentMode: isMarkdown(document.path) ? state.documentMode : 'source' });
+      patch({ documentId: id, expandedFolders: [...new Set([...state.expandedFolders, ...ancestorFolders(document.path)])], content: null, documentMode: isMarkdown(document.path) ? state.documentMode : 'source' });
       void run('Reading and verifying document…', async () => ({ content: await api.read(snapshot.id, id), status: 'Document bytes verified against the Git blob.' }));
     },
     setDocumentMode(documentMode) {
