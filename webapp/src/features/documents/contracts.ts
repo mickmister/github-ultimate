@@ -11,6 +11,7 @@ export interface DocumentBrowserModel {
   readonly documentId: string;
   readonly query: string;
   readonly content: string | null;
+  readonly documentMode: 'source' | 'markdown';
   readonly busy: boolean;
   readonly status: string;
   readonly error: string | null;
@@ -26,6 +27,7 @@ export interface DocumentBrowserActions {
   browseDocuments(): void;
   setQuery(query: string): void;
   selectDocument(id: string): void;
+  setDocumentMode(mode: 'source' | 'markdown'): void;
 }
 export interface DocumentBrowserProps {
   readonly model: DocumentBrowserModel;

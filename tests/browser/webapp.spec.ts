@@ -10,8 +10,8 @@ test('Start shell hydrates from static branch assets and reports a missing exten
     const path = new URL(route.request().url()).pathname;
     if (!path.startsWith(appPath)) return route.fulfill({ status: 404 });
     const name = path.slice(appPath.length) || 'index.html';
-    if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_-]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404 });
-    return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
+    if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_.-]+\.(js|css|ttf)$/.test(name)) return route.fulfill({ status: 404 });
+    return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.ttf') ? 'font/ttf' : 'text/html' });
   });
   await page.goto('https://mickmister.github.io' + appPath);
   await expect(page.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();

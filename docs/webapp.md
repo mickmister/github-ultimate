@@ -30,6 +30,28 @@ workspace discovery, verified document listing/reading, and local filtering.
 It intentionally does not copy the old settings page's diagnostics or Beads
 inspector. It does not persist document contents or navigation selections.
 
+## Document views
+
+Opening a document now mounts a read-only Monaco source editor instead of the
+plain-text pane. It supports syntax highlighting, line numbers, folding, word
+wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Markdown files also offer a
+**Markdown preview** button for headings, lists, tables, task lists, and fenced
+code blocks. **Source** returns to the exact verified document text. Switching
+views does not issue another document read. HTML scripts, remote embeds, and
+unsafe links are removed from the rendered Markdown.
+
+The editor and its JSON/editor workers are lazy-loaded and served from the same
+origin as the app, including branch-preview subpaths. Models, editors, and theme
+listeners are disposed when a document or view changes. The plain source text
+remains available as a fallback if the editor fails to load. These views browse
+immutable snapshots; document editing/publishing is not implemented.
+
+The integration takes inspiration from
+[hediet/browser-ext-github-monaco](https://github.com/hediet/browser-ext-github-monaco)'s
+local loading, editor/model disposal, responsive layout, and theme handling. This
+app uses its own React adapter and local Markdown rendering rather than GitHub
+textarea replacement or GitHub's Markdown preview endpoint.
+
 ```sh
 pnpm run hosted:build       # existing pages + SPA under the branch preview base
 pnpm run webapp:check
@@ -79,8 +101,9 @@ workspace, browse documents, select one, and filter the list. No extension,
 GitHub credentials, network API, or browser storage is used. The story runs in
 React Strict Mode to exercise the container's mount/disposal lifecycle.
 
-Presentation fixtures open directly in reading, choose-document, loading,
-read-error, no-connections, empty-workspace, and long-content states. They use
+Presentation fixtures open directly in Monaco source, rich Markdown, JSON,
+untrusted Markdown, choose-document, loading, read-error, no-connections,
+empty-workspace, and long-content states. They use
 the same `DocumentBrowserView` and CSS as the deployed app. Fixture interactions
 are local demonstration callbacks; use Interactive for the real state machine.
 

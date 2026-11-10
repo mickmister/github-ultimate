@@ -24,5 +24,7 @@ execFileSync('pnpm', ['--dir', 'webapp', 'build'], { stdio: 'inherit', env: { ..
 // Start's server build is used only to generate the SPA shell. Publish only
 // client files: GitHub Pages does not run a server or server functions.
 await cp('webapp/dist/client', 'hosted-dist/app', { recursive: true });
+await cp('webapp/node_modules/monaco-editor/LICENSE', 'hosted-dist/app/MONACO_LICENSE.txt');
+await cp('webapp/node_modules/monaco-editor/ThirdPartyNotices.txt', 'hosted-dist/app/MONACO_THIRD_PARTY_NOTICES.txt');
 if (await payloadSize('hosted-dist') > previewLimit) throw new Error('Hosted pages exceed the branch preview payload limit.');
 console.log(`Built hosted page for ${metadata.branch} at ${metadata.sha}`);

@@ -154,7 +154,8 @@ not publish.
 - Replace the whole branch directory, removing superseded bundled assets.
 - Publish only `hosted-dist/`: no Storybook, node_modules, extension ZIPs, source
   maps, private results, credentials or browser recordings.
-- Maximum 1 MiB per build and 50 MiB for the assembled site. Oversize publication
+- Maximum 8 MiB per build (including the locally bundled Monaco editor/workers)
+  and 50 MiB for the assembled site. Oversize publication
   fails before pushing, preserving the existing site.
 - Hosted build and Pages deployment artifacts expire after one day.
 - Git history remains append-only: no force pushes or automatic rewriting.

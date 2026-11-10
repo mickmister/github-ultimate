@@ -20,11 +20,53 @@ test('interactive mock host runs the real document controller without extension 
   await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
   await page.getByRole('button', { name: 'planning/product-brief.md', exact: false }).click();
   await expect(page.getByLabel('Document content')).toContainText('deterministic Storybook fixture data');
+  await expect(page.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Markdown preview', exact: true }).click();
+  const preview = page.getByRole('region', { name: 'Markdown preview', exact: true });
+  await expect(preview.getByRole('heading', { name: 'Product brief', exact: true })).toBeVisible();
+  await expect(preview.getByRole('table')).toBeVisible();
+  await expect(preview.getByRole('checkbox').first()).toBeChecked();
+  await expect(preview.getByRole('checkbox').first()).toBeDisabled();
+  await page.getByRole('button', { name: 'Source', exact: true }).click();
+  await expect(page.locator('[data-editor-ready=true]')).toBeVisible();
   await page.getByLabel('Find a document').fill('literal-html');
   await page.getByRole('button', { name: 'examples/literal-html.txt', exact: false }).click();
   await expect(page.getByLabel('Document content')).toContainText('<script>');
+  await expect(page.locator('[data-editor-ready=true]')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Markdown preview', exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => '__unsafeDocument' in window)).toBe(false);
   expect(messages).toEqual([]); expect(errors).toEqual([]);
+});
+
+test('rich Markdown strips active HTML and remote embeds', async ({ page }) => {
+  const requests: string[] = [];
+  await page.route('https://example.invalid/**', route => { requests.push(route.request().url()); return route.abort(); });
+  await page.goto('/iframe.html?id=web-app-document-browser--untrusted-markdown&viewMode=story');
+  const preview = page.getByRole('region', { name: 'Markdown preview', exact: true });
+  await expect(preview).toContainText('Safe document text');
+  await expect(preview.locator('script, img, iframe')).toHaveCount(0);
+  await expect(preview.getByText('Unsafe link')).not.toHaveAttribute('href');
+  expect(await page.evaluate(() => '__unsafeDocument' in window)).toBe(false);
+  expect(requests).toEqual([]);
+});
+
+test('Monaco JSON source is read-only, uses a local worker and supports find', async ({ page }) => {
+  const errors: string[] = [], workers: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  page.on('worker', worker => workers.push(worker.url()));
+  await page.goto('/iframe.html?id=web-app-document-browser--json-source&viewMode=story');
+  await expect(page.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
+  const editor = page.getByRole('textbox', { name: 'Read-only document source' });
+  const lines = page.locator('.monaco-editor .view-lines');
+  const original = await lines.innerText();
+  await editor.focus();
+  await page.keyboard.insertText('MUTATED');
+  await expect.poll(() => lines.innerText()).toBe(original);
+  await page.keyboard.press('ControlOrMeta+f');
+  await expect(page.getByRole('textbox', { name: 'Find', exact: true })).toBeVisible();
+  await expect.poll(() => workers.some(url => url.includes('json.worker'))).toBe(true);
+  expect(workers.every(url => url.startsWith(new URL(page.url()).origin))).toBe(true);
+  expect(errors).toEqual([]);
 });
 
 test('presentation fixtures cover ready, loading, error, empty and long-content layouts', async ({ page }) => {

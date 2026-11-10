@@ -5,7 +5,8 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-export const previewLimit = 1024 * 1024;
+// Monaco's locally bundled editor, workers, languages, and font fit within 8 MiB.
+export const previewLimit = 8 * 1024 * 1024;
 export const siteLimit = 50 * 1024 * 1024;
 export function previewDirectory(branch) {
   return `b-${branch.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${createHash('sha256').update(branch).digest('hex').slice(0, 16)}`;
@@ -27,7 +28,7 @@ export async function payloadSize(directory) {
 // (not force-squashed); its cumulative storage is intentionally not claimed bounded.
 export async function publishHosted({ remote, source, output, branch, sha, token, deleted = false }) {
   if (!branch || branch === 'gh-pages' || !/^[a-f0-9]{40,64}$/.test(sha)) throw new Error('Invalid source branch or SHA.');
-  if (!deleted && await payloadSize(source) > previewLimit) throw new Error('Hosted preview exceeds the 1 MiB payload limit.');
+  if (!deleted && await payloadSize(source) > previewLimit) throw new Error('Hosted preview exceeds the 8 MiB payload limit.');
   if (!deleted && (!await readFile(join(source, 'index.html'), 'utf8') || JSON.parse(await readFile(join(source, 'build.json'), 'utf8')).sha !== sha)) throw new Error('Built hosted page does not match the source SHA.');
   const directory = await mkdtemp(join(tmpdir(), 'github-ultimate-pages-'));
   const env = { ...process.env, GIT_AUTHOR_NAME: 'github-actions[bot]', GIT_AUTHOR_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com', GIT_COMMITTER_NAME: 'github-actions[bot]', GIT_COMMITTER_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com', GIT_TERMINAL_PROMPT: '0' };
