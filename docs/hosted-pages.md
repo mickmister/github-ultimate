@@ -119,20 +119,21 @@ the actual sender origin from browser metadata, not a page-supplied claim.
 
 ## Build and publication
 
-`pnpm run hosted:build` writes only HTML, JS/CSS and public build metadata to
-`hosted-dist/`. Both HTML entries and lazy workspace apps use content-hashed
-relative asset URLs under branch preview paths. No runtime
-application backend is needed.
+`pnpm run pages:build` builds the existing hosted pages, the TanStack SPA at
+`app/`, and the mock-data React Storybook at `storybook/` into `hosted-dist/`.
+`pnpm run hosted:build` remains available to build the hosted pages and SPA
+alone. The Storybook uses relative assets and same-origin Monaco workers under
+its branch subdirectory. No runtime application backend is needed.
 
 After CI verification succeeds for a branch push, the `pages` job:
 
-1. Downloads the small verified hosted artifact.
+1. Downloads the verified hosted app and Storybook artifact.
 2. Replaces `gh-pages/previews/b-<readable-branch>-<hash>/` for that branch.
 3. Prunes previews whose source branches no longer exist.
 4. Updates a root preview index and `previews.json`.
 5. Pushes an ordinary commit to `gh-pages`, uploads the assembled current site
    using `actions/upload-pages-artifact`, and publishes via `actions/deploy-pages`.
-6. Adds the exact branch preview URL to the job summary.
+6. Adds the exact branch preview and Storybook URLs to the job summary.
 
 Pages must use **GitHub Actions** as its build source. Explicit publication avoids
 relying on a `GITHUB_TOKEN` commit to trigger another workflow. No extra App/key
@@ -152,9 +153,10 @@ not publish.
 
 - One current deployment directory per source branch, never per commit.
 - Replace the whole branch directory, removing superseded bundled assets.
-- Publish only `hosted-dist/`: no Storybook, node_modules, extension ZIPs, source
-  maps, private results, credentials or browser recordings.
-- Maximum 8 MiB per build (including the locally bundled Monaco editor/workers)
+- Publish only `hosted-dist/`, including the mock-data React Storybook: no
+  node_modules, extension ZIPs, source maps, build-machine diagnostics, private
+  results, credentials or browser recordings.
+- Maximum 24 MiB per build (app + Storybook and their local Monaco editor/workers)
   and 50 MiB for the assembled site. Oversize publication
   fails before pushing, preserving the existing site.
 - Hosted build and Pages deployment artifacts expire after one day.

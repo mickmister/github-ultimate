@@ -1,12 +1,12 @@
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { mkdtemp, readdir, readFile, writeFile, mkdir, rm, cp, lstat } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, writeFile, mkdir, rm, cp, lstat, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// Monaco's locally bundled editor, workers, languages, and font fit within 8 MiB.
-export const previewLimit = 8 * 1024 * 1024;
+// Bound the app + mock-data Storybook, including their local Monaco assets.
+export const previewLimit = 24 * 1024 * 1024;
 export const siteLimit = 50 * 1024 * 1024;
 export function previewDirectory(branch) {
   return `b-${branch.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${createHash('sha256').update(branch).digest('hex').slice(0, 16)}`;
@@ -28,7 +28,7 @@ export async function payloadSize(directory) {
 // (not force-squashed); its cumulative storage is intentionally not claimed bounded.
 export async function publishHosted({ remote, source, output, branch, sha, token, deleted = false }) {
   if (!branch || branch === 'gh-pages' || !/^[a-f0-9]{40,64}$/.test(sha)) throw new Error('Invalid source branch or SHA.');
-  if (!deleted && await payloadSize(source) > previewLimit) throw new Error('Hosted preview exceeds the 8 MiB payload limit.');
+  if (!deleted && await payloadSize(source) > previewLimit) throw new Error('Hosted preview exceeds the 24 MiB payload limit.');
   if (!deleted && (!await readFile(join(source, 'index.html'), 'utf8') || JSON.parse(await readFile(join(source, 'build.json'), 'utf8')).sha !== sha)) throw new Error('Built hosted page does not match the source SHA.');
   const directory = await mkdtemp(join(tmpdir(), 'github-ultimate-pages-'));
   const env = { ...process.env, GIT_AUTHOR_NAME: 'github-actions[bot]', GIT_AUTHOR_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com', GIT_COMMITTER_NAME: 'github-actions[bot]', GIT_COMMITTER_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com', GIT_TERMINAL_PROMPT: '0' };
@@ -65,7 +65,14 @@ export async function publishHosted({ remote, source, output, branch, sha, token
       manifest[branch] = { directory: previewDirectory(branch), sha };
     }
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
-    const links = Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)).map(([name, entry]) => `<li><a href="./previews/${entry.directory}/">${escape(name)}</a> <code>${entry.sha.slice(0, 12)}</code></li>`).join('\n');
+    const links = (await Promise.all(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)).map(async ([name, entry]) => {
+      let storybook = '';
+      try {
+        await access(join(directory, 'previews', entry.directory, 'storybook', 'index.html'));
+        storybook = ` · <a href="./previews/${entry.directory}/storybook/">Storybook</a>`;
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      return `<li><a href="./previews/${entry.directory}/">${escape(name)}</a> <code>${entry.sha.slice(0, 12)}</code>${storybook}</li>`;
+    }))).join('\n');
     await writeFile(join(directory, 'index.html'), `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>GitHub Ultimate branch previews</title><body><h1>GitHub Ultimate branch previews</h1><p>One current hosted bridge demo per branch. All preview paths share one origin.</p><ul>${links}</ul></body></html>\n`);
     await writeFile(join(directory, '.nojekyll'), '');
     if (await payloadSize(directory) > siteLimit) throw new Error('Pages site exceeds 50 MiB. Publication stopped without changing gh-pages.');

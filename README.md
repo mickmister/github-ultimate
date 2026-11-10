@@ -75,6 +75,8 @@ Dashboard links accept private `https://node.tailnet.ts.net/` hosts without quer
 
 `pnpm run hosted:build` builds the existing hosted pages in `hosted/` and the
 new [TanStack Start SPA](docs/webapp.md) at `app/` inside each branch preview.
+`pnpm run pages:build` also includes the mock-data web-app Storybook at
+`storybook/`; CI publishes both through the same GitHub Pages branch preview.
 CI maintains one current preview per branch in `gh-pages` and publishes the
 assembled site through GitHub Pages. Origin-to-connection grants are configured
 in the extension; hosted pages never receive credentials. See
