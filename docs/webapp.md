@@ -93,6 +93,7 @@ Compare candidates using the same model fixtures and interaction scenarios.
 pnpm run webapp:storybook         # http://127.0.0.1:6010/
 pnpm run webapp:storybook:build   # webapp/storybook-static/
 pnpm run test:webapp-storybook
+pnpm run pages:build              # hosted-dist/ with app/ and storybook/
 ```
 
 Open **Web app → Document browser → Interactive** to exercise the production
@@ -112,6 +113,14 @@ TanStack Start Vite plugin. The existing HTML Storybook remains available via
 `pnpm run storybook`. Set `PORT` for a managed preview slot; `STORYBOOK_PREVIEW=1`
 disables HMR for proxies without WebSocket support. The server binds to localhost
 and allows the managed `*.jamtools.dev` preview hostnames.
+
+The React Storybook is also published at `storybook/` inside each GitHub Pages
+branch preview, alongside `app/`. The Pages index and deployment summary link
+to it. For example, append
+`storybook/?path=/story/web-app-document-browser--reading-document` to a branch
+preview URL. It uses static relative assets, including Monaco workers, so no
+running development server or extension is needed. `storybook/build.json`
+identifies the source branch and commit used for publication.
 
 The browser integration test exercises the built SPA as static files under its
 branch base path through a real extension with fixture GitHub responses. It

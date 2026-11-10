@@ -10,8 +10,9 @@ const config: StorybookConfig = {
   },
   stories: ['../stories/**/*.stories.tsx'],
   core: { disableTelemetry: true, allowedHosts: ['.jamtools.dev'] },
-  async viteFinal(config) {
+  async viteFinal(config, { configType }) {
     return mergeConfig(config, {
+      ...(configType === 'PRODUCTION' ? { base: './' } : {}),
       server: {
         allowedHosts: ['.jamtools.dev', 'localhost', '127.0.0.1'],
         fs: { allow: [fileURLToPath(new URL('../..', import.meta.url))] },

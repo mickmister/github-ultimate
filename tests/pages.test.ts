@@ -5,6 +5,8 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 // @ts-expect-error The publisher is deliberately dependency-free JavaScript for CI.
 import { previewDirectory, publishHosted, previewLimit, payloadSize } from '../scripts/publish-hosted.mjs';
+// @ts-expect-error Staging is dependency-free JavaScript for CI.
+import { stageHostedStorybook } from '../scripts/stage-hosted-storybook.mjs';
 
 test('publisher replaces one preview per branch, preserves peers, prunes deletions and skips stale source builds', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pages-proof-'));
@@ -18,10 +20,12 @@ test('publisher replaces one preview per branch, preserves peers, prunes deletio
     git(['remote', 'add', 'origin', remote]); git(['push', 'origin', 'main']); git(['push', 'origin', 'HEAD:refs/heads/feature/a']);
     const sha = git(['rev-parse', 'HEAD']);
     await writeFile(join(source, 'index.html'), '<h1>Hosted</h1>'); await writeFile(join(source, 'build.json'), JSON.stringify({ sha }));
+    await mkdir(join(source, 'storybook')); await writeFile(join(source, 'storybook/index.html'), '<h1>Storybook</h1>');
     await writeFile(join(source, 'obsolete.js'), 'old bundle');
     const publish = (branch: string, revision = sha) => publishHosted({ remote, source, output, branch, sha: revision });
     await publish('main'); await publish('feature/a');
     expect(await readdir(join(output, 'previews'))).toHaveLength(2);
+    expect(await readFile(join(output, 'index.html'), 'utf8')).toContain(`./previews/${previewDirectory('feature/a')}/storybook/`);
     await rm(join(source, 'obsolete.js')); await writeFile(join(source, 'new.js'), 'new bundle');
     await publish('main');
     expect(await readdir(join(output, 'previews', previewDirectory('main')))).not.toContain('obsolete.js');
@@ -47,7 +51,7 @@ test('preview paths avoid branch slash/slug collisions and block oversized or li
   const root = await mkdtemp(join(tmpdir(), 'pages-size-'));
   try {
     await writeFile(join(root, 'huge.js'), 'x'.repeat(previewLimit + 1));
-    await expect(publishHosted({ remote: 'unused', source: root, output: join(root, 'output'), branch: 'main', sha: 'a'.repeat(40) })).rejects.toThrow('8 MiB');
+    await expect(publishHosted({ remote: 'unused', source: root, output: join(root, 'output'), branch: 'main', sha: 'a'.repeat(40) })).rejects.toThrow('24 MiB');
     await rm(join(root, 'huge.js')); await symlink('/etc/passwd', join(root, 'link'));
     await expect(payloadSize(root)).rejects.toThrow('regular files');
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -73,3 +77,26 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   // Keep the original app's size boundary separate from the new React bundle.
   expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app')).toBeLessThan(64 * 1024);
 }, 120000);
+
+test('Storybook staging replaces stale assets, preserves app files and binds public build metadata', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'storybook-stage-'));
+  const source = join(root, 'storybook-build'), output = join(root, 'hosted');
+  try {
+    await mkdir(source); await mkdir(output); await mkdir(join(output, 'app'));
+    for (const file of ['index.html', 'iframe.html', 'index.json']) await writeFile(join(source, file), file);
+    await writeFile(join(source, 'asset.js'), 'current');
+    await writeFile(join(source, 'asset.js.map'), 'not published');
+    await writeFile(join(source, 'project.json'), 'build-machine diagnostics');
+    const metadata = { branch: 'feature/storybook', sha: 'a'.repeat(40) };
+    await writeFile(join(output, 'build.json'), JSON.stringify(metadata));
+    await writeFile(join(output, 'app/index.html'), 'existing app');
+    for (const name of ['MONACO_LICENSE.txt', 'MONACO_THIRD_PARTY_NOTICES.txt']) await writeFile(join(output, 'app', name), name);
+    await mkdir(join(output, 'storybook')); await writeFile(join(output, 'storybook/obsolete.js'), 'old');
+    await stageHostedStorybook({ source, output });
+    expect(await readFile(join(output, 'app/index.html'), 'utf8')).toBe('existing app');
+    expect(JSON.parse(await readFile(join(output, 'storybook/build.json'), 'utf8'))).toEqual(metadata);
+    const files = await readdir(join(output, 'storybook'));
+    expect(files).toContain('asset.js'); expect(files).toContain('MONACO_LICENSE.txt');
+    expect(files).not.toContain('obsolete.js'); expect(files).not.toContain('asset.js.map'); expect(files).not.toContain('project.json');
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
