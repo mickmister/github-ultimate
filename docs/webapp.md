@@ -70,13 +70,24 @@ selection and appearance stay in the presentation-independent model/actions.
 
 ### Read-only content
 
-Opening a document now mounts a read-only Monaco source editor instead of the
-plain-text pane. It supports syntax highlighting, line numbers, folding, word
-wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Markdown files also offer a
-**Markdown preview** button for headings, lists, tables, task lists, and fenced
-code blocks. **Source** returns to the exact verified document text. Switching
+Selecting a document opens a full-viewport reading layout, hiding the connection
+controls and tree. Markdown documents open in **Markdown preview** by default,
+with headings, lists, tables, task lists, and fenced code blocks. Other file
+types open in the read-only Monaco source editor. **Source** switches Markdown
+to its exact verified text, with syntax highlighting, line numbers, folding,
+word wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Switching
 views does not issue another document read. HTML scripts, remote embeds, and
 unsafe links are removed from the rendered Markdown.
+
+**Back to documents** returns to the tree without discarding the selected file,
+search, expanded folders or loaded content. **Open fullscreen** reopens that
+loaded document without another read. Each new file selection defaults back to
+Markdown preview (where applicable) and fullscreen. Escape returns to browsing
+in the app; Monaco retains Escape for editor widgets. Keyboard focus moves to
+the reader's back button on entry and the selected tree item on return. Loading
+and read errors retain the back control; failed reads also offer **Retry document**.
+This is an application layout, so it works inside the Storybook iframe and on
+phones without requesting browser fullscreen permissions.
 
 The editor and its JSON/editor workers are lazy-loaded and served from the same
 origin as the app, including branch-preview subpaths. Models, editors, and theme

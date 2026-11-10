@@ -15,6 +15,7 @@ export interface DocumentBrowserModel {
   readonly treeAppearance: TreeAppearance;
   readonly content: string | null;
   readonly documentMode: 'source' | 'markdown';
+  readonly documentFullscreen: boolean;
   readonly busy: boolean;
   readonly status: string;
   readonly error: string | null;
@@ -33,6 +34,7 @@ export interface DocumentBrowserActions {
   setTreeAppearance(appearance: TreeAppearance): void;
   selectDocument(id: string): void;
   setDocumentMode(mode: 'source' | 'markdown'): void;
+  setDocumentFullscreen(fullscreen: boolean): void;
 }
 export interface DocumentBrowserProps {
   readonly model: DocumentBrowserModel;

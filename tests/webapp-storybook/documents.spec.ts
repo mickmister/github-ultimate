@@ -20,16 +20,22 @@ test('interactive mock host runs the real document controller without extension 
   await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
   await page.getByRole('treeitem', { name: 'planning', exact: true }).click();
   await page.getByRole('treeitem', { name: 'planning/product-brief.md', exact: true }).click();
-  await expect(page.getByLabel('Document content')).toContainText('deterministic Storybook fixture data');
-  await expect(page.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
-  await page.getByRole('button', { name: 'Markdown preview', exact: true }).click();
   const preview = page.getByRole('region', { name: 'Markdown preview', exact: true });
+  await expect(preview).toContainText('deterministic Storybook fixture data');
+  await expect(page.locator('.document-fullscreen')).toBeVisible();
+  const bounds = await page.getByRole('main').boundingBox();
+  expect(bounds?.x).toBe(0);
+  expect(bounds?.y).toBe(0);
+  expect(bounds?.width).toBe(page.viewportSize()!.width);
+  expect(bounds!.height).toBeGreaterThanOrEqual(page.viewportSize()!.height);
+  await expect(page.getByRole('tree', { name: 'Documents' })).toHaveCount(0);
   await expect(preview.getByRole('heading', { name: 'Product brief', exact: true })).toBeVisible();
   await expect(preview.getByRole('table')).toBeVisible();
   await expect(preview.getByRole('checkbox').first()).toBeChecked();
   await expect(preview.getByRole('checkbox').first()).toBeDisabled();
   await page.getByRole('button', { name: 'Source', exact: true }).click();
-  await expect(page.locator('[data-editor-ready=true]')).toBeVisible();
+  await expect(page.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
+  await page.getByRole('button', { name: 'Back to documents' }).click();
   await page.getByLabel('Find a document').fill('literal-html');
   await page.getByRole('treeitem', { name: 'examples/literal-html.txt', exact: true }).click();
   await expect(page.getByLabel('Document content')).toContainText('<script>');
@@ -67,8 +73,11 @@ test('real controller supports keyboard tree browsing, ancestor-preserving searc
   await expect(nested).toBeFocused();
   await expect(page.getByRole('heading', { name: 'Select a document', exact: true })).toBeVisible();
   await page.keyboard.press('Enter');
-  await expect(page.getByLabel('Document content')).toContainText('Nested research notes');
+  await expect(page.getByRole('region', { name: 'Markdown preview', exact: true })).toContainText('Nested research notes');
+  await expect(page.getByRole('button', { name: 'Back to documents' })).toBeFocused();
+  await page.keyboard.press('Escape');
   await expect(nested).toHaveAttribute('aria-selected', 'true');
+  await expect(nested).toBeFocused();
   await page.getByLabel('Find a document').fill('notes.md');
   await expect(page.getByRole('treeitem', { name: 'planning/notes.md', exact: true })).toBeVisible();
   await expect(nested).toBeVisible();
@@ -120,8 +129,11 @@ test('Monaco JSON source is read-only, uses a local worker and supports find', a
 test('presentation fixtures cover ready, loading, error, empty and long-content layouts', async ({ page }) => {
   for (const story of ['reading-document', 'loading', 'read-error', 'empty-workspace', 'no-connections', 'long-content']) {
     await page.goto(`/iframe.html?id=web-app-document-browser--${story}&viewMode=story`);
-    await expect(page.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
-    if (story === 'reading-document') await expect(page.getByLabel('Document content')).toContainText('Product brief');
+    await expect(page.getByRole('main')).toBeVisible();
+    if (story === 'reading-document') {
+      await expect(page.getByRole('region', { name: 'Markdown preview', exact: true })).toContainText('Product brief');
+      await expect(page.getByRole('button', { name: 'Back to documents' })).toBeVisible();
+    }
     if (story === 'loading') await expect(page.getByRole('status').first()).toContainText('Reading and verifying');
     if (story === 'read-error') await expect(page.getByRole('alert')).toContainText('approved access route');
     if (story === 'empty-workspace') await expect(page.getByText('No documents match this search.')).toBeVisible();
