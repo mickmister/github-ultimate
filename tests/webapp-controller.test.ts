@@ -17,17 +17,35 @@ function setup() {
   const controller = createDocumentBrowserController(host);
   return { module, ...controller };
 }
-async function ready(controller: ReturnType<typeof setup>) {
+async function ready(controller: ReturnType<typeof setup>, expected = snapshot) {
   controller.actions.connect();
   await vi.waitFor(() => expect(controller.getSnapshot().canDiscover).toBe(true));
   controller.actions.discoverWorkspaces();
   await vi.waitFor(() => expect(controller.getSnapshot().workspaces).toHaveLength(2));
   controller.actions.selectWorkspace('workspace-a');
   controller.actions.browseDocuments();
-  await vi.waitFor(() => expect(controller.getSnapshot().snapshot).toEqual(snapshot));
+  await vi.waitFor(() => expect(controller.getSnapshot().snapshot).toEqual(expected));
 }
 
 describe('document browser behavior independent of presentation', () => {
+  it('switches Markdown/source without another read and resets the mode for non-Markdown or a new scope', async () => {
+    const controller = setup();
+    const value = { ...snapshot, documents: [...snapshot.documents, { id: 'config', path: 'config.json', size: 2 }] };
+    controller.module.open.mockResolvedValueOnce(value);
+    await ready(controller, value);
+    controller.actions.selectDocument('note-a');
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    controller.actions.setDocumentMode('markdown');
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', content: 'Hello' });
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+    controller.actions.selectDocument('config');
+    await vi.waitFor(() => expect(controller.getSnapshot().busy).toBe(false));
+    controller.actions.setDocumentMode('markdown');
+    expect(controller.getSnapshot().documentMode).toBe('source');
+    controller.actions.setRepository('other/storage');
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'source', snapshot: null, content: null });
+  });
+
   it('guards commands, binds the selected installation, and rejects missing-document workspaces', async () => {
     const controller = setup();
     controller.actions.discoverWorkspaces(); controller.actions.browseDocuments();

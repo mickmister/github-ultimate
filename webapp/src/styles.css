@@ -2,18 +2,18 @@
 @media (prefers-color-scheme: dark) { :root { --bg: #101724; --panel: #182233; --fg: #e4ebf6; --muted: #aabbd1; --line: #35445c; --accent: #bdadff; --selected: #302a4e; --error: #ffabb9; } }
 * { box-sizing: border-box; }
 body { margin: 0; }
-button, input, select { font: inherit; }
-button, input, select { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); padding: 8px 12px; }
-button { cursor: pointer; font-weight: 600; }
-button:disabled { opacity: .55; cursor: default; }
-button:not(:disabled):hover, a:hover { color: var(--accent); }
+:is(button, input, select):not(.monaco-editor *) { font: inherit; }
+:is(button, input, select):not(.monaco-editor *) { min-height: 44px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); color: var(--fg); padding: 8px 12px; }
+button:not(.monaco-editor *) { cursor: pointer; font-weight: 600; }
+button:disabled:not(.monaco-editor *) { opacity: .55; cursor: default; }
+button:not(:disabled):not(.monaco-editor *):hover, a:hover { color: var(--accent); }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 a { color: var(--accent); text-underline-offset: 3px; }
 h1, h2, p { margin: 0 0 12px; }
 h1 { font-size: clamp(1.8rem, 4vw, 2.5rem); line-height: 1.2; }
 h2 { font-size: 1.15rem; }
-label { display: grid; gap: 6px; font-size: .875rem; font-weight: 600; min-width: 0; }
-input, select { width: 100%; min-width: 0; }
+label:not(.monaco-editor *) { display: grid; gap: 6px; font-size: .875rem; font-weight: 600; min-width: 0; }
+:is(input, select):not(.monaco-editor *) { width: 100%; min-width: 0; }
 .app-shell { max-width: 1500px; margin: auto; padding: clamp(16px, 3vw, 40px); }
 .page-header { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 20px; margin-bottom: 24px; }
 .page-header nav { display: flex; flex-wrap: wrap; align-content: start; gap: 16px; }
@@ -36,6 +36,19 @@ input, select { width: 100%; min-width: 0; }
 .document-list small { font-weight: 400; }
 .document-preview { min-width: 0; padding: 24px; }
 .document-preview header { border-bottom: 1px solid var(--line); margin-bottom: 20px; overflow-wrap: anywhere; }
-.document-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875rem; min-height: 280px; }
+.source-fallback { white-space: pre-wrap; overflow-wrap: anywhere; font-size: .875rem; }
+.document-toolbar { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 16px; }
+.document-toolbar [role=group] { display: flex; gap: 6px; }
+.document-toolbar button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--selected); }
+.monaco-host { height: clamp(320px, 65vh, 900px); width: 100%; min-width: 0; border: 1px solid var(--line); }
+.document-placeholder { min-height: 280px; color: var(--muted); }
+.markdown-preview { min-height: 320px; overflow-wrap: anywhere; line-height: 1.75; }
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 24px 0 12px; }
+.markdown-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
+.markdown-preview code { font: .875rem/1.6 ui-monospace, monospace; }
+.markdown-preview blockquote { border-left: 3px solid var(--accent); margin: 16px 0; padding: 4px 16px; color: var(--muted); }
+.markdown-preview table { border-collapse: collapse; display: block; max-width: 100%; overflow: auto; margin: 16px 0; }
+.markdown-preview th, .markdown-preview td { padding: 8px 12px; border: 1px solid var(--line); }
+.markdown-preview input[type=checkbox] { width: auto; min-height: 0; margin-right: 8px; }
 code { font-size: .8em; }
 @media (max-width: 720px) { .browser { grid-template-columns: minmax(0, 1fr); } .document-sidebar { border-right: 0; border-bottom: 1px solid var(--line); } .document-list { max-height: 260px; overflow: auto; } .connection-panel, .document-sidebar, .document-preview, .welcome { padding: 16px; } }

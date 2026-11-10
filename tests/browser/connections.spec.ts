@@ -71,8 +71,8 @@ async function serveHosted() {
     const app = pathname.indexOf('/app/');
     if (app >= 0) {
       const name = pathname.slice(app + '/app/'.length) || 'index.html';
-      if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_-]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
-      return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
+      if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_.-]+\.(js|css|ttf)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
+      return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.ttf') ? 'font/ttf' : 'text/html' });
     }
     const name = pathname.split('/').pop() || 'index.html';
     if (!['index.html', 'settings.html', 'build.json'].includes(name) && !/^(main|settings|shared|beads|documents)-[A-Z0-9]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
@@ -231,6 +231,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   const appPath = shell.match(/href="([^"]+)assets\/[^" ]+\.css"/)![1];
   const modern = await context.newPage();
   const pageErrors: string[] = []; modern.on('pageerror', error => pageErrors.push(error.message));
+  const workerURLs: string[] = []; modern.on('worker', worker => workerURLs.push(worker.url()));
   await modern.goto('https://mickmister.github.io' + appPath);
   await expect(modern.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
   await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeEnabled();
@@ -240,8 +241,19 @@ test('hosted branch page reads through an approved connection and revocation tak
   await modern.getByRole('button', { name: 'Browse documents', exact: true }).click();
   await expect(modern.getByRole('status')).toContainText('2 document(s)');
   await modern.getByRole('button', { name: 'notes/private.md', exact: false }).click();
+  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
   await expect(modern.getByLabel('Document content')).toContainText('Private workspace note');
   expect(await modern.evaluate(() => '__unsafeDocument' in window)).toBe(false);
+  await modern.getByRole('button', { name: 'Markdown preview', exact: true }).click();
+  await expect(modern.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
+  await expect(modern.getByLabel('Markdown preview', { exact: true }).locator('script')).toHaveCount(0);
+  await modern.getByRole('button', { name: 'Source', exact: true }).click();
+  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
+  await modern.getByRole('button', { name: 'workspace/manifest.json', exact: false }).click();
+  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
+  await expect.poll(() => workerURLs.some(url => url.includes('json.worker'))).toBe(true);
+  expect(workerURLs.every(url => url.startsWith('https://mickmister.github.io/'))).toBe(true);
+  await expect(modern.getByRole('button', { name: 'Markdown preview', exact: true })).toHaveCount(0);
   await modern.getByLabel('Find a document').fill('no-match');
   await expect(modern.getByText('No documents match this search.')).toBeVisible();
   await modern.setViewportSize({ width: 375, height: 812 });

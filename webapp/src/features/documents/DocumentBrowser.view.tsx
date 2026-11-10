@@ -1,4 +1,7 @@
 import type { DocumentBrowserProps } from './contracts';
+import { isMarkdown } from './document-format';
+import { MonacoDocument } from './MonacoDocument';
+import { MarkdownDocument } from './MarkdownDocument';
 
 export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
   const entries = model.snapshot?.documents.filter(document => document.path.toLocaleLowerCase().includes(model.query.toLocaleLowerCase())) ?? [];
@@ -25,7 +28,14 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
         {!entries.length && <p className="muted">No documents match this search.</p>}
       </aside>
       <article className="document-preview"><header><h2>{selected?.path ?? 'Select a document'}</h2>{model.snapshot.purpose && <p>{model.snapshot.purpose}</p>}<p className="muted">Verified snapshot <code>{model.snapshot.commit}</code></p></header>
-        <pre tabIndex={0} aria-label="Document content">{model.content ?? (model.documentId && model.busy ? 'Reading…' : 'Choose a document to read its verified contents.')}</pre>
+        {selected && model.content !== null ? <>
+          <div className="document-toolbar"><span className="muted">Read-only snapshot</span>
+            <div role="group" aria-label="Document view"><button aria-pressed={model.documentMode === 'source'} onClick={() => actions.setDocumentMode('source')}>Source</button>
+              {isMarkdown(selected.path) && <button aria-pressed={model.documentMode === 'markdown'} onClick={() => actions.setDocumentMode('markdown')}>Markdown preview</button>}
+            </div>
+          </div>
+          {model.documentMode === 'markdown' && isMarkdown(selected.path) ? <MarkdownDocument content={model.content} /> : <MonacoDocument key={model.snapshot.id + ':' + selected.id} path={selected.path} content={model.content} />}
+        </> : <p className="document-placeholder" aria-label="Document content">{model.documentId && model.busy ? 'Reading…' : 'Choose a document to read its verified contents.'}</p>}
       </article>
     </section> : <section className="welcome"><h2>Your documents, pinned to a snapshot</h2><p>Choose an approved connection and storage repository, discover a workspace, then browse its documents.</p><p className="muted">Sign-in and origin approval remain in extension connection settings. Document contents stay in this tab.</p></section>}
   </main>;

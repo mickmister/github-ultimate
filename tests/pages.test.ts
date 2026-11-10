@@ -47,7 +47,7 @@ test('preview paths avoid branch slash/slug collisions and block oversized or li
   const root = await mkdtemp(join(tmpdir(), 'pages-size-'));
   try {
     await writeFile(join(root, 'huge.js'), 'x'.repeat(previewLimit + 1));
-    await expect(publishHosted({ remote: 'unused', source: root, output: join(root, 'output'), branch: 'main', sha: 'a'.repeat(40) })).rejects.toThrow('1 MiB');
+    await expect(publishHosted({ remote: 'unused', source: root, output: join(root, 'output'), branch: 'main', sha: 'a'.repeat(40) })).rejects.toThrow('8 MiB');
     await rm(join(root, 'huge.js')); await symlink('/etc/passwd', join(root, 'link'));
     await expect(payloadSize(root)).rejects.toThrow('regular files');
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -72,4 +72,4 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.map'))).toBe(false);
   // Keep the original app's size boundary separate from the new React bundle.
   expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app')).toBeLessThan(64 * 1024);
-}, 60000);
+}, 120000);

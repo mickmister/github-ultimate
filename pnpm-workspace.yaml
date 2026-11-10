@@ -1,6 +1,9 @@
 packages:
   - webapp
 
+overrides:
+  'monaco-editor>dompurify': '3.4.17'
+
 allowBuilds:
   '@ast-grep/cli': true
   '@mickmister/openlint': true

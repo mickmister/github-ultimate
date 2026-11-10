@@ -23,7 +23,8 @@ function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }
     selectWorkspace(workspaceId) { patch({ workspaceId }); },
     browseDocuments() { patch({ snapshot: mockSnapshot, content: null, documentId: '', busy: false, error: null }); },
     setQuery(query) { patch({ query }); },
-    selectDocument(documentId) { patch({ documentId, content: mockDocumentContents[documentId] ?? 'Long-content fixture document.', busy: false, error: null }); },
+    selectDocument(documentId) { patch({ documentId, content: mockDocumentContents[documentId] ?? 'Long-content fixture document.', documentMode: 'source', busy: false, error: null }); },
+    setDocumentMode(documentMode) { patch({ documentMode }); },
   };
   return <DocumentBrowserView model={model} actions={actions} />;
 }
@@ -38,6 +39,9 @@ type Story = StoryObj;
 
 export const Interactive: Story = { render: () => <InteractiveBrowser /> };
 export const ReadingDocument: Story = { render: () => <FixtureBrowser initialModel={readyModel} /> };
+export const MarkdownPreview: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown' }} /> };
+export const UntrustedMarkdown: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'unsafeMarkdown', content: mockDocumentContents.unsafeMarkdown, documentMode: 'markdown' }} /> };
+export const JsonSource: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'config', content: mockDocumentContents.config }} /> };
 export const ChooseDocument: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: '', content: null }} /> };
 export const Loading: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, busy: true, canDiscover: false, canBrowse: false, status: 'Reading and verifying document…' }} /> };
 export const ReadError: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, error: 'The approved access route is no longer available. Reconnect your extension and try again.', status: 'Document request failed.' }} /> };
