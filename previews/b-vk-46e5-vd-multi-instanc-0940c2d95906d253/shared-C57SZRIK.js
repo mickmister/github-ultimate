@@ -1,0 +1,1 @@
+function o(t,n,e){let r=document.createElement(t);return n!==void 0&&(r.textContent=n),e&&(r.className=e),r}function a(t,n){let e=o("a",t,"button");return e.href=n,e.target="_blank",e.rel="noopener noreferrer",e}export{o as a,a as b};
