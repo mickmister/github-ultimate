@@ -4,6 +4,7 @@ import { DocumentBrowser } from '../src/features/documents/DocumentBrowser';
 import { DocumentBrowserView } from '../src/features/documents/DocumentBrowser.view';
 import type { DocumentBrowserActions, DocumentBrowserModel } from '../src/features/documents/contracts';
 import { createMockAppHooks, mockDocumentContents, mockSnapshot, readyModel } from './documents.fixtures';
+import { ancestorFolders } from '../src/features/documents/document-tree';
 
 function InteractiveBrowser() {
   const appHooks = useMemo(createMockAppHooks, []);
@@ -13,7 +14,7 @@ function InteractiveBrowser() {
 // Presentation fixtures keep inputs and document selection interactive without
 // reimplementing the controller. Use Interactive for the complete user journey.
 function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }) {
-  const [model, setModel] = useState(initialModel);
+  const [model, setModel] = useState<DocumentBrowserModel>(() => ({ ...initialModel, expandedFolders: ancestorFolders(initialModel.snapshot?.documents.find(document => document.id === initialModel.documentId)?.path ?? '') }));
   const patch = (value: Partial<DocumentBrowserModel>) => setModel(current => ({ ...current, ...value }));
   const actions: DocumentBrowserActions = {
     connect() { patch({ ...readyModel, snapshot: null, content: null, documentId: '' }); },
@@ -23,7 +24,9 @@ function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }
     selectWorkspace(workspaceId) { patch({ workspaceId }); },
     browseDocuments() { patch({ snapshot: mockSnapshot, content: null, documentId: '', busy: false, error: null }); },
     setQuery(query) { patch({ query }); },
-    selectDocument(documentId) { patch({ documentId, content: mockDocumentContents[documentId] ?? 'Long-content fixture document.', documentMode: 'source', busy: false, error: null }); },
+    setExpandedFolders(expandedFolders) { if (!model.query.trim()) patch({ expandedFolders }); },
+    setTreeAppearance(treeAppearance) { patch({ treeAppearance }); },
+    selectDocument(documentId) { patch({ documentId, expandedFolders: [...new Set([...model.expandedFolders, ...ancestorFolders(model.snapshot?.documents.find(document => document.id === documentId)?.path ?? '')])], content: mockDocumentContents[documentId] ?? 'Long-content fixture document.', documentMode: 'source', busy: false, error: null }); },
     setDocumentMode(documentMode) { patch({ documentMode }); },
   };
   return <DocumentBrowserView model={model} actions={actions} />;
@@ -42,6 +45,9 @@ export const ReadingDocument: Story = { render: () => <FixtureBrowser initialMod
 export const MarkdownPreview: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown' }} /> };
 export const UntrustedMarkdown: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'unsafeMarkdown', content: mockDocumentContents.unsafeMarkdown, documentMode: 'markdown' }} /> };
 export const JsonSource: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'config', content: mockDocumentContents.config }} /> };
+export const NestedFolders: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'interview', content: mockDocumentContents.interview }} /> };
+export const FilteredDocuments: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, query: 'notes.md' }} /> };
+export const CompactTealTree: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, treeAppearance: { density: 'compact', accent: 'teal' } }} /> };
 export const ChooseDocument: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: '', content: null }} /> };
 export const Loading: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, busy: true, canDiscover: false, canBrowse: false, status: 'Reading and verifying document…' }} /> };
 export const ReadError: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, error: 'The approved access route is no longer available. Reconnect your extension and try again.', status: 'Document request failed.' }} /> };

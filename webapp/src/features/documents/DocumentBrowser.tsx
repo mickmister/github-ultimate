@@ -5,6 +5,7 @@ import { createDocumentBrowserController } from './controller';
 import type { DocumentBrowserPresentation } from './contracts';
 import { DocumentBrowserView } from './DocumentBrowser.view';
 import { AppPending } from '../../views/AppPending.view';
+import { readTreeAppearance, saveTreeAppearance } from './tree-appearance';
 
 export function DocumentBrowser({
   appHooks,
@@ -12,10 +13,15 @@ export function DocumentBrowser({
 }: { appHooks?: AppHooksV1; presentation?: DocumentBrowserPresentation }) {
   const [controller, setController] = useState<ReturnType<typeof createDocumentBrowserController> | null>(null);
   useEffect(() => {
-    const mounted = createDocumentBrowserController(appHooks ?? createHostedAppHooks());
+    const mounted = createDocumentBrowserController(appHooks ?? createHostedAppHooks(), readTreeAppearance());
+    let appearance = mounted.getSnapshot().treeAppearance;
+    const unsubscribe = mounted.subscribe(() => {
+      const next = mounted.getSnapshot().treeAppearance;
+      if (next !== appearance) { appearance = next; saveTreeAppearance(next); }
+    });
     setController(mounted);
     mounted.actions.connect();
-    return () => mounted.dispose();
+    return () => { unsubscribe(); mounted.dispose(); };
   }, [appHooks]);
   return controller ? <SubscribedBrowser controller={controller} presentation={Presentation} /> : <AppPending />;
 }

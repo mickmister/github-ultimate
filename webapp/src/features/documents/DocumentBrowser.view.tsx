@@ -2,9 +2,9 @@ import type { DocumentBrowserProps } from './contracts';
 import { isMarkdown } from './document-format';
 import { MonacoDocument } from './MonacoDocument';
 import { MarkdownDocument } from './MarkdownDocument';
+import { DocumentTree } from './DocumentTree';
 
 export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
-  const entries = model.snapshot?.documents.filter(document => document.path.toLocaleLowerCase().includes(model.query.toLocaleLowerCase())) ?? [];
   const selected = model.snapshot?.documents.find(document => document.id === model.documentId);
   return <main className="app-shell">
     <header className="page-header">
@@ -24,8 +24,11 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
     <div className="request-status"><p role="status" aria-live="polite">{model.status}</p>{model.error && <p role="alert" className="error">{model.error}</p>}</div>
     {model.snapshot ? <section className="browser" aria-label="Document browser" aria-busy={model.busy}>
       <aside className="document-sidebar"><h2>Documents <span className="count">{model.snapshot.documents.length}</span></h2><label>Find a document<input type="search" value={model.query} onChange={event => actions.setQuery(event.target.value)} /></label>
-        <ul className="document-list">{entries.map(document => <li key={document.id}><button aria-current={model.documentId === document.id ? 'true' : undefined} onClick={() => actions.selectDocument(document.id)}><span>{document.path}</span><small>{document.size === null ? 'Size unknown' : `${document.size.toLocaleString()} bytes`}</small></button></li>)}</ul>
-        {!entries.length && <p className="muted">No documents match this search.</p>}
+        <details className="tree-appearance"><summary>Tree appearance</summary>
+          <label>Tree density<select value={model.treeAppearance.density} onChange={event => actions.setTreeAppearance({ ...model.treeAppearance, density: event.target.value === 'compact' ? 'compact' : 'comfortable' })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
+          <label>Tree accent<select value={model.treeAppearance.accent} onChange={event => actions.setTreeAppearance({ ...model.treeAppearance, accent: event.target.value === 'blue' ? 'blue' : event.target.value === 'teal' ? 'teal' : 'default' })}><option value="default">App default</option><option value="blue">Blue</option><option value="teal">Teal</option></select></label>
+        </details>
+        <DocumentTree model={model} actions={actions} />
       </aside>
       <article className="document-preview"><header><h2>{selected?.path ?? 'Select a document'}</h2>{model.snapshot.purpose && <p>{model.snapshot.purpose}</p>}<p className="muted">Verified snapshot <code>{model.snapshot.commit}</code></p></header>
         {selected && model.content !== null ? <>

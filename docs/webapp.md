@@ -32,6 +32,44 @@ inspector. It does not persist document contents or navigation selections.
 
 ## Document views
 
+The sidebar is an Ark UI tree, built from the verified snapshot's document paths.
+Folders sort before files, with natural filename ordering. File labels show the
+basename; accessible names and hover titles retain the full path. Folder
+expansion and keyboard focus do not fetch document contents. Enter/Space or a
+file click opens the document; selecting a document reveals its parent folders.
+Arrow keys, Home/End and typeahead follow Ark's tree keyboard behavior.
+Search retains and expands matching ancestor folders. Clearing search restores
+the previous folder expansion. Expansion resets when the workspace changes.
+
+### Tree appearance
+
+Open **Tree appearance** to choose comfortable/compact rows and an app-default,
+blue or teal accent. These preferences are stored in browser local storage;
+document contents and navigation are not. If storage is unavailable, the controls
+still work for the current tab. Coarse-pointer devices retain comfortable touch
+targets even when compact density is chosen.
+
+Embedders and user stylesheets can override these public CSS variables on an
+ancestor or individual `.document-tree`; no Ark internals need to be targeted:
+
+```css
+.document-sidebar {
+  --document-tree-accent: #7252bf;
+  --document-tree-selected-bg: #eee8fb;
+  --document-tree-indent: 20px;
+  --document-tree-row-height: 48px;
+  --document-tree-font-size: .9rem;
+  --document-tree-radius: 8px;
+}
+```
+
+Color overrides should provide matching light/dark values and readable contrast.
+The built-in palettes follow the system color scheme. The tree is a production
+component used by both the hosted app and its Storybook stories; its expansion,
+selection and appearance stay in the presentation-independent model/actions.
+
+### Read-only content
+
 Opening a document now mounts a read-only Monaco source editor instead of the
 plain-text pane. It supports syntax highlighting, line numbers, folding, word
 wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Markdown files also offer a
@@ -99,7 +137,8 @@ pnpm run pages:build              # hosted-dist/ with app/ and storybook/
 Open **Web app → Document browser → Interactive** to exercise the production
 controller with deterministic in-memory `AppHooksV1` capabilities. Discover a
 workspace, browse documents, select one, and filter the list. No extension,
-GitHub credentials, network API, or browser storage is used. The story runs in
+GitHub credentials or network API is used. Appearance preferences use the same
+local browser storage as the app. The story runs in
 React Strict Mode to exercise the container's mount/disposal lifecycle.
 
 Presentation fixtures open directly in Monaco source, rich Markdown, JSON,
