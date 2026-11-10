@@ -5,8 +5,8 @@ response history, and manual GitHub comment composition for mobile Safari.
 Build its WebExtension resources on Linux, macOS, or CI:
 
 ```sh
-npm ci
-npm run build:safari
+pnpm install --frozen-lockfile
+pnpm run build:safari
 ```
 
 `dist-safari/` contains the manifest, bundled content/settings scripts, popup,
@@ -66,14 +66,14 @@ monitoring, or native messaging requirement in this slice.
 ## Local checks
 
 ```sh
-npm run check
-npm test
-npm run build
-npm run build:safari
-npx playwright install --with-deps chromium webkit
-npm run test:browser
-npm run test:mobile
-npm run test:playground
+pnpm run check
+pnpm test
+pnpm run build
+pnpm run build:safari
+pnpm exec playwright install --with-deps chromium webkit
+pnpm run test:browser
+pnpm run test:mobile
+pnpm run test:playground
 ```
 
 Mobile tests load the **built Safari content script** against controlled

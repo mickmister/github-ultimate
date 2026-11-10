@@ -3,7 +3,7 @@
 Adapted from `vibe-kanban-vscode-web/.github/openlint/openlint.yaml` in the
 `2286-vd-redesign-2` workspace. Both supporting ast-grep rules are included.
 OpenLint is pinned to `@mickmister/openlint@0.1.0`; its ast-grep dependency is
-resolved by `package-lock.json`. Run `npm ci` before using the commands.
+resolved by `pnpm-lock.yaml`. Run `pnpm install --frozen-lockfile` before using the commands.
 
 ## Current coverage
 
@@ -19,23 +19,23 @@ GitHub Ultimate uses imperative TypeScript DOM rendering, not React or TSX:
   DOM APIs and CSS. `src/hosted-content.ts` bridges the extension to it.
 - Storybook uses `@storybook/html-vite`; esbuild bundles the extension.
 
-**The imported rules check JSX syntax only. A successful scan today does not
-prove any boundary in the existing `.ts`, HTML, or CSS UI.** They are opt-in
-scaffolding for possible future TSX views, not a reason to adopt React. The
-TypeScript configuration would also need JSX support before introducing TSX.
+**The imported rules check JSX syntax only.** They now check the new TanStack
+Start app in `webapp/src`, whose presentation lives in `*.view.tsx`. They do not
+prove boundaries in the existing imperative `.ts`, HTML, or CSS UI. The webapp
+has its own JSX-enabled TypeScript configuration.
 
 ## Commands
 
 ```sh
-npm run lint:tsx-view-boundary
-npm run lint:tsx-view-boundary:changed
-npm run lint:tsx-view-boundary:last-commit
-npm run lint:ui-customization-fences
+pnpm run lint:tsx-view-boundary
+pnpm run lint:tsx-view-boundary:changed
+pnpm run lint:tsx-view-boundary:last-commit
+pnpm run lint:ui-customization-fences
 ```
 
-The full commands target `src` and `hosted`, avoiding generated bundles and
-dependencies. Changed/last-commit commands select files via Git. There is no
-`migrated` command yet because there are no migrated TSX views.
+The full commands target `src`, `hosted`, and `webapp/src`, avoiding generated bundles and
+dependencies. Changed/last-commit commands select files via Git. The new SPA's
+views are covered by the full command; the legacy DOM surfaces are not migrated.
 
 `tsx-view-boundary` keeps intrinsic elements such as `<button>` in
 `*.view.tsx` (with a story exemption) and hook-like calls/declarations outside
@@ -72,5 +72,5 @@ Once module boundaries exist, add TypeScript-aware import restrictions for the
 actual `.ts` renderers. Pair those checks with Storybook/Playwright scenarios
 for narrow containers, long labels, zoom, dark mode, touch, keyboard/focus,
 and loading/error/empty states. Syntax lint cannot establish those behaviors.
-Do not make the imported TSX scan a required UI-quality gate until relevant
-source exists and its coverage is explicit.
+The TSX boundary scan now runs in CI for the new SPA. It does not establish
+layout quality or boundaries in the legacy DOM surfaces.

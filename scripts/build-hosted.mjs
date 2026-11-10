@@ -1,11 +1,14 @@
 import { build } from 'esbuild';
-import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
+import { previewDirectory, payloadSize, previewLimit } from './publish-hosted.mjs';
 
 const metadata = {
   branch: process.env.GITHUB_REF_NAME ?? execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim(),
   sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
 };
+const repositoryName = (process.env.GITHUB_REPOSITORY ?? 'mickmister/github-ultimate').split('/')[1];
+const webappBase = `/${repositoryName}/previews/${previewDirectory(metadata.branch)}/app/`;
 await rm('hosted-dist', { recursive: true, force: true });
 await mkdir('hosted-dist', { recursive: true });
 const built = await build({ entryPoints: ['hosted/main.ts', 'hosted/settings.ts'], outdir: 'hosted-dist', entryNames: '[name]-[hash]', chunkNames: 'shared-[hash]', splitting: true, bundle: true, format: 'esm', target: ['chrome120', 'safari16.4'], minify: true, sourcemap: false, metafile: true, define: { __HOSTED_BUILD__: JSON.stringify(metadata) } });
@@ -17,4 +20,9 @@ for (const [entry, page] of [['main', 'index'], ['settings', 'settings']]) {
   await writeFile(`hosted-dist/${page}.html`, html);
 }
 await writeFile('hosted-dist/build.json', JSON.stringify(metadata) + '\n');
+execFileSync('pnpm', ['--dir', 'webapp', 'build'], { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'production', WEBAPP_BASE_PATH: webappBase } });
+// Start's server build is used only to generate the SPA shell. Publish only
+// client files: GitHub Pages does not run a server or server functions.
+await cp('webapp/dist/client', 'hosted-dist/app', { recursive: true });
+if (await payloadSize('hosted-dist') > previewLimit) throw new Error('Hosted pages exceed the branch preview payload limit.');
 console.log(`Built hosted page for ${metadata.branch} at ${metadata.sha}`);

@@ -119,7 +119,7 @@ the actual sender origin from browser metadata, not a page-supplied claim.
 
 ## Build and publication
 
-`npm run hosted:build` writes only HTML, JS/CSS and public build metadata to
+`pnpm run hosted:build` writes only HTML, JS/CSS and public build metadata to
 `hosted-dist/`. Both HTML entries and lazy workspace apps use content-hashed
 relative asset URLs under branch preview paths. No runtime
 application backend is needed.

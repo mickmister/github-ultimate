@@ -5,13 +5,13 @@ extension, resolves the current repository and open PR using `gh`, and posts a
 pretty-printed `github-task` comment. You do not have to calculate repository,
 PR, Markdown fences or a comment URL yourself.
 
-Requires Node 22, `npm ci`, GitHub CLI, and `gh auth login` (or `GH_TOKEN` /
+Requires Node 22.12+, `pnpm install --frozen-lockfile`, GitHub CLI, and `gh auth login` (or `GH_TOKEN` /
 `GITHUB_TOKEN`). Only github.com PR conversation comments are supported.
 
 ```sh
 # Run from a checkout on the branch whose PR should receive the form:
 ./bin/github-ultimate-form path/to/form.json
-npm run form -- --file path/to/form.yaml
+pnpm run form --file path/to/form.yaml
 
 # Or send DSL over stdin:
 ./bin/github-ultimate-form < path/to/form.json
@@ -26,8 +26,8 @@ npm run form -- --file path/to/form.yaml
 ./bin/github-ultimate-form --file path/to/form.json --repo owner/repo --pr 42 --json
 ```
 
-`npm link` optionally exposes the `github-ultimate-form` command globally from
-this checkout. `npm run form -- ...` is always available without linking.
+`pnpm link --global` optionally exposes the `github-ultimate-form` command globally from
+this checkout. `pnpm run form ...` is always available without linking.
 
 ## Input and results
 
@@ -101,7 +101,7 @@ to future execution handlers.
 
 ## Use the CLI directly in GitHub Actions
 
-After checking out this extension and running `npm ci`:
+After checking out this extension and running `pnpm install --frozen-lockfile`:
 
 ```yaml
 permissions:
@@ -145,7 +145,7 @@ Node 22, installs the publisher runtime dependencies and calls the same CLI:
 ```
 
 The form path is relative to the caller's working directory. A local action can
-also use `./.github/actions/post-form`; its install step runs `npm ci --omit=dev`
+also use `./.github/actions/post-form`; its install step runs a filtered production-only pnpm install
 in the extension checkout, so place it in a dedicated posting job after any
 build/tests that need development dependencies. The action is ready to be used
 once its source is pushed; no new workflow trigger or agent handler is enabled

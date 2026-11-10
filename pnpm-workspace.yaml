@@ -1,0 +1,7 @@
+packages:
+  - webapp
+
+allowBuilds:
+  '@ast-grep/cli': true
+  '@mickmister/openlint': true
+  esbuild: true

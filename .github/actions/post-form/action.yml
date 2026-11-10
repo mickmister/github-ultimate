@@ -35,7 +35,10 @@ runs:
     - name: Install publisher dependencies
       shell: bash
       working-directory: ${{ github.action_path }}/../../..
-      run: npm ci --omit=dev --ignore-scripts
+      run: |
+        corepack enable
+        corepack prepare pnpm@12.18.0 --activate
+        pnpm --filter github-ultimate install --prod --frozen-lockfile --ignore-scripts
     - id: publish
       shell: bash
       env:

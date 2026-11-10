@@ -67,7 +67,14 @@ test.beforeEach(async () => { profile = await mkdtemp(resolve(tmpdir(), 'github-
 test.afterEach(async () => { await context?.close(); await rm(profile, { recursive: true, force: true }); });
 async function serveHosted() {
   await context.route('https://mickmister.github.io/**', async route => {
-    const name = new URL(route.request().url()).pathname.split('/').pop() || 'index.html';
+    const pathname = new URL(route.request().url()).pathname;
+    const app = pathname.indexOf('/app/');
+    if (app >= 0) {
+      const name = pathname.slice(app + '/app/'.length) || 'index.html';
+      if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_-]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
+      return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
+    }
+    const name = pathname.split('/').pop() || 'index.html';
     if (!['index.html', 'settings.html', 'build.json'].includes(name) && !/^(main|settings|shared|beads|documents)-[A-Z0-9]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
     await route.fulfill({ path: resolve('hosted-dist', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.json') ? 'application/json' : 'text/html' });
   });
@@ -217,6 +224,33 @@ test('hosted branch page reads through an approved connection and revocation tak
   await dashboard.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(dashboard.getByRole('heading', { name: 'Connection & storage settings', exact: true })).toBeVisible();
   await dashboard.close();
+  // The new Start SPA is served entirely from static files under its real
+  // branch base path, and uses the same approved extension/verified Git reader.
+  const shell = await readFile(resolve('hosted-dist/app/index.html'), 'utf8');
+  expect(shell).not.toContain('Choose your workspace');
+  const appPath = shell.match(/href="([^"]+)assets\/[^" ]+\.css"/)![1];
+  const modern = await context.newPage();
+  const pageErrors: string[] = []; modern.on('pageerror', error => pageErrors.push(error.message));
+  await modern.goto('https://mickmister.github.io' + appPath);
+  await expect(modern.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
+  await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeEnabled();
+  await modern.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
+  await expect(modern.getByRole('status')).toContainText('1 workspace(s) found');
+  await modern.getByLabel('Stored workspace').selectOption('workspace-a');
+  await modern.getByRole('button', { name: 'Browse documents', exact: true }).click();
+  await expect(modern.getByRole('status')).toContainText('2 document(s)');
+  await modern.getByRole('button', { name: 'notes/private.md', exact: false }).click();
+  await expect(modern.getByLabel('Document content')).toContainText('Private workspace note');
+  expect(await modern.evaluate(() => '__unsafeDocument' in window)).toBe(false);
+  await modern.getByLabel('Find a document').fill('no-match');
+  await expect(modern.getByText('No documents match this search.')).toBeVisible();
+  await modern.setViewportSize({ width: 375, height: 812 });
+  expect(await modern.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await modern.reload();
+  await expect(modern.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
+  await expect(modern.getByLabel('Document content')).toHaveCount(0);
+  expect(pageErrors).toEqual([]);
+  await modern.close();
   await settings.getByRole('button', { name: 'Revoke https://mickmister.github.io' }).click();
   await page.getByRole('button', { name: 'Read document', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('no approved connections');
