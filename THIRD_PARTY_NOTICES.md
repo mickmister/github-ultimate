@@ -8,6 +8,8 @@ Runtime dependencies bundled in the extension:
 | marked | MIT |
 | yaml | ISC |
 | zod | MIT |
+| aws4fetch | MIT |
+| fast-xml-parser and its bundled runtime dependencies | MIT |
 
 The build includes the complete installed dependency license texts in
 `THIRD_PARTY_LICENSES.txt` in the extension ZIP. Exact versions are pinned by

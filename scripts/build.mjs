@@ -1,5 +1,6 @@
 import { build } from 'esbuild';
-import { mkdir, rm, copyFile, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, rm, copyFile, readFile, writeFile, readdir, realpath } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 const browser = process.argv[2] ?? 'chrome';
 if (!['chrome', 'safari'].includes(browser)) throw new Error(`Unknown browser target: ${browser}`);
@@ -27,14 +28,22 @@ await writeFile(`${outdir}/popup.html`, popup.replace('__BUILD_VERSION__', manif
 await copyFile('connections.html', `${outdir}/connections.html`);
 for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) await copyFile(file, `${outdir}/${file}`);
 let licenses = '';
-for (const name of Object.keys(pkg.dependencies)) {
-  const directory = `node_modules/${name}`;
+const licensed = new Set();
+async function licensePackage(directory) {
   const installed = JSON.parse(await readFile(`${directory}/package.json`, 'utf8'));
-  const { readdir } = await import('node:fs/promises');
+  const name = installed.name;
+  const identity = `${name}@${installed.version}`;
+  if (licensed.has(identity)) return;
+  licensed.add(identity);
   const names = (await readdir(directory)).filter(file => /^licen[sc]e(?:\.|$)/i.test(file));
-  if (!names.length) throw new Error(`Missing runtime license for ${name}`);
+  const override = identity === '@nodable/entities@3.1.0' ? 'licenses/nodable-val-parsers-MIT.txt' : undefined;
+  if (!names.length && !override) throw new Error(`Missing runtime license for ${name}`);
   licenses += `\n${'='.repeat(72)}\n${name} ${installed.version} — ${installed.license}\n`;
   for (const file of names) licenses += `\n${await readFile(`${directory}/${file}`, 'utf8')}\n`;
+  if (!names.length && override) licenses += `\n${await readFile(override, 'utf8')}\n`;
+  const modules = resolve(await realpath(directory), name.startsWith('@') ? '../..' : '..');
+  for (const dependency of Object.keys(installed.dependencies ?? {})) await licensePackage(resolve(modules, dependency));
 }
+for (const name of Object.keys(pkg.dependencies)) await licensePackage(`node_modules/${name}`);
 await writeFile(`${outdir}/THIRD_PARTY_LICENSES.txt`, licenses);
 console.log(`Built GitHub Ultimate ${manifest.version_name} for ${browser} in ${outdir}/`);

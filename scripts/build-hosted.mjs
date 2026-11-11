@@ -11,8 +11,8 @@ const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'github-u
 const webappBase = `/${repositoryName}/previews/${previewDirectory(metadata.branch)}/app/`;
 await rm('hosted-dist', { recursive: true, force: true });
 await mkdir('hosted-dist', { recursive: true });
-const built = await build({ entryPoints: ['hosted/main.ts', 'hosted/settings.ts'], outdir: 'hosted-dist', entryNames: '[name]-[hash]', chunkNames: 'shared-[hash]', splitting: true, bundle: true, format: 'esm', target: ['chrome120', 'safari16.4'], minify: true, sourcemap: false, metafile: true, define: { __HOSTED_BUILD__: JSON.stringify(metadata) } });
-for (const [entry, page] of [['main', 'index'], ['settings', 'settings']]) {
+const built = await build({ entryPoints: ['hosted/main.ts', 'hosted/settings.ts', 'hosted/s3.ts'], outdir: 'hosted-dist', entryNames: '[name]-[hash]', chunkNames: 'shared-[hash]', splitting: true, bundle: true, format: 'esm', target: ['chrome120', 'safari16.4'], minify: true, sourcemap: false, metafile: true, define: { __HOSTED_BUILD__: JSON.stringify(metadata) } });
+for (const [entry, page] of [['main', 'index'], ['settings', 'settings'], ['s3', 's3']]) {
   const output = Object.entries(built.metafile.outputs).find(([, value]) => value.entryPoint === `hosted/${entry}.ts`);
   if (!output?.[1].cssBundle) throw new Error(`Hosted assets missing for ${entry}.`);
   const script = output[0].slice('hosted-dist/'.length), stylesheet = output[1].cssBundle.slice('hosted-dist/'.length);

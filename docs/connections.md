@@ -123,6 +123,10 @@ no Workflows/Contents write is needed for dispatching existing definitions.
 
 ## API request budgets
 
+S3-compatible endpoints have separate connections and operation grants; see
+[S3-compatible object storage](s3-connections.md). They reuse original-document
+path authorization but do not use GitHub credentials or repository discovery.
+
 The broker serializes requests. It observes `Retry-After`, `X-RateLimit-Remaining`
 and `X-RateLimit-Reset`, including a successful response that consumes the last
 request. Primary cooldowns are shared across connections for the same GitHub

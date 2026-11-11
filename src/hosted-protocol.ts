@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { pageChannel } from './bridge-channels';
 import { gitReadSchemas } from './git-reads';
 import { workspaceNavigationSchema } from './workspace-navigation';
+import { s3HostedSchemas } from './s3-protocol';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -13,6 +14,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('repositories'), id: z.string().uuid() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
+  ...s3HostedSchemas,
 ]);
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 export const pageEnvelopeSchema = z.object({ channel: z.literal(pageChannel), version: z.literal(1), requestId: z.string().uuid(), request: z.unknown() }).strict();

@@ -2,6 +2,7 @@
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"><title>GitHub Ultimate connections</title>
 <style>
 :root{color-scheme:light dark;font:16px system-ui;line-height:1.5}body{max-width:900px;margin:0 auto;padding:24px}h1{font-size:1.6rem}h2{font-size:1.2rem}form,article{border:1px solid #8887;border-radius:8px;padding:20px;margin:20px 0}label{display:block;margin:12px 0}input,select{display:block;box-sizing:border-box;width:100%;padding:10px;font:inherit}button,a{min-height:44px}button{font:inherit;padding:10px;margin:6px 8px 6px 0;cursor:pointer}button:disabled{cursor:wait}pre{white-space:pre-wrap;overflow-wrap:anywhere;padding:12px;background:#8881}a{display:inline-block;overflow-wrap:anywhere}#status{min-height:1.5em}code{overflow-wrap:anywhere}small{display:block} @media(max-width:480px){body{padding:12px}form,article{padding:12px}}
+input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:20px;margin-right:8px}
 </style></head><body>
 <h1>GitHub App connections</h1>
 <p>Add a named client App connection. Tokens stay in extension-origin credential storage, outside GitHub content scripts and hosted pages. Sign in and select an installation, then approve hosted origins for read access below. Workflow dispatch is not exposed yet.</p>
@@ -13,5 +14,23 @@
 <button type="submit">Add connection</button></form>
 <p id="status" role="status" aria-live="polite"></p>
 <main id="connections" aria-label="Connections"></main>
+<section aria-labelledby="s3-heading"><h2 id="s3-heading">S3-compatible connections</h2>
+<p>Configure your own HTTPS endpoint (HTTP loopback for development), bucket and key prefix. Credentials stay in extension-origin storage. Use separate connections for direct and staging uploads; intent snapshot/review integration is separate.</p>
+<form id="s3-add"><h3>Add or edit S3 connection</h3>
+<label>S3 connection name<input name="name" required maxlength="80"></label>
+<label>S3 endpoint<input name="endpoint" type="url" required placeholder="https://storage.example"></label>
+<label>S3 bucket<input name="bucket" required></label>
+<label>S3 signing region<input name="region" value="us-east-1" required></label>
+<label>S3 addressing<select name="addressing"><option value="path">Path style: endpoint/bucket/key</option><option value="virtual">Virtual hosted: bucket.endpoint/key</option></select></label>
+<label>S3 allowed key prefix<input name="prefix" placeholder="workspace/"></label>
+<label>S3 access key ID<input name="accessKeyId" required autocomplete="off"></label>
+<label>S3 secret access key<input name="secretAccessKey" type="password" required autocomplete="off"></label>
+<label>S3 session token (optional)<input name="sessionToken" type="password" autocomplete="off"></label>
+<label><input name="allowRead" type="checkbox" checked>Allow reads and listing</label>
+<label><input name="allowUpload" type="checkbox" checked>Allow uploads</label>
+<label><input name="allowOverwrite" type="checkbox">Allow replacing existing objects</label>
+<p>Without replacement, uploads use If-None-Match: *. A service that cannot enforce that condition returns an error; no overwrite fallback is attempted. Objects are limited to 8 MiB per read/upload.</p>
+<button type="submit">Save S3 connection</button><button type="reset">Cancel S3 edit</button></form>
+<p id="s3-status" aria-live="polite"></p><div id="s3-connections"></div></section>
 <p>Disconnect removes local credentials only. To revoke the GitHub authorization, visit <a href="https://github.com/settings/apps/authorizations" target="_blank" rel="noopener noreferrer">GitHub authorized Apps</a>. Multiple local connections to the same App can share its upstream authorization; revoking it can affect all of them.</p>
 <script src="connections-page.js"></script></body></html>

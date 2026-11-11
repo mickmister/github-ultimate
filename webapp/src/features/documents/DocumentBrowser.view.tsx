@@ -13,7 +13,7 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
   return <FeedbackProvider><main className={`app-shell${fullscreen ? ' document-fullscreen' : ''}`}>
     {!fullscreen && <><header className="page-header">
       <div><p className="eyebrow">GitHub Ultimate · new web app</p><h1>Workspace documents</h1><p className="muted">Explore verified workspace snapshots through your browser extension.</p></div>
-      <nav aria-label="Existing pages"><a href="../">Current dashboard</a><a href="../settings.html">Connection &amp; storage settings</a></nav>
+      <nav aria-label="Existing pages"><a href="../">Current dashboard</a><a href="../settings.html">Connection &amp; storage settings</a><a href="../s3.html">S3 object storage</a></nav>
     </header>
     <section className="connection-panel" aria-labelledby="connection-heading">
        <div className="section-heading"><h2 id="connection-heading">Choose your workspace</h2><div><button onClick={actions.connect} disabled={model.busy}>Reconnect extension</button>{actions.forgetWorkspace && <button onClick={actions.forgetWorkspace} disabled={model.busy}>Forget saved workspace</button>}</div></div>

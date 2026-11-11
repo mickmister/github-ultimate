@@ -392,7 +392,7 @@ test('automatic restore does not replace an unavailable saved connection with an
     window.addEventListener('message', event => {
       if (event.data?.channel !== 'github-ultimate-page-v1') return;
       const result = event.data.request.operation === 'connections' ? [{ id: '22222222-2222-4222-8222-222222222222', name: 'Other App', appId: 999, installation: { id: 456, account: 'other' } }] : { protocolVersion: 1, capabilities: [] };
-      window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision: 3, requestId: event.data.requestId, ok: true, result }, location.origin);
+      window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision: 4, requestId: event.data.requestId, ok: true, result }, location.origin);
     });
   });
   await page.goto('https://mickmister.github.io/github-ultimate/previews/saved-connection/settings.html');

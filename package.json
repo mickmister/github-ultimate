@@ -39,7 +39,9 @@
     "package": "pnpm run build && node scripts/package.mjs"
   },
   "dependencies": {
+    "aws4fetch": "^1.0.20",
     "dompurify": "^3.3.0",
+    "fast-xml-parser": "^5.12.0",
     "marked": "^17.0.0",
     "yaml": "^2.8.1",
     "zod": "^4.1.12"

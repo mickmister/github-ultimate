@@ -2,6 +2,7 @@ import type { ConnectionRequest, PublicConnection, Installation, Repository } fr
 import { extensionAPI } from './extension-api';
 import { trustedOrigin, originPattern } from './hosted-protocol';
 import { trustedSubpath, type HostedGrant } from './hosted-access';
+import './s3-settings-page';
 
 const status = document.getElementById('status')!;
 const container = document.getElementById('connections')!;

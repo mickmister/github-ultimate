@@ -106,6 +106,7 @@ export class Connections {
         await this.store.put(record);
         return null;
       }
+      if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
       if (gitReadSchema.safeParse(request).success) {
