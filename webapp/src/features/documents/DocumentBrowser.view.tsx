@@ -3,11 +3,14 @@ import { isMarkdown } from './document-format';
 import { MonacoDocument } from './MonacoDocument';
 import { MarkdownDocument } from './MarkdownDocument';
 import { DocumentTree } from './DocumentTree';
+import { FeedbackProvider } from '../feedback/FeedbackProvider';
+import { AttachableContext } from '../feedback/AttachableContext';
+import { documentFeedbackTarget } from './feedback-target';
 
 export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
   const selected = model.snapshot?.documents.find(document => document.id === model.documentId);
   const fullscreen = Boolean(selected && model.documentFullscreen);
-  return <main className={`app-shell${fullscreen ? ' document-fullscreen' : ''}`}>
+  return <FeedbackProvider><main className={`app-shell${fullscreen ? ' document-fullscreen' : ''}`}>
     {!fullscreen && <><header className="page-header">
       <div><p className="eyebrow">GitHub Ultimate · new web app</p><h1>Workspace documents</h1><p className="muted">Explore verified workspace snapshots through your browser extension.</p></div>
       <nav aria-label="Existing pages"><a href="../">Current dashboard</a><a href="../settings.html">Connection &amp; storage settings</a></nav>
@@ -29,7 +32,9 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
           <label>Tree density<select value={model.treeAppearance.density} onChange={event => actions.setTreeAppearance({ ...model.treeAppearance, density: event.target.value === 'compact' ? 'compact' : 'comfortable' })}><option value="comfortable">Comfortable</option><option value="compact">Compact</option></select></label>
           <label>Tree accent<select value={model.treeAppearance.accent} onChange={event => actions.setTreeAppearance({ ...model.treeAppearance, accent: event.target.value === 'blue' ? 'blue' : event.target.value === 'teal' ? 'teal' : 'default' })}><option value="default">App default</option><option value="blue">Blue</option><option value="teal">Teal</option></select></label>
         </details>
-        <DocumentTree model={model} actions={actions} />
+        <AttachableContext target={{ elementId: 'document-tree', label: 'document tree', uiPath: ['Documents', 'Tree'], featureId: 'documents.tree' }}>
+          <DocumentTree model={model} actions={actions} />
+        </AttachableContext>
       </aside>}
       <article className="document-preview"><header>
         {selected && <div className="reading-navigation">{fullscreen
@@ -43,10 +48,12 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
               {isMarkdown(selected.path) && <button aria-pressed={model.documentMode === 'markdown'} onClick={() => actions.setDocumentMode('markdown')}>Markdown preview</button>}
             </div>
           </div>
-          {model.documentMode === 'markdown' && isMarkdown(selected.path) ? <MarkdownDocument content={model.content} /> : <MonacoDocument key={model.snapshot.id + ':' + selected.id} path={selected.path} content={model.content} />}
+          {model.documentMode === 'markdown' && isMarkdown(selected.path)
+            ? <AttachableContext key={`markdown:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.markdown-renderer', 'rendered-markdown')}><MarkdownDocument content={model.content} /></AttachableContext>
+            : <AttachableContext key={`source:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')}><MonacoDocument key={model.snapshot.id + ':' + selected.id} path={selected.path} content={model.content} /></AttachableContext>}
         </> : <><p className="document-placeholder" aria-label="Document content">{model.documentId && model.busy ? 'Reading…' : selected && model.error ? 'This document could not be loaded.' : 'Choose a document to read its verified contents.'}</p>
           {selected && model.error && <button onClick={() => actions.selectDocument(selected.id)}>Retry document</button>}</>}
       </article>
     </section> : <section className="welcome"><h2>Your documents, pinned to a snapshot</h2><p>Choose an approved connection and storage repository, discover a workspace, then browse its documents.</p><p className="muted">Sign-in and origin approval remain in extension connection settings. Document contents stay in this tab.</p></section>}
-  </main>;
+  </main></FeedbackProvider>;
 }

@@ -27,6 +27,12 @@ test('published Storybook loads its manager, stories and Monaco workers under a 
   await expect(frame.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
   await frame.getByRole('button', { name: 'Markdown preview', exact: true }).click();
   await expect(frame.getByRole('region', { name: 'Markdown preview', exact: true }).getByRole('table')).toBeVisible();
+  await frame.getByRole('button', { name: 'Comment on planning/product-brief.md', exact: true }).click();
+  await frame.getByRole('menuitem', { name: 'Comment on Feature', exact: true }).click();
+  const composer = frame.getByRole('dialog', { name: 'Comment on Feature', exact: true });
+  await composer.getByLabel('Your comment').fill('Make the rendered table easier to scan.');
+  await composer.getByRole('button', { name: 'Add to queue', exact: true }).click();
+  await expect(frame.getByRole('button', { name: 'Comments · 1', exact: true })).toBeVisible();
   await frame.getByRole('button', { name: 'Back to documents' }).click();
   await expect(frame.getByRole('tree', { name: 'Documents' })).toBeVisible();
   await page.goto(base + 'iframe.html?id=web-app-document-browser--json-source&viewMode=story');

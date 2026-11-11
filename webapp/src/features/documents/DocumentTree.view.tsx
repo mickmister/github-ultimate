@@ -1,6 +1,8 @@
 import { TreeView, createTreeCollection } from '@ark-ui/react/tree-view';
 import type { DocumentBrowserProps } from './contracts';
 import { buildDocumentTree, documentNodeId, folderNodeId, type DocumentTreeNode } from './document-tree';
+import { AttachableContext, FeedbackTrigger } from '../feedback/AttachableContext';
+import { documentFeedbackTarget } from './feedback-target';
 
 export function DocumentTreeView({ model, actions, tree, collection }: DocumentBrowserProps & {
   tree: ReturnType<typeof buildDocumentTree>;
@@ -17,14 +19,14 @@ export function DocumentTreeView({ model, actions, tree, collection }: DocumentB
         if (document) actions.selectDocument(document.id);
       }}>
       <TreeView.Tree aria-label="Documents">
-        {collection.rootNode.children?.map((node, index) => <DocumentTreeNodeView key={node.id} node={node} indexPath={[index]} />)}
+        {collection.rootNode.children?.map((node, index) => <DocumentTreeNodeView key={node.id} node={node} indexPath={[index]} model={model} />)}
       </TreeView.Tree>
     </TreeView.Root>
     <p className="tree-results muted" aria-live="polite">{tree.count ? `${tree.count} of ${model.snapshot?.documents.length ?? 0} documents` : 'No documents match this search.'}</p>
   </>;
 }
 
-function DocumentTreeNodeView({ node, indexPath }: { node: DocumentTreeNode; indexPath: number[] }) {
+function DocumentTreeNodeView({ node, indexPath, model }: { node: DocumentTreeNode; indexPath: number[]; model: DocumentBrowserProps['model'] }) {
   return <TreeView.NodeProvider node={node} indexPath={indexPath}>
     {node.children ? <TreeView.Branch>
       <TreeView.BranchControl className="document-tree-row" title={node.path}>
@@ -32,12 +34,13 @@ function DocumentTreeNodeView({ node, indexPath }: { node: DocumentTreeNode; ind
         <TreeView.BranchText className="tree-name">{node.name}</TreeView.BranchText>
       </TreeView.BranchControl>
       <TreeView.BranchContent>
-        {node.children.map((child, index) => <DocumentTreeNodeView key={child.id} node={child} indexPath={[...indexPath, index]} />)}
+        {node.children.map((child, index) => <DocumentTreeNodeView key={child.id} node={child} indexPath={[...indexPath, index]} model={model} />)}
       </TreeView.BranchContent>
-    </TreeView.Branch> : <TreeView.Item className="document-tree-row" title={node.path} aria-label={node.path}>
+    </TreeView.Branch> : <AttachableContext asChild showButton={false} target={{ ...documentFeedbackTarget(model, node.document!, 'documents.tree', 'document-entry'), uiPath: [node.path] }}><TreeView.Item className="document-tree-row" title={node.path} aria-label={node.path}>
       <span className="tree-file-icon" aria-hidden="true">▤</span>
       <TreeView.ItemText className="tree-name">{node.name}</TreeView.ItemText>
       <small className="tree-size">{node.document?.size == null ? 'Size unknown' : `${node.document.size.toLocaleString()} bytes`}</small>
-    </TreeView.Item>}
+      <FeedbackTrigger label={node.path} />
+    </TreeView.Item></AttachableContext>}
   </TreeView.NodeProvider>;
 }
