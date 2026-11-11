@@ -6,11 +6,13 @@ import type { DocumentBrowserPresentation } from './contracts';
 import { DocumentBrowserView } from './DocumentBrowser.view';
 import { AppPending } from '../../views/AppPending.view';
 import { readTreeAppearance, saveTreeAppearance } from './tree-appearance';
+import type { DocumentNavigation } from './navigation';
 
 export function DocumentBrowser({
   appHooks,
   presentation: Presentation = DocumentBrowserView,
-}: { appHooks?: AppHooksV1; presentation?: DocumentBrowserPresentation }) {
+  navigation,
+}: { appHooks?: AppHooksV1; presentation?: DocumentBrowserPresentation; navigation?: DocumentNavigation }) {
   const [controller, setController] = useState<ReturnType<typeof createDocumentBrowserController> | null>(null);
   useEffect(() => {
     const mounted = createDocumentBrowserController(appHooks ?? createHostedAppHooks(), readTreeAppearance());
@@ -20,17 +22,34 @@ export function DocumentBrowser({
       if (next !== appearance) { appearance = next; saveTreeAppearance(next); }
     });
     setController(mounted);
-    mounted.actions.connect();
+    if (!navigation) mounted.actions.connect();
     return () => { unsubscribe(); mounted.dispose(); };
   }, [appHooks]);
-  return controller ? <SubscribedBrowser controller={controller} presentation={Presentation} /> : <AppPending />;
+  return controller ? <SubscribedBrowser controller={controller} presentation={Presentation} navigation={navigation} /> : <AppPending />;
 }
 
-function SubscribedBrowser({ controller, presentation: Presentation }: {
+function SubscribedBrowser({ controller, presentation: Presentation, navigation }: {
   controller: ReturnType<typeof createDocumentBrowserController>;
   presentation: DocumentBrowserPresentation;
+  navigation?: DocumentNavigation;
 }) {
   const model = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  useEffect(() => { if (navigation) controller.actions.openLocation(navigation.location); }, [controller, navigation?.location]);
+  const scope = { connection: model.connectionId, repository: model.repository.trim(), workspace: model.workspaceId };
+  const actions = navigation ? {
+    ...controller.actions,
+    browseDocuments() {
+      if (!model.canBrowse) return;
+      const current = navigation.location;
+      if (!current.documentId && current.connection === scope.connection && current.repository === scope.repository && current.workspace === scope.workspace) controller.actions.browseDocuments();
+      else navigation.navigate(scope);
+    },
+    selectDocument(documentId: string) {
+      if (documentId === model.documentId && model.documentFullscreen) controller.actions.selectDocument(documentId);
+      else navigation.navigate({ ...scope, documentId });
+    },
+    setDocumentFullscreen(fullscreen: boolean) { navigation.navigate({ ...scope, documentId: fullscreen ? model.documentId : undefined }); },
+  } : controller.actions;
   const wasFullscreen = useRef(false);
   useEffect(() => {
     if (wasFullscreen.current && !model.documentFullscreen) {
@@ -43,11 +62,11 @@ function SubscribedBrowser({ controller, presentation: Presentation }: {
     const escape = (event: KeyboardEvent) => {
       // Monaco owns Escape for its find widget and other editor interactions.
       if (event.key === 'Escape' && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('.monaco-editor, [data-feedback-control], [data-scope="menu"], [data-scope="dialog"]'))) {
-        controller.actions.setDocumentFullscreen(false);
+        actions.setDocumentFullscreen(false);
       }
     };
     window.addEventListener('keydown', escape);
     return () => window.removeEventListener('keydown', escape);
-  }, [controller, model.documentFullscreen]);
-  return <Presentation model={model} actions={controller.actions} />;
+  }, [actions, model.documentFullscreen]);
+  return <Presentation model={model} actions={actions} />;
 }

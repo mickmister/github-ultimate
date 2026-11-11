@@ -7,10 +7,10 @@ there are no server functions, server routes, or application data loaders.
 
 Start builds a server bundle locally solely to generate the static HTML shell.
 Only `webapp/dist/client` is copied to `hosted-dist/app` and published to Pages.
-No application UI/data is server-rendered. The current SPA has one index route,
-so a direct visit or reload works with GitHub Pages directory-index hosting.
-Additional pathname routes would need explicit static entry points or a routing
-strategy compatible with Pages; no catch-all rewrite is assumed.
+No application UI/data is server-rendered. TanStack Router uses hash history:
+`app/#/documents` browses a workspace and `app/#/documents/<document-id>` opens
+a reader page. The Pages deployment prefix stays before the hash; every reload
+requests the same `app/index.html`, without a catch-all rewrite.
 
 ## Development
 
@@ -27,8 +27,38 @@ Open `http://127.0.0.1:3100/`. Approve that origin in the extension connection
 settings and reload the page to use real data. The extension handles sign-in and
 read authorization. The new page supports connection selection, repository and
 workspace discovery, verified document listing/reading, and local filtering.
-It intentionally does not copy the old settings page's diagnostics or Beads
-inspector. It does not persist document contents or navigation selections.
+Document routes carry `connection`, `repository` and `workspace` search fields
+inside the hash. A copied link or reload reconnects through approved extension
+capabilities, discovers that exact workspace, verifies its snapshot and reads
+the requested document. An unavailable connection/workspace/document produces an
+explicit error rather than silently selecting another one. Connection IDs are
+device-specific; a link does not grant access or carry credentials. Document IDs
+include the verified blob identity, so a removed or revised resource can become
+unavailable in the latest snapshot. Document contents are not persisted.
+
+Browser Back/Forward controls reader navigation. Returning to the same loaded
+workspace retains search, expansion, selection and content; reopening that same
+loaded document does not read it again. Search and expansion are tab-memory
+state, not serialized into links. Standalone embedded document browsers and
+presentation stories can still operate without a router.
+
+## Legacy UI migration inventory
+
+The TanStack app currently implements document browsing, rendered/source views
+and reusable feedback. The following manual-DOM surfaces still have production
+entry points and require separate migration work:
+
+| Surface | Current implementation |
+| --- | --- |
+| Workspace dashboard, workspace apps and Beads viewer | `hosted/main.ts`, `hosted/components.ts`, `hosted/workspace-apps.ts` |
+| Hosted connection/storage settings and diagnostics | `hosted/settings.ts`, `hosted/settings.html` |
+| GitHub form, response and workflow UI | `src/content.ts`, `src/ui.ts` |
+| Extension sign-in, connection and origin approval settings | `src/connections-page.ts` |
+| Extension popup | `src/popup.ts` |
+
+Shared host capabilities and verified readers can support React replacements,
+but rendering those surfaces through React remains separate from this routing
+change. The dashboard and hosted settings links remain available from the app.
 
 ## Document views
 

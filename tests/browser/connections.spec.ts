@@ -243,6 +243,22 @@ test('hosted branch page reads through an approved connection and revocation tak
   await modern.getByRole('treeitem', { name: 'notes', exact: true }).click();
   await modern.getByRole('treeitem', { name: 'notes/private.md', exact: true }).click();
   await expect(modern.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
+  const documentURL = new URL(modern.url());
+  expect(documentURL.pathname).toBe(appPath);
+  expect(documentURL.hash).toMatch(/^#\/documents\/[^?]+\?/);
+  expect(new URLSearchParams(documentURL.hash.split('?')[1]).get('workspace')).toBe('workspace-a');
+  expect(new URLSearchParams(documentURL.hash.split('?')[1]).get('repository')).toBe('mickmister/workspace-storage');
+  // A fresh page and a reload must reconstruct the same approved workspace and document.
+  const linked = await context.newPage();
+  await linked.goto(documentURL.href);
+  await expect(linked.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
+  await linked.reload();
+  await expect(linked.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
+  await linked.close();
+  await modern.goBack();
+  await expect(modern.getByRole('tree', { name: 'Documents', exact: true })).toBeVisible();
+  await modern.goForward();
+  await expect(modern.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
   await expect(modern.locator('.document-fullscreen')).toBeVisible();
   await expect(modern.getByRole('tree')).toHaveCount(0);
   expect(await modern.evaluate(() => '__unsafeDocument' in window)).toBe(false);

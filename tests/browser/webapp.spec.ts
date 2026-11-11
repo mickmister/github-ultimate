@@ -15,6 +15,7 @@ test('Start shell hydrates from static branch assets and reports a missing exten
   });
   await page.goto('https://mickmister.github.io' + appPath);
   await expect(page.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
+  await expect(page).toHaveURL('https://mickmister.github.io' + appPath + '#/documents');
   await expect(page.getByRole('alert')).toContainText('No bridge response', { timeout: 10000 });
   await expect(page.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
   expect(errors).toEqual([]);
