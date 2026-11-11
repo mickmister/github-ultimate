@@ -44,7 +44,7 @@ export function FeedbackShellView({ children, active, composer, review, state, n
         <Dialog.Content className="feedback-dialog" data-feedback-control="true" aria-label={composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}>
           <header><Dialog.Title>{composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}</Dialog.Title>
             <button type="button" onClick={actions.closeDialog} aria-label="Close comments">Close</button></header>
-          <Dialog.Description>{composer ? 'Add your thought with the captured UI context and highlighted content.' : 'Review your thoughts, then copy JSON to paste into agent chat. Drafts stay in this tab until exported.'}</Dialog.Description>
+          <Dialog.Description>{composer ? 'Add your thought with the captured UI context and highlighted content.' : 'Review your thoughts, then copy a compact Markdown review to paste into agent chat. Drafts stay in this tab until copied.'}</Dialog.Description>
           {composer ? <form onSubmit={event => { event.preventDefault(); actions.addComment(); }}>
             <p><strong>{composer.context.target.label}</strong><br />{composer.context.target.uiPath.join(' → ')}</p>
             <p className="feedback-context-detail">{composer.kind === 'content-comment' ? composer.context.target.resource?.path ?? composer.context.target.resource?.id : composer.context.target.featureId}</p>
@@ -61,7 +61,7 @@ export function FeedbackShellView({ children, active, composer, review, state, n
               <label htmlFor={`feedback-comment-${item.id}`}>Comment {index + 1}</label><textarea id={`feedback-comment-${item.id}`} value={item.comment} rows={3} onChange={event => actions.edit(item.id, event.target.value)} />
               <button type="button" onClick={() => actions.remove(item.id)} aria-label={`Remove comment ${index + 1}`}>Remove</button>
             </li>)}</ol>
-            <button type="button" disabled={!state.items.length || state.exporting} onClick={actions.copyAndClear}>{state.exporting ? 'Copying…' : 'Copy JSON & clear'}</button>
+            <button type="button" disabled={!state.items.length || state.exporting} onClick={actions.copyAndClear}>{state.exporting ? 'Copying…' : 'Copy review & clear'}</button>
           </>}
           {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}
         </Dialog.Content>

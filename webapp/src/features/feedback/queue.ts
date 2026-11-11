@@ -1,4 +1,5 @@
 import type { FeedbackCapture, FeedbackComment, FeedbackKind, FeedbackOptions } from './contracts';
+import { formatFeedbackReview } from './review';
 
 export const feedbackStorageKey = 'github-ultimate:feedback:v1';
 export function restoreFeedbackDraft(value: string | null): FeedbackComment[] {
@@ -59,14 +60,14 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
       if (state.exporting || !state.items.length) return;
       const exported = [...state.items];
       const versions = new Map(exported.map(item => [item.id, item.version]));
-      const json = JSON.stringify({ schemaVersion: 1, batchId: crypto.randomUUID(), exportedAt: new Date().toISOString(), interactions: exported }, null, 2);
+      const review = formatFeedbackReview(exported);
       update({ exporting: true, message: '' });
       try {
         // Start clipboard writing directly in the user's click, before any other asynchronous work.
-        await write(json);
-        update({ items: state.items.filter(item => versions.get(item.id) !== item.version), exporting: false, message: 'JSON copied. Exported comments cleared.' }, true);
+        await write(review);
+        update({ items: state.items.filter(item => versions.get(item.id) !== item.version), exporting: false, message: 'Review copied. Exported comments cleared.' }, true);
       } catch {
-        update({ exporting: false, message: 'Clipboard copy failed. Your comments are still queued; retry from the Copy JSON & clear button.' });
+        update({ exporting: false, message: 'Clipboard copy failed. Your comments are still queued; retry from the Copy review & clear button.' });
       }
     },
   };

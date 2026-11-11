@@ -11,7 +11,7 @@ async function selectText(page: Page, selector: string) {
   return text;
 }
 
-test('captures selected content, persists across reload, edits and copies JSON before clearing', async ({ page, context }) => {
+test('captures selected content, persists across reload, edits and copies a compact review before clearing', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto('/iframe.html?id=web-app-document-browser--reading-document&viewMode=story');
   const quote = await selectText(page, '.markdown-preview strong');
@@ -27,17 +27,13 @@ test('captures selected content, persists across reload, edits and copies JSON b
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
   const review = page.getByRole('dialog', { name: 'Queued comments', exact: true });
   await review.getByLabel('Comment 1', { exact: true }).fill('Make the introduction more concrete.');
-  await review.getByRole('button', { name: 'Copy JSON & clear', exact: true }).click();
+  await review.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
   await expect(review.getByText('No comments queued.', { exact: true })).toBeVisible();
-  const batch = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
-  expect(batch.schemaVersion).toBe(1);
-  expect(batch.interactions[0].context).not.toHaveProperty('pageUrl');
-  expect(batch.interactions).toHaveLength(1);
-  expect(batch.interactions[0]).toMatchObject({ kind: 'content-comment', comment: 'Make the introduction more concrete.', context: {
-    target: { featureId: 'documents.markdown-renderer', uiPath: ['Documents', 'Reader'], resource: { kind: 'document', id: 'brief', path: 'planning/product-brief.md', revision: 'a1b2c3d4'.repeat(5) } },
-    selection: { text: quote, representation: 'rendered-markdown' },
-  } });
-  expect(batch.interactions[0].context.appBuild).toMatch(/^[a-f0-9]{40}$/);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('# planning/product-brief.md');
+  expect(copied).toContain(`Revision: ${'a1b2c3d4'.repeat(5)}`);
+  expect(copied).toContain(`> ${quote}\n\nMake the introduction more concrete.`);
+  for (const omitted of ['pageUrl', 'schemaVersion', 'prefix', 'suffix', 'appBuild', 'featureId', 'capturedAt']) expect(copied).not.toContain(omitted);
 });
 
 test('another application can explicitly opt into URLs with an isolated draft key', async ({ page, context }) => {
@@ -53,10 +49,10 @@ test('another application can explicitly opt into URLs with an isolated draft ke
   expect(await page.evaluate(() => sessionStorage.getItem('github-ultimate:feedback:v1'))).toBeNull();
   await page.reload();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
-  await page.getByRole('button', { name: 'Copy JSON & clear', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('No comments queued.');
-  const batch = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
-  expect(batch.interactions[0].context.pageUrl).toBe(url);
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain(`Page: ${url}`);
 });
 
 test('nearest nested target owns the menu; ordinary Copy does not enqueue; failed export preserves feature comments', async ({ page, context }) => {
@@ -76,7 +72,7 @@ test('nearest nested target owns the menu; ordinary Copy does not enqueue; faile
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Denied')) } }));
   const review = page.getByRole('dialog', { name: 'Queued comments', exact: true });
-  await review.getByRole('button', { name: 'Copy JSON & clear', exact: true }).click();
+  await review.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
   await expect(review).toContainText('Your comments are still queued');
   await expect(review.getByLabel('Comment 1', { exact: true })).toHaveValue('Improve paragraph spacing.');
   await review.getByRole('button', { name: 'Remove comment 1', exact: true }).click();
@@ -96,10 +92,12 @@ test('source editor captures exact model selection and line ranges through its c
   await composer.getByLabel('Your comment').fill('Explain this setting.');
   await composer.getByRole('button', { name: 'Add to queue' }).click();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
-  await page.getByRole('button', { name: 'Copy JSON & clear', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Queued comments', exact: true })).toContainText('No comments queued.');
-  const batch = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
-  expect(batch.interactions[0].context.selection).toMatchObject({ representation: 'source', ranges: [{ startLineNumber: 1, startColumn: 1, endLineNumber: 4, endColumn: 2 }] });
+  const copied = await page.evaluate(() => navigator.clipboard.readText());
+  expect(copied).toContain('## 1 — lines 1–4');
+  expect(copied).toContain('"readOnly": true');
+  expect(copied).toContain('Explain this setting.');
 });
 
 test('row overflow and keyboard actions work without opening the document and fit a phone viewport', async ({ page }) => {

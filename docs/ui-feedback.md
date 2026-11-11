@@ -26,9 +26,18 @@ resource fields; these should contain only context the embedding app needs.
 ## Queue and clipboard
 
 **Comments · N** opens the review dialog. Edit or remove items, then choose
-**Copy JSON & clear** and paste the result into agent chat. The versioned JSON
-envelope contains a batch ID, export timestamp and ordered `interactions`.
-Each interaction has its own ID, version, kind, comment and captured context.
+**Copy review & clear** and paste the compact Markdown review into agent chat.
+Repository and workspace are included once per scope, with a heading and exact
+revision for each document. Each numbered comment contains only the highlighted
+text and the verbatim comment. Source selections include their actual line ranges;
+rendered selections do not invent Markdown source positions. Whole-document
+comments need no quote. Feature comments are explicitly labeled with their feature
+identifier so they remain distinguishable from feedback on document content.
+
+Prefix/suffix context and internal IDs, build metadata and timestamps stay out of
+the copied review. Full capture data, including anchors used to locate highlights,
+remains in the internal versioned draft until the comment is cleared. An embedding
+app that explicitly opts into browser URLs also gets a Page line in the review.
 
 Drafts use tab-scoped `sessionStorage` under `github-ultimate:feedback:v1` and
 survive reloads and navigation. If storage fails, comments remain usable in memory

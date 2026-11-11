@@ -89,7 +89,7 @@ test('source comments use model decorations, survive view switches, and clear af
   await page.getByRole('button', { name: 'Show selected view', exact: true }).click();
   await expect(page.locator('.monaco-editor .feedback-source-highlight').first()).toBeVisible();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
-  await page.getByRole('button', { name: 'Copy JSON & clear', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('No comments queued.');
   await page.getByRole('button', { name: 'Close comments', exact: true }).click();
   await expect(page.locator('.feedback-source-highlight')).toHaveCount(0);
