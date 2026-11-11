@@ -6,7 +6,11 @@ version = '0.1.0'
 
 android {
   namespace 'dev.githubultimate.companion.webview'
-  defaultConfig { minSdkVersion 24 }
+  defaultConfig {
+    minSdkVersion 24
+    versionCode 1
+    versionName project.version.toString()
+  }
 }
 
 dependencies {
