@@ -40,8 +40,10 @@ test('interactive mock host runs the real document controller without extension 
   });
   await page.route('https://api.github.com/**', route => { messages.push(route.request().url()); return route.abort(); });
   await page.goto('/iframe.html?id=web-app-document-browser--interactive&viewMode=story');
-  await expect(page.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeEnabled();
+  await page.getByLabel('Storage repository').fill('');
+  await expect(page.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
   await page.getByLabel('Storage repository').fill('octo-example/workspace-storage');
+  await expect(page.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('3 workspace(s) found');
   await page.getByLabel('Stored workspace').selectOption('product-research');
@@ -87,6 +89,7 @@ test('rich Markdown strips active HTML and remote embeds', async ({ page }) => {
 
 test('real controller supports keyboard tree browsing, ancestor-preserving search and persistent appearance', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-document-browser--interactive&viewMode=story');
+  await page.getByLabel('Storage repository').fill('octo-example/workspace-storage');
   await page.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
   await page.getByLabel('Stored workspace').selectOption('product-research');
   await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
@@ -117,6 +120,7 @@ test('real controller supports keyboard tree browsing, ancestor-preserving searc
   await page.getByLabel('Tree accent').selectOption('teal');
   await expect(page.locator('.document-tree')).toHaveAttribute('data-density', 'compact');
   await page.reload();
+  await page.getByLabel('Storage repository').fill('octo-example/workspace-storage');
   await page.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
   await page.getByLabel('Stored workspace').selectOption('product-research');
   await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
