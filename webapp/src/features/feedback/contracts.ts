@@ -19,6 +19,8 @@ export interface FeedbackSelection {
   readonly representation: string;
   readonly prefix?: string;
   readonly suffix?: string;
+  /** Text-node offsets within the rendered content, not Markdown source offsets. */
+  readonly textRange?: { readonly startOffset: number; readonly endOffset: number };
   readonly ranges?: readonly { startLineNumber: number; startColumn: number; endLineNumber: number; endColumn: number }[];
 }
 export interface FeedbackCapture {
