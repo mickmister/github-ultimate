@@ -8,6 +8,7 @@ import { previewDirectory, publishHosted, previewLimit, payloadSize } from '../s
 // @ts-expect-error Staging is dependency-free JavaScript for CI.
 import { stageHostedStorybook } from '../scripts/stage-hosted-storybook.mjs';
 
+// This exercises many real Git subprocesses; allow tracing overhead in CI.
 test('publisher replaces one preview per branch, preserves peers, prunes deletions and skips stale source builds', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pages-proof-'));
   const remote = join(root, 'remote.git'), repo = join(root, 'source'), source = join(root, 'payload'), output = join(root, 'site');
@@ -44,7 +45,7 @@ test('publisher replaces one preview per branch, preserves peers, prunes deletio
     expect(JSON.parse(await readFile(join(output, 'previews.json'), 'utf8'))).toEqual({});
     expect(await readdir(join(output, 'previews'))).toEqual([]);
   } finally { await rm(root, { recursive: true, force: true }); }
-});
+}, 30000);
 test('preview paths avoid branch slash/slug collisions and block oversized or linked payloads', async () => {
   expect(previewDirectory('feature/a')).not.toBe(previewDirectory('feature-a'));
   expect(previewDirectory('../../escape')).not.toContain('/');
