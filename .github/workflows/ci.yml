@@ -19,6 +19,13 @@ jobs:
       contents: read
       actions: read
     steps:
+      - name: Audit build network traffic
+        uses: mickmister/cargowall-action@vk/46e5-vd-multi-instanc
+        with:
+          start-phase: pre
+          mode: audit
+          offline: 'true'
+          fail-on-unsupported: 'true'
       - name: Capture Thoth telemetry
         uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
         timeout-minutes: 2
@@ -31,13 +38,6 @@ jobs:
           OTEL_METRICS_EXPORTER: deferred
           OTEL_LOGS_EXPORTER: deferred
           OTEL_GITHUB_JOB_SHUTDOWN_TIMEOUT: '60'
-      - name: Audit build network traffic
-        uses: code-cargo/cargowall-action@6edf046a8c1c6bcac21f8409c42f094418449839 # v1
-        with:
-          mode: audit
-          offline: 'true'
-          fail-on-unsupported: 'true'
-          skip-actions-api: 'true'
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -167,6 +167,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
+      - name: Audit Pages network traffic
+        uses: mickmister/cargowall-action@vk/46e5-vd-multi-instanc
+        with:
+          start-phase: pre
+          mode: audit
+          offline: 'true'
+          fail-on-unsupported: 'true'
       - name: Capture Thoth telemetry
         uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
         timeout-minutes: 2
@@ -179,13 +186,6 @@ jobs:
           OTEL_METRICS_EXPORTER: deferred
           OTEL_LOGS_EXPORTER: deferred
           OTEL_GITHUB_JOB_SHUTDOWN_TIMEOUT: '60'
-      - name: Audit Pages network traffic
-        uses: code-cargo/cargowall-action@6edf046a8c1c6bcac21f8409c42f094418449839 # v1
-        with:
-          mode: audit
-          offline: 'true'
-          fail-on-unsupported: 'true'
-          skip-actions-api: 'true'
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
