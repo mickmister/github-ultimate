@@ -1,0 +1,25 @@
+{
+  "name": "@github-ultimate/mobile",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.js",
+  "scripts": {
+    "start": "expo start --dev-client",
+    "ios": "expo run:ios",
+    "android": "expo run:android",
+    "check": "tsc --noEmit",
+    "export": "expo export --platform all --output-dir dist"
+  },
+  "dependencies": {
+    "expo": "~54.0.33",
+    "expo-constants": "~18.0.13",
+    "expo-modules-core": "~3.0.29",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-safe-area-context": "~5.6.0"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "^5.9.3"
+  }
+}
