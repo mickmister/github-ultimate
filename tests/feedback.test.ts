@@ -8,6 +8,46 @@ const context: FeedbackCapture = {
   pageUrl: 'https://example.test/app/', appBuild: 'application-revision', capturedAt: '2026-11-11T00:00:00Z',
 };
 
+it('omits browser URLs from new captures, persisted drafts and exported events by default', async () => {
+  let saved = '', copied = '';
+  const queue = createFeedbackQueue([], value => { saved = value; });
+  queue.add('content-comment', 'A useful comment', context);
+  expect(queue.getSnapshot().items[0].context).not.toHaveProperty('pageUrl');
+  expect(restoreFeedbackDraft(saved)[0].context).not.toHaveProperty('pageUrl');
+  await queue.copyAndClear(async text => { copied = text; });
+  expect(JSON.parse(copied).interactions[0].context).not.toHaveProperty('pageUrl');
+  expect(copied).not.toContain('https://example.test/app/');
+  expect(context.pageUrl).toBe('https://example.test/app/');
+});
+
+it('preserves old comments while immediately removing URLs from legacy tab drafts', async () => {
+  const legacy = { schemaVersion: 1, interactions: [{ id: 'old-comment', version: 3, kind: 'content-comment', comment: 'Keep this draft', context }] };
+  let saved = '', copied = '';
+  const queue = createFeedbackQueue(restoreFeedbackDraft(JSON.stringify(legacy)), value => { saved = value; });
+  expect(queue.getSnapshot().items[0]).toMatchObject({ id: 'old-comment', version: 3, comment: 'Keep this draft' });
+  expect(restoreFeedbackDraft(saved)[0].context).not.toHaveProperty('pageUrl');
+  await queue.copyAndClear(async text => { copied = text; });
+  expect(JSON.parse(copied).interactions[0].context).not.toHaveProperty('pageUrl');
+});
+
+it('allows explicit URL opt-in and strips queued URLs when that policy is turned off', async () => {
+  let saved = '', copied = '';
+  const queue = createFeedbackQueue([], value => { saved = value; }, { includePageUrl: true });
+  queue.add('feature-comment', 'Explicit URL capture', context);
+  expect(restoreFeedbackDraft(saved)[0].context.pageUrl).toBe(context.pageUrl);
+  await queue.copyAndClear(async text => { copied = text; });
+  expect(JSON.parse(copied).interactions[0].context.pageUrl).toBe(context.pageUrl);
+  queue.add('content-comment', 'Retain the comment, remove its URL', context);
+  let finish!: () => void;
+  const exporting = queue.copyAndClear(() => new Promise(resolve => { finish = resolve; }));
+  queue.setIncludePageUrl(false);
+  finish(); await exporting;
+  expect(queue.getSnapshot().items[0].comment).toBe('Retain the comment, remove its URL');
+  expect(restoreFeedbackDraft(saved)[0].context).not.toHaveProperty('pageUrl');
+  queue.setIncludePageUrl(true);
+  expect(queue.getSnapshot().items[0].context).not.toHaveProperty('pageUrl');
+});
+
 it('freezes captured context and restores a versioned tab draft without merging content and feature targets', () => {
   let saved = '';
   const queue = createFeedbackQueue([], value => { saved = value; });

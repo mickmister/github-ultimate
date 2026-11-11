@@ -10,10 +10,14 @@ export default meta;
 type Story = StoryObj;
 
 // Real feedback and document-rendering components, with a nested UI boundary.
-export const NestedTargets: Story = { render: () => <FeedbackProvider>
+function FeedbackExample({ includePageUrl = false }: { includePageUrl?: boolean }) {
+  return <FeedbackProvider includePageUrl={includePageUrl} storageKey={includePageUrl ? 'feedback:url-opt-in-demo:v1' : undefined}>
   <AttachableContext target={{ elementId: 'documents', label: 'document browser', uiPath: ['Documents'], featureId: 'documents.browser' }}>
     <AttachableContext target={{ ...documentFeedbackTarget(readyModel, mockSnapshot.documents[0], 'documents.markdown-renderer', 'rendered-markdown'), uiPath: ['Reader'] }}>
       <MarkdownDocument content={mockDocumentContents.brief} />
     </AttachableContext>
   </AttachableContext>
-</FeedbackProvider> };
+</FeedbackProvider>;
+}
+export const NestedTargets: Story = { render: () => <FeedbackExample /> };
+export const UrlOptIn: Story = { render: () => <FeedbackExample includePageUrl /> };

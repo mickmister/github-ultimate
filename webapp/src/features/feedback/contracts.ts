@@ -24,11 +24,15 @@ export interface FeedbackSelection {
 export interface FeedbackCapture {
   readonly target: FeedbackTarget;
   readonly selection: FeedbackSelection | null;
-  readonly pageUrl: string;
+  readonly pageUrl?: string;
   readonly appBuild: string;
   readonly capturedAt: string;
 }
 export type FeedbackKind = 'content-comment' | 'feature-comment';
+export interface FeedbackOptions {
+  /** Expose the current browser URL only when the embedding app explicitly opts in. */
+  readonly includePageUrl?: boolean;
+}
 export interface FeedbackComment {
   readonly id: string;
   readonly version: number;

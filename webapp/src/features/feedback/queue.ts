@@ -1,4 +1,4 @@
-import type { FeedbackCapture, FeedbackComment, FeedbackKind } from './contracts';
+import type { FeedbackCapture, FeedbackComment, FeedbackKind, FeedbackOptions } from './contracts';
 
 export const feedbackStorageKey = 'github-ultimate:feedback:v1';
 export function restoreFeedbackDraft(value: string | null): FeedbackComment[] {
@@ -9,7 +9,7 @@ export function restoreFeedbackDraft(value: string | null): FeedbackComment[] {
       const context = item?.context, target = context?.target, selection = context?.selection;
       return typeof item.id === 'string' && Number.isSafeInteger(item.version) && item.version > 0 &&
         ['content-comment', 'feature-comment'].includes(item.kind) && typeof item.comment === 'string' &&
-        typeof context?.pageUrl === 'string' && typeof context.appBuild === 'string' && typeof context.capturedAt === 'string' &&
+        (context?.pageUrl === undefined || typeof context.pageUrl === 'string') && typeof context?.appBuild === 'string' && typeof context.capturedAt === 'string' &&
         typeof target?.elementId === 'string' && typeof target.label === 'string' && typeof target.featureId === 'string' &&
         Array.isArray(target.uiPath) && target.uiPath.every(part => typeof part === 'string') &&
         (target.resource === undefined || typeof target.resource?.kind === 'string' && typeof target.resource.id === 'string') &&
@@ -18,8 +18,15 @@ export function restoreFeedbackDraft(value: string | null): FeedbackComment[] {
   } catch { return []; }
 }
 
-export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], persist: (value: string) => void = () => {}) {
-  let state = { items: initial, exporting: false, message: '' };
+export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], persist: (value: string) => void = () => {}, options: FeedbackOptions = {}) {
+  let includePageUrl = options.includePageUrl === true;
+  function capture(context: FeedbackCapture): FeedbackCapture {
+    if (includePageUrl) return context;
+    const { pageUrl: _pageUrl, ...requiredContext } = context;
+    return requiredContext;
+  }
+  const sanitize = (item: FeedbackComment) => ({ ...item, context: capture(item.context) });
+  let state = { items: initial.map(sanitize), exporting: false, message: '' };
   const listeners = new Set<() => void>();
   function update(next: Partial<typeof state>, save = false) {
     state = { ...state, ...next };
@@ -29,12 +36,19 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
     }
     listeners.forEach(listener => listener());
   }
+  // Migrate old tab drafts immediately, rather than waiting for an edit/export.
+  if (!includePageUrl && initial.some(item => item.context.pageUrl !== undefined)) update({}, true);
   return {
     getSnapshot: () => state,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    setIncludePageUrl(include: boolean) {
+      if (includePageUrl === include) return;
+      includePageUrl = include;
+      if (!include) update({ items: state.items.map(item => item.context.pageUrl === undefined ? item : { ...sanitize(item), version: item.version + 1 }) }, true);
+    },
     add(kind: FeedbackKind, comment: string, context: FeedbackCapture) {
       if (!comment.trim()) return;
-      const item: FeedbackComment = { id: crypto.randomUUID(), version: 1, kind, comment, context: structuredClone(context) };
+      const item: FeedbackComment = { id: crypto.randomUUID(), version: 1, kind, comment, context: structuredClone(capture(context)) };
       update({ items: [...state.items, item], message: 'Comment queued.' }, true);
     },
     edit(id: string, comment: string) {
