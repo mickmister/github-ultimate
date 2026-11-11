@@ -25,7 +25,7 @@ jobs:
       actions: read
     steps:
       - name: Observe build
-        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
+        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
         timeout-minutes: 2
         with:
           profile: ${{ inputs.observability-profile || 'light' }}
@@ -120,7 +120,7 @@ jobs:
             browsers: chromium webkit
     steps:
       - name: Observe browser tests
-        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
+        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
         timeout-minutes: 2
         with:
           profile: ${{ inputs.observability-profile || 'light' }}
@@ -258,7 +258,7 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Observe Pages publication
-        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
+        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
         timeout-minutes: 2
         with:
           profile: ${{ inputs.observability-profile || 'light' }}

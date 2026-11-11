@@ -1,9 +1,8 @@
-name: Observability action smoke
+name: Shared observability consumer smoke
 on:
   push:
     branches: ['**', '!gh-pages']
     paths:
-      - .github/actions/observability/**
       - .github/workflows/observability-smoke.yml
   workflow_dispatch:
 permissions:
@@ -20,7 +19,7 @@ jobs:
     steps:
       - name: Observe smoke test
         id: observe
-        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
+        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
         timeout-minutes: 2
         with:
           profile: ${{ matrix.profile }}
