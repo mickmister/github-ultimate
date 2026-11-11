@@ -28,6 +28,78 @@ async function ready(controller: ReturnType<typeof setup>, expected = snapshot) 
 }
 
 describe('document browser behavior independent of presentation', () => {
+  const linked = { connection: connection.id, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'note-a' };
+
+  it('restores a cold document link through approved connections, discovery and verified reads', async () => {
+    const controller = setup();
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.getSnapshot()).toMatchObject({ connectionId: connection.id, repository: 'owner/storage', workspaceId: 'workspace-a', documentId: 'note-a', documentFullscreen: true, documentMode: 'markdown' });
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: connection.id, installationId: connection.installationId, repository: 'owner/storage', workspace: 'workspace-a' });
+    controller.actions.setQuery('a.md');
+    controller.actions.setDocumentMode('source');
+    controller.actions.openLocation({ ...linked, documentId: undefined });
+    expect(controller.getSnapshot()).toMatchObject({ query: 'a.md', content: 'Hello', documentFullscreen: false, expandedFolders: ['notes'] });
+    controller.actions.openLocation(linked);
+    expect(controller.getSnapshot()).toMatchObject({ documentFullscreen: true, documentMode: 'source', content: 'Hello' });
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+    expect(controller.module.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects incomplete, unapproved and unavailable link scopes without substituting another connection', async () => {
+    const controller = setup();
+    controller.actions.openLocation({ documentId: 'note-a' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('needs a connection'));
+    expect(controller.module.connect).not.toHaveBeenCalled();
+    controller.actions.openLocation({ ...linked, connection: 'another-device' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('not approved'));
+    expect(controller.getSnapshot().connections).toEqual([connection]);
+    expect(controller.module.discover).not.toHaveBeenCalled();
+    controller.actions.openLocation({ ...linked, workspace: 'missing' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('workspace is unavailable'));
+    expect(controller.module.open).not.toHaveBeenCalled();
+    expect(controller.module.read).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing documents without reading a different resource', async () => {
+    const controller = setup();
+    controller.actions.openLocation({ ...linked, documentId: 'missing' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('not in this workspace snapshot'));
+    expect(controller.getSnapshot().snapshot).toEqual(snapshot);
+    expect(controller.module.read).not.toHaveBeenCalled();
+  });
+
+  it('stops stale deep-link restoration before it opens or reads the old scope', async () => {
+    const controller = setup();
+    let finish!: (value: { id: string; hasDocuments: boolean }[]) => void;
+    controller.module.discover.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.module.discover).toHaveBeenCalledTimes(1));
+    controller.actions.openLocation({ ...linked, repository: 'new/storage' });
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    finish([{ id: 'workspace-a', hasDocuments: true }]);
+    await Promise.resolve(); await Promise.resolve();
+    expect(controller.getSnapshot()).toMatchObject({ repository: 'new/storage', content: 'Hello' });
+    expect(controller.module.open).toHaveBeenCalledTimes(1);
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: connection.id, installationId: 123, repository: 'new/storage', workspace: 'workspace-a' });
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a pending linked workspace when history returns to the unscoped browser', async () => {
+    const controller = setup();
+    let finish!: (value: { id: string; hasDocuments: boolean }[]) => void;
+    controller.module.discover.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.module.discover).toHaveBeenCalledTimes(1));
+    controller.actions.openLocation({});
+    await vi.waitFor(() => expect(controller.getSnapshot().canDiscover).toBe(true));
+    finish([{ id: 'workspace-a', hasDocuments: true }]);
+    await Promise.resolve(); await Promise.resolve();
+    expect(controller.getSnapshot()).toMatchObject({ snapshot: null, documentId: '', documentFullscreen: false, workspaceId: '' });
+    expect(controller.module.open).not.toHaveBeenCalled();
+    expect(controller.module.read).not.toHaveBeenCalled();
+  });
+
   it('keeps expansion separate from reads, reveals selected ancestors and resets navigation on scope changes', async () => {
     const controller = setup();
     await ready(controller);

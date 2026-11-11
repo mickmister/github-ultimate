@@ -3,6 +3,7 @@ import type { DocumentBrowserActions, DocumentBrowserModel } from './contracts';
 import { isMarkdown } from './document-format';
 import { ancestorFolders } from './document-tree';
 import { defaultTreeAppearance, type TreeAppearance } from './tree-appearance';
+import type { DocumentLocation } from './navigation';
 
 const validRepository = (value: string) => /^(?!\.{1,2}\/)[a-zA-Z0-9_.-]+\/(?!\.{1,2}$)[a-zA-Z0-9_.-]+$/.test(value) && value.length <= 220;
 
@@ -30,11 +31,11 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     generation++;
     patch({ busy: false, error: null, ...next });
   }
-  async function run(message: string, work: () => Promise<Partial<DocumentBrowserModel>>) {
+  async function run(message: string, work: (isCurrent: () => boolean) => Promise<Partial<DocumentBrowserModel>>) {
     const current = ++generation;
     patch({ busy: true, error: null, status: message });
     try {
-      const result = await work();
+      const result = await work(() => !disposed && current === generation);
       if (current === generation) patch({ ...result, busy: false });
     } catch (error) {
       if (current === generation) patch({ busy: false, content: null, error: error instanceof Error ? error.message : 'Document request failed.', status: 'Request failed. Retry or choose another connection.' });
@@ -45,7 +46,43 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     if (!connection || !validRepository(state.repository.trim())) throw new Error('Choose an approved connection and a valid owner/repository.');
     return { connectionId: connection.id, installationId: connection.installationId, repository: state.repository.trim(), workspace: state.workspaceId };
   }
-  const actions = Object.freeze<DocumentBrowserActions>({
+  const actions = Object.freeze<DocumentBrowserActions & { openLocation(location: DocumentLocation): void }>({
+    openLocation(location) {
+      if (disposed) return;
+      const { connection, repository, workspace, documentId } = location;
+      if (!connection && !repository && !workspace && !documentId) { invalidate(emptyDocuments); actions.connect(); return; }
+      if (state.snapshot && connection === state.connectionId && repository === state.repository && workspace === state.workspaceId) {
+        if (!documentId) { invalidate({ documentFullscreen: false }); return; }
+        if (documentId === state.documentId && state.content !== null) { invalidate({ documentFullscreen: true }); return; }
+        if (state.snapshot.documents.some(document => document.id === documentId)) { actions.selectDocument(documentId); return; }
+        invalidate({ ...emptyDocuments, error: 'The linked document is not in this workspace snapshot.', status: 'Document not found.' });
+        return;
+      }
+      patch({ ...emptyDocuments, connectionId: '', repository: repository ?? '', workspaceId: '', workspaces: [] });
+      void run('Restoring workspace document link…', async isCurrent => {
+        if (!connection || !repository || !workspace || !validRepository(repository)) throw new Error('This document link needs a connection, valid repository and workspace. Choose the workspace below to continue.');
+        const connections = state.connections.length ? state.connections : await api.connect();
+        if (!isCurrent()) return {};
+        patch({ connections });
+        const approved = connections.find(item => item.id === connection);
+        if (!approved) throw new Error('The linked connection is not approved on this device. Open extension connection settings or choose another connection.');
+        const selected = { connectionId: approved.id, installationId: approved.installationId, repository, workspace };
+        patch({ connectionId: approved.id });
+        const workspaces = await api.discover(selected);
+        if (!isCurrent()) return {};
+        if (!workspaces.some(item => item.id === workspace && item.hasDocuments)) throw new Error('The linked workspace is unavailable or has no documents.');
+        patch({ workspaces, workspaceId: workspace });
+        const snapshot = await api.open(selected);
+        if (!isCurrent()) return {};
+        const document = documentId ? snapshot.documents.find(item => item.id === documentId) : undefined;
+        const restored = { connections, connectionId: approved.id, repository, workspaces, workspaceId: workspace, snapshot };
+        patch(restored);
+        if (documentId && !document) throw new Error('The linked document is not in this workspace snapshot.');
+        if (!document) return { ...restored, status: `${snapshot.documents.length} document(s) in the verified snapshot.` };
+        patch({ documentId, expandedFolders: ancestorFolders(document.path), documentMode: isMarkdown(document.path) ? 'markdown' : 'source', documentFullscreen: true });
+        return { content: await api.read(snapshot.id, document.id), status: 'Document bytes verified against the Git blob.' };
+      });
+    },
     connect() {
       if (state.busy || disposed) return;
       patch({ connections: [], connectionId: '', workspaces: [], workspaceId: '', ...emptyDocuments });

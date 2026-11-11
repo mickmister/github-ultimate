@@ -1,4 +1,3 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { DocumentBrowser } from '../features/documents/DocumentBrowser';
+import { createFileRoute, redirect } from '@tanstack/react-router';
 
-export const Route = createFileRoute('/')({ ssr: false, component: DocumentBrowser });
+export const Route = createFileRoute('/')({ ssr: false, beforeLoad: () => { throw redirect({ to: '/documents', replace: true }); } });
