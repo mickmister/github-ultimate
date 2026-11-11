@@ -119,6 +119,12 @@ the actual sender origin from browser metadata, not a page-supplied claim.
 
 ## Build and publication
 
+Successful CI Pages deployments add a `github-pages` commit status linking directly
+to the published branch preview and a `github-pages/storybook` status linking to
+its mock-data Storybook. Branch-deletion cleanup deployments link `github-pages`
+to the updated preview index instead. Statuses are posted only after Pages
+confirms deployment; the workflow summary also includes these links.
+
 `pnpm run pages:build` builds the existing hosted pages, the TanStack SPA at
 `app/`, and the mock-data React Storybook at `storybook/` into `hosted-dist/`.
 `pnpm run hosted:build` remains available to build the hosted pages and SPA
