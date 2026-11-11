@@ -224,6 +224,9 @@ importers:
       '@ark-ui/react':
         specifier: 5.40.0
         version: 5.40.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@mermaid-js/tiny':
+        specifier: 12.3.0
+        version: 12.3.0
       '@tanstack/react-router':
         specifier: 1.170.42
         version: 1.170.42(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -784,6 +787,10 @@ packages:
 
   '@jridgewell/trace-mapping@0.3.31':
     resolution: {integrity: sha512-zzNR+SdQSDJzc8joaeP8QQoCQr8NuYx2dIIytl1QeBEZHJ9uW6hebsrYgbz8hJwUQao3TWCMtmfV8Nu1twOLAw==}
+
+  '@mermaid-js/tiny@12.3.0':
+    resolution: {integrity: sha512-90BO2kQvmQWj9YjBX2IsLHCw61rN69dPTn5wFfDu+b9aT7qtzfzTA3wpKWeaRAKK85refSo9How5EOeY39DWfA==}
+    engines: {node: '>=22.12.0'}
 
   '@mickmister/openlint@0.1.0':
     resolution: {integrity: sha512-OikbKMkKKMxEK4blbi4uf3jIzrkUARLXhSufFeTxRN1mSt/rcv7jwhPOw/RkardrDu5tYDpA9XzTzb03Azb93Q==}
@@ -3075,6 +3082,8 @@ snapshots:
     dependencies:
       '@jridgewell/resolve-uri': 3.1.2
       '@jridgewell/sourcemap-codec': 1.6.0
+
+  '@mermaid-js/tiny@12.3.0': {}
 
   '@mickmister/openlint@0.1.0':
     dependencies:

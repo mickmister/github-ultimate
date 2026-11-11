@@ -79,6 +79,12 @@ word wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Switching
 views does not issue another document read. HTML scripts, remote embeds, and
 unsafe links are removed from the rendered Markdown.
 
+Fenced `mermaid` blocks render as diagrams, including `flowchart TD` and
+`flowchart LR`. The renderer is lazy-loaded from the app's own assets, and the
+resulting SVG is sanitized. Multiple diagrams can appear in one document;
+invalid diagrams retain their readable source with an inline error. **Source**
+always shows the original Markdown, including diagram definitions.
+
 **Back to documents** returns to the tree without discarding the selected file,
 search, expanded folders or loaded content. **Open fullscreen** reopens that
 loaded document without another read. Each new file selection defaults back to
