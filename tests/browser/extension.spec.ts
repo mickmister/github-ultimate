@@ -26,6 +26,42 @@ test.beforeEach(async () => {
 });
 test.afterEach(async () => { await context?.close(); await rm(profile, { recursive: true, force: true }); });
 
+test('GitHub code-block scrollers and page scroll padding do not break sticky question navigation', async () => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.addStyleTag({ content: 'html { scroll-padding-top: 80px; } .highlight-source-json { overflow: auto; position: relative; } main { padding-top: 250px; padding-bottom: 1200px; }' });
+  const header = page.locator('#issuecomment-1 .wizard-header');
+  const anchor = page.locator('#issuecomment-1 .wizard-anchor');
+  const tabs = header.locator('.question-index button');
+  // Use real pointer coordinates: Playwright's locator.click would itself
+  // scroll the sticky tab to honor the page's scroll-padding before clicking.
+  const clickTab = async (index: number) => {
+    const box = (await tabs.nth(index).boundingBox())!;
+    await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  };
+  await header.evaluate(node => {
+    for (const field of node.parentElement!.querySelectorAll<HTMLElement>('fieldset')) field.style.minHeight = '1800px';
+  });
+  await page.evaluate(() => scrollTo(0, 0));
+  const initial = await page.evaluate(() => scrollY);
+  await clickTab(1);
+  expect(await page.evaluate(() => scrollY)).toBe(initial);
+  await clickTab(0);
+  await anchor.evaluate(node => window.scrollBy(0, node.getBoundingClientRect().top));
+  const aligned = await page.evaluate(() => scrollY);
+  await clickTab(1);
+  expect(Math.abs(await page.evaluate(() => scrollY) - aligned)).toBeLessThanOrEqual(1);
+  await page.evaluate(() => scrollBy(0, 300));
+  expect(Math.abs((await header.boundingBox())!.y)).toBeLessThanOrEqual(1);
+  await clickTab(0);
+  expect(Math.abs((await anchor.boundingBox())!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs((await header.boundingBox())!.y)).toBeLessThanOrEqual(1);
+  await page.evaluate(() => scrollBy(0, 200));
+  const nextBox = (await header.getByRole('button', { name: 'Next', exact: true }).boundingBox())!;
+  await page.mouse.click(nextBox.x + nextBox.width / 2, nextBox.y + nextBox.height / 2);
+  expect(Math.abs((await header.boundingBox())!.y)).toBeLessThanOrEqual(1);
+  expect(Math.abs((await anchor.boundingBox())!.y)).toBeLessThanOrEqual(1);
+});
+
 test('diagnostic setting updates inline tools and keeps either tool group centered', async () => {
   const row = page.locator('.wizard-header .wizard-navigation');
   const tools = row.locator('.record-tools');

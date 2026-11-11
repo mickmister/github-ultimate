@@ -57,7 +57,9 @@ function isRecord(block: HTMLElement, raw: string) {
 function presentationFor(code: HTMLElement): HTMLElement {
   const details = code.closest('details');
   const label = details?.querySelector(':scope > summary')?.textContent ?? '';
-  return details && (label.startsWith('Form: ') || label === 'Submitted answers · GitHub Ultimate') ? details : code;
+  // GitHub's highlighted-code wrapper scrolls independently. Mount the form
+  // beside that wrapper so its sticky header follows the PR conversation.
+  return details && (label.startsWith('Form: ') || label === 'Submitted answers · GitHub Ultimate') ? details : code.closest<HTMLElement>('.highlight, [class*="highlight-source-"]') ?? code;
 }
 function ensureController(item: Mounted) {
   if (item.controller || !item.data || !('format' in item.data)) return;
