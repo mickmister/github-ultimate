@@ -60,11 +60,11 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
     web.webViewClient = object : WebViewClient() {
       override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         if (!request.isForMainFrame) return true
-        if (!allowed(request.url.toString())) { invalidate(); fail("Navigation outside the deployment was blocked."); return true }
+        if (!allowed(request.url.toString())) { invalidateDocument(); fail("Navigation outside the deployment was blocked."); return true }
         return false
       }
       override fun onPageStarted(view: WebView, url: String, icon: Bitmap?) {
-        invalidate()
+        invalidateDocument()
         if (!allowed(url)) { view.stopLoading(); fail("Document is outside the deployment."); return }
         // Captured from the native navigation lifecycle, not history-mutated JS.
         documentURL = url
@@ -77,7 +77,7 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
       override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) { if (request.isForMainFrame) fail("Document load failed; reload to retry.") }
       override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) { if (request.isForMainFrame) fail("Document returned an HTTP error.") }
       override fun onReceivedSslError(view: WebView, handler: SslErrorHandler, error: SslError) { handler.cancel(); fail("TLS validation failed.") }
-      override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean { invalidate(); fail("Web content process stopped; reload to reconnect."); return true }
+      override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean { invalidateDocument(); fail("Web content process stopped; reload to reconnect."); return true }
     }
   }
 
@@ -94,7 +94,7 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
   fun loadEntry() {
     if (entry == loadedEntry || scope.isEmpty()) return
     loadedEntry = entry
-    invalidate()
+    invalidateDocument()
     if (!allowed(entry)) { fail("Entry is outside the HTTPS deployment."); return }
     if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) { fail("Update Android System WebView: origin-aware messaging is required."); return }
     if (!listenerInstalled) {
@@ -114,7 +114,7 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
     web.loadUrl(entry)
   }
 
-  private fun invalidate() {
+  private fun invalidateDocument() {
     ready = false; documentId = UUID.randomUUID().toString(); documentURL = ""
     onDocument(mapOf("state" to "loading", "documentId" to documentId, "documentURL" to ""))
   }
