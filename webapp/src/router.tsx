@@ -1,11 +1,12 @@
-import { createRouter } from '@tanstack/react-router';
+import { createHashHistory, createRouter } from '@tanstack/react-router';
 import { routeTree } from './routeTree.gen';
 
 export function getRouter() {
   return createRouter({
     routeTree,
-    // This first SPA has one index route, served by app/index.html on Pages.
-    basepath: import.meta.env.BASE_URL,
+    basepath: '/',
+    // The Pages deployment prefix belongs before #, never inside route paths.
+    ...(typeof window === 'undefined' ? {} : { history: createHashHistory() }),
     scrollRestoration: true,
   });
 }

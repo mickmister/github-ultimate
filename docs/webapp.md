@@ -7,10 +7,10 @@ there are no server functions, server routes, or application data loaders.
 
 Start builds a server bundle locally solely to generate the static HTML shell.
 Only `webapp/dist/client` is copied to `hosted-dist/app` and published to Pages.
-No application UI/data is server-rendered. The current SPA has one index route,
-so a direct visit or reload works with GitHub Pages directory-index hosting.
-Additional pathname routes would need explicit static entry points or a routing
-strategy compatible with Pages; no catch-all rewrite is assumed.
+No application UI/data is server-rendered. TanStack Router uses hash history:
+`app/#/documents` browses a workspace and `app/#/documents/<document-id>` opens
+a reader page. The Pages deployment prefix stays before the hash; every reload
+requests the same `app/index.html`, without a catch-all rewrite.
 
 ## Development
 
@@ -27,18 +27,103 @@ Open `http://127.0.0.1:3100/`. Approve that origin in the extension connection
 settings and reload the page to use real data. The extension handles sign-in and
 read authorization. The new page supports connection selection, repository and
 workspace discovery, verified document listing/reading, and local filtering.
-It intentionally does not copy the old settings page's diagnostics or Beads
-inspector. It does not persist document contents or navigation selections.
+Document routes carry `connection`, `repository` and `workspace` search fields
+inside the hash. A copied link or reload reconnects through approved extension
+capabilities, discovers that exact workspace, verifies its snapshot and reads
+the requested document. An unavailable connection/workspace/document produces an
+explicit error rather than silently selecting another one. Connection IDs are
+device-specific; a link does not grant access or carry credentials. Document IDs
+include the verified blob identity, so a removed or revised resource can become
+unavailable in the latest snapshot. Document contents are not persisted.
+
+Browser Back/Forward controls reader navigation. Returning to the same loaded
+workspace retains search, expansion, selection and content; reopening that same
+loaded document does not read it again. Search and expansion are tab-memory
+state, not serialized into links. Standalone embedded document browsers and
+presentation stories can still operate without a router.
+
+## Legacy UI migration inventory
+
+The TanStack app currently implements document browsing, rendered/source views
+and reusable feedback. The following manual-DOM surfaces still have production
+entry points and require separate migration work:
+
+| Surface | Current implementation |
+| --- | --- |
+| Workspace dashboard, workspace apps and Beads viewer | `hosted/main.ts`, `hosted/components.ts`, `hosted/workspace-apps.ts` |
+| Hosted connection/storage settings and diagnostics | `hosted/settings.ts`, `hosted/settings.html` |
+| GitHub form, response and workflow UI | `src/content.ts`, `src/ui.ts` |
+| Extension sign-in, connection and origin approval settings | `src/connections-page.ts` |
+| Extension popup | `src/popup.ts` |
+
+Shared host capabilities and verified readers can support React replacements,
+but rendering those surfaces through React remains separate from this routing
+change. The dashboard and hosted settings links remain available from the app.
 
 ## Document views
 
-Opening a document now mounts a read-only Monaco source editor instead of the
-plain-text pane. It supports syntax highlighting, line numbers, folding, word
-wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Markdown files also offer a
-**Markdown preview** button for headings, lists, tables, task lists, and fenced
-code blocks. **Source** returns to the exact verified document text. Switching
+The sidebar is an Ark UI tree, built from the verified snapshot's document paths.
+Folders sort before files, with natural filename ordering. File labels show the
+basename; accessible names and hover titles retain the full path. Folder
+expansion and keyboard focus do not fetch document contents. Enter/Space or a
+file click opens the document; selecting a document reveals its parent folders.
+Arrow keys, Home/End and typeahead follow Ark's tree keyboard behavior.
+Search retains and expands matching ancestor folders. Clearing search restores
+the previous folder expansion. Expansion resets when the workspace changes.
+
+### Tree appearance
+
+Open **Tree appearance** to choose comfortable/compact rows and an app-default,
+blue or teal accent. These preferences are stored in browser local storage;
+document contents and navigation are not. If storage is unavailable, the controls
+still work for the current tab. Coarse-pointer devices retain comfortable touch
+targets even when compact density is chosen.
+
+Embedders and user stylesheets can override these public CSS variables on an
+ancestor or individual `.document-tree`; no Ark internals need to be targeted:
+
+```css
+.document-sidebar {
+  --document-tree-accent: #7252bf;
+  --document-tree-selected-bg: #eee8fb;
+  --document-tree-indent: 20px;
+  --document-tree-row-height: 48px;
+  --document-tree-font-size: .9rem;
+  --document-tree-radius: 8px;
+}
+```
+
+Color overrides should provide matching light/dark values and readable contrast.
+The built-in palettes follow the system color scheme. The tree is a production
+component used by both the hosted app and its Storybook stories; its expansion,
+selection and appearance stay in the presentation-independent model/actions.
+
+### Read-only content
+
+Selecting a document opens a full-viewport reading layout, hiding the connection
+controls and tree. Markdown documents open in **Markdown preview** by default,
+with headings, lists, tables, task lists, and fenced code blocks. Other file
+types open in the read-only Monaco source editor. **Source** switches Markdown
+to its exact verified text, with syntax highlighting, line numbers, folding,
+word wrap, find (`Ctrl/Cmd+F`), and light/dark themes. Switching
 views does not issue another document read. HTML scripts, remote embeds, and
 unsafe links are removed from the rendered Markdown.
+
+Fenced `mermaid` blocks render as diagrams, including `flowchart TD` and
+`flowchart LR`. The renderer is lazy-loaded from the app's own assets, and the
+resulting SVG is sanitized. Multiple diagrams can appear in one document;
+invalid diagrams retain their readable source with an inline error. **Source**
+always shows the original Markdown, including diagram definitions.
+
+**Back to documents** returns to the tree without discarding the selected file,
+search, expanded folders or loaded content. **Open fullscreen** reopens that
+loaded document without another read. Each new file selection defaults back to
+Markdown preview (where applicable) and fullscreen. Escape returns to browsing
+in the app; Monaco retains Escape for editor widgets. Keyboard focus moves to
+the reader's back button on entry and the selected tree item on return. Loading
+and read errors retain the back control; failed reads also offer **Retry document**.
+This is an application layout, so it works inside the Storybook iframe and on
+phones without requesting browser fullscreen permissions.
 
 The editor and its JSON/editor workers are lazy-loaded and served from the same
 origin as the app, including branch-preview subpaths. Models, editors, and theme
@@ -99,7 +184,8 @@ pnpm run pages:build              # hosted-dist/ with app/ and storybook/
 Open **Web app → Document browser → Interactive** to exercise the production
 controller with deterministic in-memory `AppHooksV1` capabilities. Discover a
 workspace, browse documents, select one, and filter the list. No extension,
-GitHub credentials, network API, or browser storage is used. The story runs in
+GitHub credentials or network API is used. Appearance preferences use the same
+local browser storage as the app. The story runs in
 React Strict Mode to exercise the container's mount/disposal lifecycle.
 
 Presentation fixtures open directly in Monaco source, rich Markdown, JSON,

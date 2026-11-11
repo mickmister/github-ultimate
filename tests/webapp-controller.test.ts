@@ -29,6 +29,97 @@ async function ready(controller: ReturnType<typeof setup>, expected = snapshot) 
 }
 
 describe('document browser behavior independent of presentation', () => {
+  const linked = { connection: connection.id, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'note-a' };
+
+  it('restores a cold document link through approved connections, discovery and verified reads', async () => {
+    const controller = setup();
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.getSnapshot()).toMatchObject({ connectionId: connection.id, repository: 'owner/storage', workspaceId: 'workspace-a', documentId: 'note-a', documentFullscreen: true, documentMode: 'markdown' });
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: connection.id, installationId: connection.installationId, repository: 'owner/storage', workspace: 'workspace-a' });
+    controller.actions.setQuery('a.md');
+    controller.actions.setDocumentMode('source');
+    controller.actions.openLocation({ ...linked, documentId: undefined });
+    expect(controller.getSnapshot()).toMatchObject({ query: 'a.md', content: 'Hello', documentFullscreen: false, expandedFolders: ['notes'] });
+    controller.actions.openLocation(linked);
+    expect(controller.getSnapshot()).toMatchObject({ documentFullscreen: true, documentMode: 'source', content: 'Hello' });
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+    expect(controller.module.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects incomplete, unapproved and unavailable link scopes without substituting another connection', async () => {
+    const controller = setup();
+    controller.actions.openLocation({ documentId: 'note-a' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('needs a connection'));
+    expect(controller.module.connect).not.toHaveBeenCalled();
+    controller.actions.openLocation({ ...linked, connection: 'another-device' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('not approved'));
+    expect(controller.getSnapshot().connections).toEqual([connection]);
+    expect(controller.module.discover).not.toHaveBeenCalled();
+    controller.actions.openLocation({ ...linked, workspace: 'missing' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('workspace is unavailable'));
+    expect(controller.module.open).not.toHaveBeenCalled();
+    expect(controller.module.read).not.toHaveBeenCalled();
+  });
+
+  it('rejects missing documents without reading a different resource', async () => {
+    const controller = setup();
+    controller.actions.openLocation({ ...linked, documentId: 'missing' });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('not in this workspace snapshot'));
+    expect(controller.getSnapshot().snapshot).toEqual(snapshot);
+    expect(controller.module.read).not.toHaveBeenCalled();
+  });
+
+  it('stops stale deep-link restoration before it opens or reads the old scope', async () => {
+    const controller = setup();
+    let finish!: (value: { id: string; hasDocuments: boolean }[]) => void;
+    controller.module.discover.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.module.discover).toHaveBeenCalledTimes(1));
+    controller.actions.openLocation({ ...linked, repository: 'new/storage' });
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    finish([{ id: 'workspace-a', hasDocuments: true }]);
+    await Promise.resolve(); await Promise.resolve();
+    expect(controller.getSnapshot()).toMatchObject({ repository: 'new/storage', content: 'Hello' });
+    expect(controller.module.open).toHaveBeenCalledTimes(1);
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: connection.id, installationId: 123, repository: 'new/storage', workspace: 'workspace-a' });
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels a pending linked workspace when history returns to the unscoped browser', async () => {
+    const controller = setup();
+    let finish!: (value: { id: string; hasDocuments: boolean }[]) => void;
+    controller.module.discover.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.module.discover).toHaveBeenCalledTimes(1));
+    controller.actions.openLocation({});
+    await vi.waitFor(() => expect(controller.getSnapshot().canDiscover).toBe(true));
+    finish([{ id: 'workspace-a', hasDocuments: true }]);
+    await Promise.resolve(); await Promise.resolve();
+    expect(controller.getSnapshot()).toMatchObject({ snapshot: null, documentId: '', documentFullscreen: false, workspaceId: '' });
+    expect(controller.module.open).not.toHaveBeenCalled();
+    expect(controller.module.read).not.toHaveBeenCalled();
+  });
+
+  it('keeps expansion separate from reads, reveals selected ancestors and resets navigation on scope changes', async () => {
+    const controller = setup();
+    await ready(controller);
+    controller.actions.setExpandedFolders(['notes', 'not-a-folder']);
+    expect(controller.getSnapshot().expandedFolders).toEqual(['notes']);
+    expect(controller.module.read).not.toHaveBeenCalled();
+    controller.actions.setQuery('a.md');
+    controller.actions.setExpandedFolders([]);
+    controller.actions.setQuery('');
+    expect(controller.getSnapshot().expandedFolders).toEqual(['notes']);
+    controller.actions.setExpandedFolders([]);
+    controller.actions.selectDocument('note-a');
+    expect(controller.getSnapshot().expandedFolders).toEqual(['notes']);
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    controller.actions.setTreeAppearance({ density: 'compact', accent: 'teal' });
+    controller.actions.selectWorkspace('');
+    expect(controller.getSnapshot()).toMatchObject({ expandedFolders: [], snapshot: null, treeAppearance: { density: 'compact', accent: 'teal' } });
+  });
+
   it('switches Markdown/source without another read and resets the mode for non-Markdown or a new scope', async () => {
     const controller = setup();
     const value = { ...snapshot, documents: [...snapshot.documents, { id: 'config', path: 'config.json', size: 2 }] };
@@ -36,6 +127,8 @@ describe('document browser behavior independent of presentation', () => {
     await ready(controller, value);
     controller.actions.selectDocument('note-a');
     await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', documentFullscreen: true });
+    controller.actions.setDocumentMode('source');
     controller.actions.setDocumentMode('markdown');
     expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', content: 'Hello' });
     expect(controller.module.read).toHaveBeenCalledTimes(1);
@@ -44,7 +137,25 @@ describe('document browser behavior independent of presentation', () => {
     controller.actions.setDocumentMode('markdown');
     expect(controller.getSnapshot().documentMode).toBe('source');
     controller.actions.setRepository('other/storage');
-    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'source', snapshot: null, content: null });
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'source', documentFullscreen: false, snapshot: null, content: null });
+  });
+
+  it('opens every selection fullscreen with the appropriate format and keeps browsing context on return', async () => {
+    const controller = setup();
+    await ready(controller);
+    controller.actions.setQuery('a.md');
+    controller.actions.selectDocument('note-a');
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', documentFullscreen: true, content: null });
+    controller.actions.setDocumentFullscreen(false); // Returning while loading must not reopen the reader on completion.
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.getSnapshot()).toMatchObject({ documentFullscreen: false, documentId: 'note-a', query: 'a.md', expandedFolders: ['notes'] });
+    controller.actions.setDocumentMode('source');
+    controller.actions.setDocumentFullscreen(true);
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+    controller.actions.selectDocument('note-a');
+    expect(controller.getSnapshot()).toMatchObject({ documentMode: 'markdown', documentFullscreen: true });
+    controller.actions.selectDocument('unknown');
+    expect(controller.getSnapshot().documentId).toBe('note-a');
   });
 
   it('guards commands, binds the selected installation, and rejects missing-document workspaces', async () => {

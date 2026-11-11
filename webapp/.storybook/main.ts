@@ -1,6 +1,7 @@
 import type { StorybookConfig } from '@storybook/react-vite';
 import { mergeConfig } from 'vite';
 import { fileURLToPath } from 'node:url';
+import { uiBuild } from '../build-metadata';
 
 const config: StorybookConfig = {
   framework: {
@@ -12,6 +13,7 @@ const config: StorybookConfig = {
   core: { disableTelemetry: true, allowedHosts: ['.jamtools.dev'] },
   async viteFinal(config, { configType }) {
     return mergeConfig(config, {
+      define: { 'import.meta.env.VITE_UI_BUILD': JSON.stringify(uiBuild) },
       ...(configType === 'PRODUCTION' ? { base: './' } : {}),
       server: {
         allowedHosts: ['.jamtools.dev', 'localhost', '127.0.0.1'],
