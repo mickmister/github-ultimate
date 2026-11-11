@@ -16,6 +16,8 @@ import 'monaco-editor/languages/definitions/shell/register.js';
 import 'monaco-editor/language/json/monaco.contribution.js';
 import { documentLanguage } from './document-format';
 import { registerFeedbackSelection } from '../feedback/selection';
+import { registerFeedbackAnnotations } from '../feedback/annotation-adapter';
+import type { FeedbackComment } from '../feedback/contracts';
 
 // Vite emits same-origin workers alongside the app/Storybook assets. No CDN.
 globalThis.MonacoEnvironment = {
@@ -42,8 +44,51 @@ export function mountDocumentEditor(host: HTMLElement, path: string, content: st
       endLineNumber: selection.endLineNumber, endColumn: selection.endColumn,
     })) };
   });
+  const decorations = editor.createDecorationsCollection();
+  let annotations: { item: FeedbackComment; ranges: monaco.Range[] }[] = [];
+  let activate = (_id: string) => {};
+  function sourceRanges(item: FeedbackComment) {
+    const selection = item.context.selection;
+    if (model.isDisposed() || selection?.representation !== 'source' || !Array.isArray(selection.ranges) || !selection.ranges.length) return null;
+    const ranges = [];
+    for (const value of selection.ranges) {
+      if (!value || ![value.startLineNumber, value.startColumn, value.endLineNumber, value.endColumn].every(number => Number.isSafeInteger(number) && number > 0)) return null;
+      const range = model.validateRange(value);
+      if (!range.equalsRange(value)) return null;
+      ranges.push(range);
+    }
+    return ranges.map(range => model.getValueInRange(range)).join('\n') === selection.text ? ranges : null;
+  }
+  const unregisterAnnotations = registerFeedbackAnnotations(host, {
+    set(comments, activeId, onActivate) {
+      if (model.isDisposed()) return;
+      activate = onActivate;
+      annotations = comments.flatMap(item => { const ranges = sourceRanges(item); return ranges ? [{ item, ranges }] : []; });
+      decorations.set(annotations.flatMap(({ item, ranges }) => ranges.map(range => ({ range, options: {
+        description: 'Queued feedback comment', inlineClassName: `feedback-source-highlight${activeId === item.id ? ' is-active' : ''}`,
+        stickiness: monaco.editor.TrackedRangeStickiness.NeverGrowsWhenTypingAtEdges,
+        overviewRuler: { color: '#d39d2e', position: monaco.editor.OverviewRulerLane.Right },
+      } }))));
+    },
+    top(item) {
+      const range = annotations.find(value => value.item.id === item.id)?.ranges[0];
+      return range && !model.isDisposed() ? editor.getTopForPosition(range.startLineNumber, range.startColumn) - editor.getScrollTop() : null;
+    },
+    reveal(item) { const range = annotations.find(value => value.item.id === item.id)?.ranges[0]; if (range && !model.isDisposed()) editor.revealRangeInCenter(range); },
+    subscribe(measure) {
+      const scroll = editor.onDidScrollChange(measure), layout = editor.onDidLayoutChange(measure);
+      return () => { scroll.dispose(); layout.dispose(); };
+    },
+    clear() { annotations = []; if (!model.isDisposed()) decorations.clear(); },
+  });
+  const annotationClick = editor.onMouseUp(event => {
+    if (!event.target.position || !editor.getSelection()?.isEmpty()) return;
+    const comment = annotations.find(value => value.ranges.some(range => range.containsPosition(event.target.position!)));
+    if (comment) activate(comment.item.id);
+  });
   dark.addEventListener('change', theme);
   return () => {
+    unregisterAnnotations(); annotationClick.dispose();
     unregisterSelection();
     dark.removeEventListener('change', theme);
     editor.dispose(); model.dispose();

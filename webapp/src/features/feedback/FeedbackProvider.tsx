@@ -1,10 +1,13 @@
 import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import type { FeedbackCapture, FeedbackKind, FeedbackOptions, FeedbackSelection, FeedbackTarget } from './contracts';
+import type { FeedbackCapture, FeedbackComment, FeedbackKind, FeedbackOptions, FeedbackSelection, FeedbackTarget } from './contracts';
 import { createFeedbackQueue, feedbackStorageKey, restoreFeedbackDraft } from './queue';
 import { captureFeedbackSelection } from './selection';
 import { FeedbackShellView } from './FeedbackShell.view';
 
 interface FeedbackAPI {
+  readonly items: readonly FeedbackComment[];
+  edit(id: string, text: string): void;
+  remove(id: string): void;
   open(target: FeedbackTarget, root: HTMLElement, origin: HTMLElement, point?: { x: number; y: number }, selection?: FeedbackSelection | null): void;
 }
 export const FeedbackContext = createContext<FeedbackAPI | null>(null);
@@ -36,6 +39,7 @@ function FeedbackRoot({ children, includePageUrl, storageKey }: { children: Reac
   const origin = useRef<HTMLElement | null>(null);
   const commentRef = useRef<HTMLTextAreaElement | null>(null);
   const api: FeedbackAPI = {
+    items: state.items, edit: queue.edit, remove: queue.remove,
     open(target, root, trigger, point, selection) {
       const rect = trigger.getBoundingClientRect();
       const viewport = root.ownerDocument.defaultView!;
