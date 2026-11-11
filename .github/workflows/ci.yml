@@ -13,7 +13,7 @@ permissions:
 jobs:
   verify:
     if: github.event_name != 'delete'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -152,7 +152,7 @@ jobs:
       ((github.event_name == 'push' && startsWith(github.ref, 'refs/heads/') && github.ref_name != 'gh-pages' && needs.verify.result == 'success') ||
        (github.event_name == 'delete' && github.event.ref_type == 'branch' && github.event.ref != 'gh-pages'))
     needs: verify
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
