@@ -4,17 +4,16 @@ on:
     branches: ['**', '!gh-pages']
     tags: ['v*']
   workflow_dispatch:
+    inputs:
+      observability-profile:
+        description: Job tracing detail
+        type: choice
+        options: [light, full]
+        default: light
   delete:
 
 permissions:
   contents: read
-
-# Keep job/step/shell telemetry without ptrace or language-runtime injection.
-# These are read by Thoth's pre-hook and propagated to subsequent steps.
-env:
-  OTEL_SHELL_CONFIG_INJECT_DEEP: 'FALSE'
-  OTEL_SHELL_CONFIG_OBSERVE_SUBPROCESSES: 'FALSE'
-  OTEL_SHELL_CONFIG_OBSERVE_SIGNALS: 'FALSE'
 
 jobs:
   build:
@@ -25,24 +24,12 @@ jobs:
       contents: read
       actions: read
     steps:
-      - name: Audit job network traffic
-        uses: mickmister/cargowall-action@vk/46e5-vd-multi-instanc
-        with:
-          start-phase: pre
-          mode: audit
-          offline: 'true'
-          fail-on-unsupported: 'true'
-      - name: Capture Thoth telemetry
-        uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
+      - name: Observe build
+        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
         timeout-minutes: 2
         with:
-          self_monitoring: 'false'
-        env:
-          OTEL_SERVICE_NAME: github-ultimate-assets
-          OTEL_TRACES_EXPORTER: deferred
-          OTEL_METRICS_EXPORTER: deferred
-          OTEL_LOGS_EXPORTER: deferred
-          OTEL_GITHUB_JOB_SHUTDOWN_TIMEOUT: '60'
+          profile: ${{ inputs.observability-profile || 'light' }}
+          service-name: github-ultimate-assets
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -132,24 +119,12 @@ jobs:
           - suite: webapp-storybook
             browsers: chromium
     steps:
-      - name: Audit job network traffic
-        uses: mickmister/cargowall-action@vk/46e5-vd-multi-instanc
-        with:
-          start-phase: pre
-          mode: audit
-          offline: 'true'
-          fail-on-unsupported: 'true'
-      - name: Capture Thoth telemetry
-        uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
+      - name: Observe browser tests
+        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
         timeout-minutes: 2
         with:
-          self_monitoring: 'false'
-        env:
-          OTEL_SERVICE_NAME: github-ultimate-browser
-          OTEL_TRACES_EXPORTER: deferred
-          OTEL_METRICS_EXPORTER: deferred
-          OTEL_LOGS_EXPORTER: deferred
-          OTEL_GITHUB_JOB_SHUTDOWN_TIMEOUT: '60'
+          profile: ${{ inputs.observability-profile || 'light' }}
+          service-name: github-ultimate-browser
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -178,6 +153,8 @@ jobs:
       - name: Install browser binaries and system dependencies
         env:
           BROWSERS: ${{ matrix.browsers }}
+          OTEL_SHELL_CONFIG_OBSERVE_SUBPROCESSES: 'FALSE'
+          OTEL_SHELL_CONFIG_OBSERVE_SIGNALS: 'FALSE'
         run: pnpm exec playwright install --with-deps $BROWSERS
       - name: Test built assets
         env:
@@ -280,24 +257,12 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Audit Pages network traffic
-        uses: mickmister/cargowall-action@vk/46e5-vd-multi-instanc
-        with:
-          start-phase: pre
-          mode: audit
-          offline: 'true'
-          fail-on-unsupported: 'true'
-      - name: Capture Thoth telemetry
-        uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
+      - name: Observe Pages publication
+        uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc
         timeout-minutes: 2
         with:
-          self_monitoring: 'false'
-        env:
-          OTEL_SERVICE_NAME: github-ultimate-pages
-          OTEL_TRACES_EXPORTER: deferred
-          OTEL_METRICS_EXPORTER: deferred
-          OTEL_LOGS_EXPORTER: deferred
-          OTEL_GITHUB_JOB_SHUTDOWN_TIMEOUT: '60'
+          profile: ${{ inputs.observability-profile || 'light' }}
+          service-name: github-ultimate-pages
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
