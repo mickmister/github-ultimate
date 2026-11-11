@@ -21,6 +21,7 @@ test('captures selected content, persists across reload, edits and copies JSON b
   await dialog.getByLabel('Your comment').fill('Reword this introduction.');
   await dialog.getByRole('button', { name: 'Add to queue' }).click();
   await expect(page.getByRole('button', { name: 'Comments · 1', exact: true })).toBeVisible();
+  expect(await page.evaluate(() => JSON.parse(sessionStorage.getItem('github-ultimate:feedback:v1')!))).not.toHaveProperty('interactions.0.context.pageUrl');
   await page.getByRole('button', { name: 'Source', exact: true }).click();
   await page.reload();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
@@ -30,12 +31,32 @@ test('captures selected content, persists across reload, edits and copies JSON b
   await expect(review.getByText('No comments queued.', { exact: true })).toBeVisible();
   const batch = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
   expect(batch.schemaVersion).toBe(1);
+  expect(batch.interactions[0].context).not.toHaveProperty('pageUrl');
   expect(batch.interactions).toHaveLength(1);
   expect(batch.interactions[0]).toMatchObject({ kind: 'content-comment', comment: 'Make the introduction more concrete.', context: {
     target: { featureId: 'documents.markdown-renderer', uiPath: ['Documents', 'Reader'], resource: { kind: 'document', id: 'brief', path: 'planning/product-brief.md', revision: 'a1b2c3d4'.repeat(5) } },
     selection: { text: quote, representation: 'rendered-markdown' },
   } });
   expect(batch.interactions[0].context.appBuild).toMatch(/^[a-f0-9]{40}$/);
+});
+
+test('another application can explicitly opt into URLs with an isolated draft key', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await page.goto('/iframe.html?id=web-app-feedback--url-opt-in&viewMode=story');
+  const url = page.url();
+  await page.getByRole('button', { name: 'Comment on planning/product-brief.md', exact: true }).click();
+  await page.getByRole('menuitem', { name: 'Comment on Feature', exact: true }).click();
+  await page.getByLabel('Your comment').fill('This app opted into URL capture.');
+  await page.getByRole('button', { name: 'Add to queue', exact: true }).click();
+  const draft = await page.evaluate(() => JSON.parse(sessionStorage.getItem('feedback:url-opt-in-demo:v1')!));
+  expect(draft.interactions[0].context.pageUrl).toBe(url);
+  expect(await page.evaluate(() => sessionStorage.getItem('github-ultimate:feedback:v1'))).toBeNull();
+  await page.reload();
+  await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy JSON & clear', exact: true }).click();
+  await expect(page.getByRole('dialog')).toContainText('No comments queued.');
+  const batch = JSON.parse(await page.evaluate(() => navigator.clipboard.readText()));
+  expect(batch.interactions[0].context.pageUrl).toBe(url);
 });
 
 test('nearest nested target owns the menu; ordinary Copy does not enqueue; failed export preserves feature comments', async ({ page, context }) => {

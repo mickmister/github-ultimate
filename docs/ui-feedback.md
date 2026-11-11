@@ -12,13 +12,16 @@ Copy writes the highlighted text, without adding a queued item. It is disabled
 without a selection. Content comments require an attached resource; feature
 comments also work on sections such as the whole document tree.
 
-Comments capture the UI path, stable element/feature identifiers, page URL,
+Comments capture the UI path, stable element/feature identifiers,
 application build commit, resource identity/revision and highlighted text when
 the menu opens. Content comments address the resource revision. Feature comments
 address the application feature/build and retain the resource as reproduction
 context. DOM ranges supply rendered text with quote context; source uses Monaco's
 model selections and line/column ranges. Rendered-text positions are not claimed
 to be Markdown source positions. No whole-document/React-props dump is captured.
+The current browser URL is omitted by default, including from stored drafts and
+exported events. Location is represented by the explicitly supplied target and
+resource fields; these should contain only context the embedding app needs.
 
 ## Queue and clipboard
 
@@ -43,6 +46,28 @@ the draft. Workflow dispatch and server-side comment publication are future work
 Mount `FeedbackProvider` above the router or panels. The app root already does
 this. Standalone document presentations also provide it; nested providers reuse
 the existing queue/menu, so a page never gets duplicate feedback UI.
+The outermost provider owns configuration; nested providers cannot opt a parent
+queue into collecting URLs.
+
+Each application can configure its own tab-draft key. URL capture requires an
+explicit opt-in at that application's provider:
+
+```tsx
+// Default: no browser URL is read or included.
+<FeedbackProvider storageKey="my-app:feedback:v1">
+  <App />
+</FeedbackProvider>
+
+// Only if this application deliberately needs browser URLs:
+<FeedbackProvider storageKey="another-app:feedback:v1" includePageUrl>
+  <AnotherApp />
+</FeedbackProvider>
+```
+
+`pageUrl` is optional in schema version 1. Old URL-bearing drafts remain readable;
+with the default policy their URLs are removed when loaded and the sanitized
+draft is saved again. Turning off `includePageUrl` also removes URLs from queued
+comments. Turning it on does not reconstruct URLs omitted from earlier captures.
 
 ```tsx
 <AttachableContext target={{

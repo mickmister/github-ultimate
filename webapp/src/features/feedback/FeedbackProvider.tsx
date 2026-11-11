@@ -1,5 +1,5 @@
-import { createContext, useContext, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import type { FeedbackCapture, FeedbackKind, FeedbackSelection, FeedbackTarget } from './contracts';
+import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import type { FeedbackCapture, FeedbackKind, FeedbackOptions, FeedbackSelection, FeedbackTarget } from './contracts';
 import { createFeedbackQueue, feedbackStorageKey, restoreFeedbackDraft } from './queue';
 import { captureFeedbackSelection } from './selection';
 import { FeedbackShellView } from './FeedbackShell.view';
@@ -16,17 +16,18 @@ export function useFeedback() {
 }
 
 /** Place once above the router/panels; nested consumers also work as standalone presentations. */
-export function FeedbackProvider({ children }: { children: ReactNode }) {
+export function FeedbackProvider({ children, includePageUrl = false, storageKey = feedbackStorageKey }: FeedbackOptions & { children: ReactNode; storageKey?: string }) {
   const parent = useContext(FeedbackContext);
-  return parent ? <>{children}</> : <FeedbackRoot>{children}</FeedbackRoot>;
+  return parent ? <>{children}</> : <FeedbackRoot key={storageKey} includePageUrl={includePageUrl} storageKey={storageKey}>{children}</FeedbackRoot>;
 }
 
-function FeedbackRoot({ children }: { children: ReactNode }) {
+function FeedbackRoot({ children, includePageUrl, storageKey }: { children: ReactNode; includePageUrl: boolean; storageKey: string }) {
   const [queue] = useState(() => {
     let initial = null;
-    try { initial = sessionStorage.getItem(feedbackStorageKey); } catch { /* Memory-only draft until storage is available. */ }
-    return createFeedbackQueue(restoreFeedbackDraft(initial), value => sessionStorage.setItem(feedbackStorageKey, value));
+    try { initial = sessionStorage.getItem(storageKey); } catch { /* Memory-only draft until storage is available. */ }
+    return createFeedbackQueue(restoreFeedbackDraft(initial), value => sessionStorage.setItem(storageKey, value), { includePageUrl });
   });
+  useEffect(() => { queue.setIncludePageUrl(includePageUrl); }, [queue, includePageUrl]);
   const state = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const [active, setActive] = useState<{ context: FeedbackCapture; point: { x: number; y: number } } | null>(null);
   const [composer, setComposer] = useState<{ kind: FeedbackKind; context: FeedbackCapture; text: string } | null>(null);
@@ -42,7 +43,8 @@ function FeedbackRoot({ children }: { children: ReactNode }) {
       setNotice('');
       setActive({ point: point ?? { x: Math.max(8, Math.min(rect.left, viewport.innerWidth - 8)), y: Math.max(8, Math.min(rect.bottom, viewport.innerHeight - 8)) }, context: structuredClone({
         target, selection: selection === undefined ? captureFeedbackSelection(root, target.representation) : selection,
-        pageUrl: location.href, appBuild: import.meta.env.VITE_UI_BUILD ?? 'development', capturedAt: new Date().toISOString(),
+        ...(includePageUrl ? { pageUrl: root.ownerDocument.location.href } : {}),
+        appBuild: import.meta.env.VITE_UI_BUILD ?? 'development', capturedAt: new Date().toISOString(),
       }) });
     },
   };
