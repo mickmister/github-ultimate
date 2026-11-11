@@ -42,7 +42,7 @@ function SubscribedBrowser({ controller, presentation: Presentation }: {
     if (!model.documentFullscreen) return;
     const escape = (event: KeyboardEvent) => {
       // Monaco owns Escape for its find widget and other editor interactions.
-      if (event.key === 'Escape' && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('.monaco-editor'))) {
+      if (event.key === 'Escape' && !event.defaultPrevented && !(event.target instanceof Element && event.target.closest('.monaco-editor, [data-feedback-control], [data-scope="menu"], [data-scope="dialog"]'))) {
         controller.actions.setDocumentFullscreen(false);
       }
     };
