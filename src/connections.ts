@@ -3,7 +3,6 @@ import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hos
 import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-reads';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 
-export const defaultClient = { name: 'GitHub Ultimate client', appId: 5684700, clientId: 'Iv23liGu3PxdoBoqgLiD' };
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('list') }).strict(),

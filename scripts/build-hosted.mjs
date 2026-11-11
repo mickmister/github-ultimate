@@ -7,7 +7,7 @@ const metadata = {
   branch: process.env.GITHUB_REF_NAME ?? execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim(),
   sha: execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim(),
 };
-const repositoryName = (process.env.GITHUB_REPOSITORY ?? 'mickmister/github-ultimate').split('/')[1];
+const repositoryName = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'github-ultimate';
 const webappBase = `/${repositoryName}/previews/${previewDirectory(metadata.branch)}/app/`;
 await rm('hosted-dist', { recursive: true, force: true });
 await mkdir('hosted-dist', { recursive: true });

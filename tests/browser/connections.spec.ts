@@ -1,9 +1,14 @@
-import { test, expect, chromium, type BrowserContext, type Worker } from '@playwright/test';
+import { test, expect, chromium, type BrowserContext, type Worker, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { mkdtemp, rm, cp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 
 let context: BrowserContext, profile: string;
+async function fillApp(page: Page, name = 'GitHub Ultimate client') {
+  await page.getByLabel('Name', { exact: true }).fill(name);
+  await page.getByLabel('App ID', { exact: true }).fill('12345');
+  await page.getByLabel('Public Client ID').fill('Iv23ExampleClient');
+}
 async function launch(hosted = false) {
   let extension = resolve('dist');
   if (hosted) {
@@ -45,7 +50,7 @@ async function mockGitHub(worker: Worker) {
       }
       if (!(init.headers as Record<string, string>)?.Authorization?.startsWith('Bearer ghu_browser_secret_')) return Response.json({}, { status: 401 });
       if (url === 'https://api.github.com/user') return Response.json({ login: 'mickmister', id: 1 });
-      if (url.startsWith('https://api.github.com/user/installations?')) return Response.json({ installations: [{ id: 123, app_id: 5684700, account: { login: 'mickmister' }, permissions: { contents: 'read', metadata: 'read', actions: 'write' } }] });
+      if (url.startsWith('https://api.github.com/user/installations?')) return Response.json({ installations: [{ id: 123, app_id: 12345, account: { login: 'mickmister' }, permissions: { contents: 'read', metadata: 'read', actions: 'write' } }] });
       if (url.startsWith('https://api.github.com/user/installations/123/repositories?')) return Response.json({ repositories: [{ full_name: 'mickmister/workspace-storage', private: true, default_branch: 'main' }] });
       if (url === 'https://api.github.com/repos/mickmister/workspace-storage/git/ref/heads/main') return Response.json({ object: { sha: 'b'.repeat(40), type: 'commit' } });
       const git = 'https://api.github.com/repos/mickmister/workspace-storage/git/';
@@ -84,7 +89,10 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   const id = await launch();
   let page = await context.newPage();
   await page.goto(`chrome-extension://${id}/connections.html`);
-  await expect(page.getByLabel('Public Client ID')).toHaveValue('Iv23liGu3PxdoBoqgLiD');
+  await expect(page.getByLabel('Name', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('App ID', { exact: true })).toHaveValue('');
+  await expect(page.getByLabel('Public Client ID')).toHaveValue('');
+  await fillApp(page);
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
   let first = page.getByRole('article', { name: 'GitHub Ultimate client', exact: true });
   await first.getByRole('button', { name: 'Sign in with device code' }).click();
@@ -92,11 +100,15 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await expect(first).toContainText('Signed in as mickmister', { timeout: 15000 });
   await first.getByRole('button', { name: 'Load installations' }).click();
   await first.getByRole('button', { name: 'Use mickmister' }).click();
+  await expect(first.getByLabel('Repository to read')).toHaveValue('');
+  await expect(first.getByLabel('Hosted origin to approve (all paths)')).toHaveValue('');
+  await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(first.getByLabel('Read results')).toContainText('"private": true');
   await expect(first.getByLabel('Read results')).toContainText('b'.repeat(40));
   await first.getByRole('button', { name: 'Refresh credentials' }).click();
   await expect(page.getByRole('status')).toContainText('Credentials refreshed');
+  await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Repository read succeeded');
   await expect(page.locator('body')).not.toContainText('ghu_browser_secret');
@@ -110,10 +122,11 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   page = await context.newPage(); await page.goto(`chrome-extension://${id}/connections.html`);
   first = page.getByRole('article', { name: 'GitHub Ultimate client', exact: true });
   await expect(first).toContainText('Signed in as mickmister');
+  await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(page.getByRole('status')).toContainText('Repository read succeeded');
 
-  await page.getByLabel('Name', { exact: true }).fill('Second connection');
+  await fillApp(page, 'Second connection');
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
   const second = page.getByRole('article', { name: 'Second connection', exact: true });
   await second.getByRole('button', { name: 'Sign in with device code' }).click();
@@ -122,6 +135,7 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await second.getByRole('button', { name: 'Use mickmister' }).click();
   await first.getByRole('button', { name: 'Disconnect locally' }).click();
   await expect(first.getByRole('button', { name: 'Sign in with device code' })).toBeVisible();
+  await second.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await second.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(second.getByLabel('Read results')).toContainText('b'.repeat(40));
   expect(await page.evaluate(async () => JSON.stringify(await chrome.storage.local.get(null)))).not.toMatch(/ghu_|ghr_|private-device/);
@@ -149,6 +163,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   const id = await launch(true);
   await serveHosted();
   const settings = await context.newPage(); await settings.goto(`chrome-extension://${id}/connections.html`);
+  await fillApp(settings);
   await settings.getByRole('button', { name: 'Add connection', exact: true }).click();
   const card = settings.getByRole('article', { name: 'GitHub Ultimate client', exact: true });
   await card.getByRole('button', { name: 'Sign in with device code' }).click();
@@ -156,12 +171,15 @@ test('hosted branch page reads through an approved connection and revocation tak
   await card.getByRole('button', { name: 'Load installations' }).click(); await card.getByRole('button', { name: 'Use mickmister' }).click();
   const page = await context.newPage(); await page.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/settings.html');
   await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
+  await card.getByLabel('Hosted origin to approve (all paths)').fill('https://mickmister.github.io');
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
   await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
   await expect(card.getByRole('button', { name: 'Bind workspace', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('status')).toContainText('1 approved connection');
   await expect(page.getByRole('button', { name: 'Read repository', exact: true })).toBeEnabled();
+  await expect(page.getByLabel('Repository (owner/name)')).toHaveValue('');
+  await page.getByLabel('Repository (owner/name)').fill('mickmister/workspace-storage');
   const worker = context.serviceWorkers()[0];
   const beforeInvalid = await worker.evaluate(() => (globalThis as typeof globalThis & { __githubRequests: string[] }).__githubRequests.length);
   const invalid = await page.evaluate(() => new Promise<{ ok: boolean; error: string }>(resolve => {
@@ -234,6 +252,9 @@ test('hosted branch page reads through an approved connection and revocation tak
   const workerURLs: string[] = []; modern.on('worker', worker => workerURLs.push(worker.url()));
   await modern.goto('https://mickmister.github.io' + appPath);
   await expect(modern.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
+  await expect(modern.getByLabel('Storage repository')).toHaveValue('');
+  await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
+  await modern.getByLabel('Storage repository').fill('mickmister/workspace-storage');
   await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeEnabled();
   await modern.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
   await expect(modern.getByRole('status')).toContainText('1 workspace(s) found');
@@ -271,6 +292,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(page.getByRole('status')).toContainText('no approved connections');
   await expect(page.getByLabel('Read result')).not.toContainText('"private": true');
   await page.getByRole('button', { name: 'Forget saved selections' }).click();
+  await expect(page.getByLabel('Repository (owner/name)')).toHaveValue('');
   expect(await page.evaluate(() => localStorage.length)).toBe(0);
 });
 

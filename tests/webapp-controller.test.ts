@@ -15,6 +15,7 @@ function setup() {
   };
   const host: AppHooksV1 = { contractVersion: 1, modules: { documents: module } };
   const controller = createDocumentBrowserController(host);
+  controller.actions.setRepository('example/workspace-storage');
   return { module, ...controller };
 }
 async function ready(controller: ReturnType<typeof setup>, expected = snapshot) {
@@ -51,7 +52,7 @@ describe('document browser behavior independent of presentation', () => {
     controller.actions.discoverWorkspaces(); controller.actions.browseDocuments();
     expect(controller.module.discover).not.toHaveBeenCalled(); expect(controller.module.open).not.toHaveBeenCalled();
     await ready(controller);
-    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: 'connection-a', installationId: 123, repository: 'mickmister/workspace-storage', workspace: 'workspace-a' });
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: 'connection-a', installationId: 123, repository: 'example/workspace-storage', workspace: 'workspace-a' });
     controller.actions.selectWorkspace('dolt-only');
     controller.actions.browseDocuments();
     expect(controller.getSnapshot().canBrowse).toBe(false);

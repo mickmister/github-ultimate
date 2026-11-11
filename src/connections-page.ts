@@ -1,13 +1,10 @@
-import { defaultClient, type ConnectionRequest, type PublicConnection, type Installation, type Repository } from './connections';
+import type { ConnectionRequest, PublicConnection, Installation, Repository } from './connections';
 import { extensionAPI } from './extension-api';
 import { trustedOrigin, originPattern } from './hosted-protocol';
 
 const status = document.getElementById('status')!;
 const container = document.getElementById('connections')!;
 const field = (id: string) => document.getElementById(id) as HTMLInputElement;
-field('name').value = defaultClient.name;
-field('appId').value = String(defaultClient.appId);
-field('clientId').value = defaultClient.clientId;
 
 async function request<T>(value: ConnectionRequest): Promise<T> {
   const response = await extensionAPI().runtime.sendMessage({ channel: 'github-ultimate-connections-v1', request: value });
@@ -65,7 +62,7 @@ function render() {
         });
         const label = element('label', 'Repository to read');
         const repository = element('input');
-        repository.value = 'mickmister/workspace-storage';
+        repository.placeholder = 'owner/repository';
         repository.autocomplete = 'off'; label.append(repository); card.append(label);
         button(card, 'Read repository', async () => {
           const result = await request({ operation: 'probe', id: record.id, repository: repository.value.trim() });
@@ -74,7 +71,7 @@ function render() {
         });
         card.append(output);
         const originLabel = element('label', 'Hosted origin to approve (all paths)');
-        const originInput = element('input'); originInput.value = 'https://mickmister.github.io'; originLabel.append(originInput); card.append(originLabel);
+        const originInput = element('input'); originInput.placeholder = 'https://your-app.example'; originLabel.append(originInput); card.append(originLabel);
         card.append(element('small', 'Read access covers every app and branch preview on this origin, not just this repository path. Workflow dispatch is not granted. Reload the hosted page after approval.'));
         button(card, 'Grant hosted read access', async () => {
           const origin = trustedOrigin(originInput.value.trim());

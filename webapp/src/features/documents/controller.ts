@@ -10,7 +10,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1) {
   const listeners = new Set<() => void>();
   let generation = 0, disposed = false;
   let state: DocumentBrowserModel = {
-    connections: [], connectionId: '', repository: 'mickmister/workspace-storage', workspaces: [], workspaceId: '',
+    connections: [], connectionId: '', repository: '', workspaces: [], workspaceId: '',
     snapshot: null, documentId: '', query: '', content: null, documentMode: 'source', busy: false, error: null,
     status: 'Connect to your approved extension to browse workspace documents.', canDiscover: false, canBrowse: false,
   };

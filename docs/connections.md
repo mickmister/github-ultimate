@@ -7,38 +7,43 @@ setting toggles the existing GitHub-page UI independently of App connections.
 
 ## Configure and test
 
-The add-connection form defaults to `gh-ultimate-browser-extension-auth`:
+The add-connection form starts empty. Enter a name and the App ID and public
+Client ID from the GitHub App you want to use. These values are saved with each
+connection in your browser profile; no account-specific App is built in.
 
-- App ID: `5684700`
-- Public Client ID: `Iv23liGu3PxdoBoqgLiD`
+Configure that App with:
+
 - Device flow enabled; expiring user authorization tokens enabled.
 - Contents read; Actions write; no Workflows permission. Additional read
   permissions may be configured. Do not use the writable CI App for this test.
 
-Install the App on the desired accounts/repositories. The initial test targets
-the private `mickmister/workspace-storage` repository, with public
-`mickmister/github-ultimate`, `mickmister/gh-agentic-workflows` and
-`mickmister/workspace-nuggets` also installed. Repository authorization comes from
-GitHub; this list is test context, not an extension repository allowlist.
+Install the App on the desired accounts/repositories. Repository authorization
+comes from GitHub, not an extension repository allowlist. Repository and hosted
+origin inputs also start empty; enter your own values. Hosted navigation can
+restore your previously saved repository selection; forgetting those selections
+clears the repository field.
 
 1. Build with `pnpm run build` and reload the unpacked extension from `dist/`.
    The new GitHub/API host permissions may need browser approval.
-2. Open the popup's **GitHub App connections** link. Add the default connection.
+2. Open the popup's **GitHub App connections** link. Enter your App details and add
+   the connection.
 3. Click **Sign in with device code**, then open GitHub device authorization and
    enter the displayed code. Leave the connections tab open. It polls no faster
    than GitHub's interval and honors `slow_down`. If the tab closes, reopen it to
    resume the persisted unexpired device flow. No secret/private key is entered.
-4. After sign-in, **Load installations** and **Use mickmister**. The page displays
+4. After sign-in, **Load installations** and choose **Use account** for your
+   intended account. The page displays
    the approved permissions; selecting an installation with write permissions
    beyond Actions is rejected. This detects a mistakenly selected CI App.
-5. **List repositories**, then **Read repository** for
-   `mickmister/workspace-storage`. Success displays its private flag, default
+5. **List repositories**, then enter an accessible `owner/repository` and choose
+   **Read repository**. Success displays its private flag, default
    branch and immutable head Git object ID. This is an authenticated private
    default-branch ref read, not yet `refs/dolt/data` reconstruction.
 6. **Refresh credentials**, then repeat the read. Device-flow refresh uses no
    client secret. Rotated credentials are persisted before further requests.
    Near-expiry credentials also refresh automatically before an API read.
-7. Reload the extension and settings page. Repeat the read to test persistence.
+7. Reload the extension and settings page. Enter the repository and repeat the
+   read to test credential persistence.
 8. Add another named connection (another client App if available). Select its
    installation explicitly. Disconnect one locally and verify the other still
    reads. Two entries for the same App are independent local records but may

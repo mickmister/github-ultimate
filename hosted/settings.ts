@@ -178,7 +178,7 @@ beadsButton.addEventListener('click', () => void action(async () => {
 }));
 document.getElementById('clear')!.addEventListener('click', () => { generation++; resetWorkspaces(); update(); result.textContent = 'Displayed data cleared.'; report('Displayed data cleared. Saved selections are retained.'); });
 document.getElementById('forget')!.addEventListener('click', () => {
-  generation++; forgetNavigation(); saved = undefined; resetWorkspaces(); select.value = ''; repository.value = 'mickmister/workspace-storage';
+  generation++; forgetNavigation(); saved = undefined; resetWorkspaces(); select.value = ''; repository.value = '';
   result.textContent = 'Displayed data cleared.'; rememberedInfo.textContent = ''; report('Saved selections forgotten and displayed data cleared.'); update();
 });
 void action(connect);

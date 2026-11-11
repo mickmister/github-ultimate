@@ -1,5 +1,7 @@
 import { beforeEach, expect, test, vi } from 'vitest';
-import { Connections, defaultClient, type ConnectionRecord, type ConnectionStore, type PublicConnection } from '../src/connections';
+import { Connections, type ConnectionRecord, type ConnectionStore, type PublicConnection } from '../src/connections';
+
+const defaultClient = { name: 'Example client', appId: 12345, clientId: 'Iv23ExampleClient' };
 
 class MemoryStore implements ConnectionStore {
   records = new Map<string, ConnectionRecord>();
