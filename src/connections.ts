@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
 import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-reads';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
+import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
+import type { WorkspaceNavigation } from './workspace-navigation';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -10,7 +12,7 @@ const requestSchema = z.discriminatedUnion('operation', [
   ...(['start', 'poll', 'refresh', 'installations', 'repositories', 'disconnect', 'remove'] as const).map(operation => z.object({ operation: z.literal(operation), id: z.string().uuid() }).strict()),
   z.object({ operation: z.literal('selectInstallation'), id: z.string().uuid(), installationId: z.number().int().positive() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
-  z.object({ operation: z.enum(['grantOrigin', 'revokeOrigin']), id: z.string().uuid(), origin: z.string().max(300) }).strict(),
+  z.object({ operation: z.enum(['grantOrigin', 'revokeOrigin']), id: z.string().uuid(), origin: z.string().max(300), subpath: z.string().max(1000).default('/'), replace: z.object({ origin: z.string().max(300), subpath: z.string().max(1000) }).strict().optional() }).strict(),
 ]);
 export type ConnectionRequest = z.infer<typeof requestSchema>;
 type Identity = { login: string; id: number };
@@ -20,6 +22,8 @@ export type ConnectionRecord = {
   id: string; name: string; appId: number; clientId: string; user?: Identity;
   installation?: { id: number; account: string }; tokens?: Tokens; pending?: Pending;
   origins?: string[];
+  hostedGrants?: HostedGrant[];
+  recentNavigation?: { source: string; updatedAt: number; navigation: WorkspaceNavigation }[];
   apiCooldown?: ApiCooldown;
 };
 export interface ConnectionStore {
@@ -42,11 +46,12 @@ export type Repository = z.infer<typeof repoSchema>;
 export class ConnectionError extends Error {}
 
 function publicConnection(record: ConnectionRecord) {
-  const { id, name, appId, clientId, user, installation, tokens, pending, origins } = record;
+  const { id, name, appId, clientId, user, installation, tokens, pending } = record;
   return {
     id, name, appId, clientId, user, installation, connected: Boolean(tokens), expiresAt: tokens?.expiresAt,
     refreshExpiresAt: tokens?.refreshExpiresAt,
-    origins: origins ?? [],
+    hostedGrants: hostedGrants(record),
+    recentNavigation: (record.recentNavigation ?? []).map(({ source, navigation }) => ({ source, navigation })),
     pending: pending && { userCode: pending.userCode, expiresAt: pending.expiresAt, nextPollAt: pending.nextPollAt },
   };
 }
@@ -68,17 +73,41 @@ export class Connections {
     return result;
   }
 
-  handleHosted(origin: string, input: unknown): Promise<unknown> {
-    const source = trustedOrigin(origin);
+  handleHosted(documentURL: string, input: unknown): Promise<unknown> {
+    const source = loadedDocument(documentURL);
     const request = hostedRequestSchema.parse(input);
     const result = this.tail.catch(() => {}).then(async () => {
       const records = await this.store.all();
-      const approved = records.filter(record => record.origins?.includes(source));
-      if (!approved.length) throw new ConnectionError('This origin has no approved connections. Grant access in extension settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces'] };
+      const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
+      if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in extension settings and reload the page.');
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation'] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
+      const navigationSource = source.origin + source.pathname;
+      if (request.operation === 'forgetNavigation') {
+        for (const record of records) {
+          if (!record.recentNavigation?.some(item => item.source === navigationSource)) continue;
+          record.recentNavigation = record.recentNavigation.filter(item => item.source !== navigationSource);
+          await this.store.put(record);
+        }
+        return null;
+      }
+      if (request.operation === 'loadNavigation') {
+        const recent = records.flatMap(record => record.recentNavigation ?? []).filter(item => item.source === navigationSource).sort((a, b) => b.updatedAt - a.updatedAt)[0];
+        if (!recent) return null;
+        const record = approved.find(record => record.id === recent.navigation.connectionId);
+        if (!record?.tokens || record.installation?.id !== recent.navigation.installationId) throw new ConnectionError('The saved connection or installation is unavailable. Choose a connection; no fallback was used.');
+        return recent.navigation;
+      }
+      if (request.operation === 'saveNavigation') {
+        const record = approved.find(record => record.id === request.navigation.connectionId);
+        if (!record?.tokens || record.installation?.id !== request.navigation.installationId) throw new ConnectionError('The selected installation changed. No navigation preference was saved.');
+        const updatedAt = Math.max(this.now(), ...records.flatMap(item => (item.recentNavigation ?? []).map(recent => recent.updatedAt + 1)));
+        record.recentNavigation = [...(record.recentNavigation ?? []).filter(item => item.source !== navigationSource), { source: navigationSource, updatedAt, navigation: request.navigation }].slice(-20);
+        await this.store.put(record);
+        return null;
+      }
       const record = approved.find(record => record.id === request.id);
-      if (!record) throw new ConnectionError('This connection is not approved for this origin.');
+      if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
       if (gitReadSchema.safeParse(request).success) {
         const gitRequest = gitReadSchema.parse(request);
         if (record.installation?.id !== gitRequest.installationId) throw new ConnectionError('The selected installation changed. Reconnect and rediscover workspaces; no fallback is allowed.');
@@ -218,15 +247,22 @@ export class Connections {
         this.apiCache.clearConnection(record.id);
         delete record.tokens; delete record.pending; delete record.user; delete record.installation;
         delete record.origins;
+        delete record.hostedGrants;
+        delete record.recentNavigation;
         await this.store.put(record); return publicConnection(record);
       case 'grantOrigin': {
         const origin = trustedOrigin(request.origin);
+        const subpath = trustedSubpath(request.subpath);
         if (!record.tokens || !record.installation) throw new ConnectionError('Sign in and select an installation before granting hosted access.');
-        record.origins = [...new Set([...(record.origins ?? []), origin])];
+        const previous = request.replace && { origin: trustedOrigin(request.replace.origin), subpath: trustedSubpath(request.replace.subpath) };
+        record.hostedGrants = hostedGrants(record).filter(grant => !previous || grant.origin !== previous.origin || grant.subpath !== previous.subpath);
+        if (!record.hostedGrants.some(grant => grant.origin === origin && grant.subpath === subpath)) record.hostedGrants.push({ origin, subpath });
+        delete record.origins;
         await this.store.put(record); return publicConnection(record);
       }
       case 'revokeOrigin':
-        record.origins = (record.origins ?? []).filter(origin => origin !== trustedOrigin(request.origin));
+        record.hostedGrants = hostedGrants(record).filter(grant => grant.origin !== trustedOrigin(request.origin) || grant.subpath !== trustedSubpath(request.subpath));
+        delete record.origins;
         await this.store.put(record); return publicConnection(record);
       case 'start': {
         if (record.tokens) throw new ConnectionError('Disconnect this connection before signing in again.');

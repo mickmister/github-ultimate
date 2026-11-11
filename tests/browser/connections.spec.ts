@@ -101,7 +101,7 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await first.getByRole('button', { name: 'Load installations' }).click();
   await first.getByRole('button', { name: 'Use mickmister' }).click();
   await expect(first.getByLabel('Repository to read')).toHaveValue('');
-  await expect(first.getByLabel('Hosted origin to approve (all paths)')).toHaveValue('');
+  await expect(first.getByLabel('Hosted origin to approve')).toHaveValue('');
   await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
   await expect(first.getByLabel('Read results')).toContainText('"private": true');
@@ -171,7 +171,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await card.getByRole('button', { name: 'Load installations' }).click(); await card.getByRole('button', { name: 'Use mickmister' }).click();
   const page = await context.newPage(); await page.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/settings.html');
   await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
-  await card.getByLabel('Hosted origin to approve (all paths)').fill('https://mickmister.github.io');
+  await card.getByLabel('Hosted origin to approve').fill('https://mickmister.github.io');
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
   await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
   await expect(card.getByRole('button', { name: 'Bind workspace', exact: true })).toHaveCount(0);
@@ -228,10 +228,6 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(page.getByLabel('Document content')).toContainText('Private workspace note');
   const dashboard = await context.newPage();
   await dashboard.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/');
-  await expect(dashboard.getByRole('status')).toContainText('1 available workspace');
-  await expect(dashboard.getByRole('heading', { name: 'Workspaces', exact: true })).toBeVisible();
-  await expect(dashboard.getByLabel('Approved connection')).toHaveCount(0);
-  await dashboard.getByRole('link', { name: 'Open workspace-a', exact: true }).click();
   await expect(dashboard.getByRole('heading', { name: 'workspace-a', exact: true })).toBeVisible();
   await expect(dashboard.getByRole('heading', { name: 'Beads', exact: true })).toBeVisible();
   await expect(dashboard.locator('.app-view')).toContainText('Storage manifest verified');
@@ -294,14 +290,30 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect.poll(() => workerURLs.some(url => url.includes('json.worker'))).toBe(true);
   expect(workerURLs.every(url => url.startsWith('https://mickmister.github.io/'))).toBe(true);
   await expect(modern.getByRole('button', { name: 'Markdown preview', exact: true })).toHaveCount(0);
+  const returning = await context.newPage();
+  await returning.goto('https://mickmister.github.io' + appPath);
+  await expect(returning.getByLabel('Document content')).toContainText('Explore product requirements');
+  await expect(returning.locator('.document-fullscreen')).toBeVisible();
+  await returning.close();
   await modern.getByRole('button', { name: 'Back to documents' }).click();
   await modern.getByLabel('Find a document').fill('no-match');
   await expect(modern.getByText('No documents match this search.')).toBeVisible();
   await modern.setViewportSize({ width: 375, height: 812 });
   expect(await modern.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await modern.reload();
-  await expect(modern.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
-  await expect(modern.getByLabel('Document content')).toHaveCount(0);
+  // A new landing visit resumes the workspace without a Discover click. Clear
+  // page preferences too: the extension independently remembers this scope.
+  await modern.evaluate(() => localStorage.removeItem(`github-ultimate-workspace-v1:${location.pathname}`));
+  await modern.goto('https://mickmister.github.io' + appPath);
+  await expect(modern.getByLabel('Document content')).toContainText('Explore product requirements');
+  await modern.getByRole('button', { name: 'Back to documents' }).click();
+  await expect(modern.getByRole('tree', { name: 'Documents', exact: true })).toBeVisible();
+  await expect(modern.getByLabel('Stored workspace')).toHaveValue('workspace-a');
+  await expect(modern.getByLabel('Storage repository')).toHaveValue('mickmister/workspace-storage');
+  await modern.getByRole('button', { name: 'Forget saved workspace', exact: true }).click();
+  await expect(modern.getByRole('status')).toContainText('Saved workspace forgotten');
+  await modern.goto('https://mickmister.github.io' + appPath);
+  await expect(modern.getByLabel('Storage repository')).toHaveValue('');
+  await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
   expect(pageErrors).toEqual([]);
   await modern.close();
   await settings.getByRole('button', { name: 'Revoke https://mickmister.github.io' }).click();
@@ -314,6 +326,46 @@ test('hosted branch page reads through an approved connection and revocation tak
   await page.getByRole('button', { name: 'Forget saved selections' }).click();
   await expect(page.getByLabel('Repository (owner/name)')).toHaveValue('');
   expect(await page.evaluate(() => localStorage.length)).toBe(0);
+});
+
+test('load-time document scope cannot be changed by earliest inline history rewrites or later SPA navigation', async () => {
+  test.setTimeout(60000);
+  const id = await launch(true);
+  const settings = await context.newPage(); await settings.goto(`chrome-extension://${id}/connections.html`);
+  await fillApp(settings);
+  await settings.getByRole('button', { name: 'Add connection', exact: true }).click();
+  const card = settings.getByRole('article', { name: 'GitHub Ultimate client', exact: true });
+  await card.getByRole('button', { name: 'Sign in with device code' }).click();
+  await expect(card).toContainText('Signed in as mickmister', { timeout: 15000 });
+  await card.getByRole('button', { name: 'Load installations' }).click(); await card.getByRole('button', { name: 'Use mickmister' }).click();
+  await card.getByLabel('Hosted origin to approve').fill('https://mickmister.github.io');
+  await card.getByLabel('Hosted subpath').fill('/allowed/');
+  await card.getByRole('button', { name: 'Grant hosted read access' }).click();
+  await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
+  await context.route('https://mickmister.github.io/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><script>if(location.pathname.startsWith("/blocked/"))history.replaceState({},"","/allowed/")</script><h1>Path fixture</h1>' }));
+  const call = (page: Page, request: object = { operation: 'discover' }) => page.evaluate(request => new Promise<{ ok: boolean; error?: string; result?: unknown }>(resolve => {
+    const requestId = crypto.randomUUID();
+    const receive = (event: MessageEvent) => {
+      if (event.data?.channel !== 'github-ultimate-extension-v1' || event.data.requestId !== requestId) return;
+      window.removeEventListener('message', receive); resolve(event.data);
+    };
+    window.addEventListener('message', receive);
+    window.postMessage({ channel: 'github-ultimate-page-v1', version: 1, requestId, request }, location.origin);
+  }), request);
+  const blocked = await context.newPage(); await blocked.goto('https://mickmister.github.io/blocked/');
+  expect(new URL(blocked.url()).pathname).toBe('/allowed/');
+  expect(await call(blocked)).toMatchObject({ ok: false, error: expect.stringContaining('no approved') });
+  expect(await call(blocked, { operation: 'discover', documentURL: 'https://mickmister.github.io/allowed/' })).toMatchObject({ ok: false, error: expect.stringContaining('incompatible') });
+  const allowed = await context.newPage(); await allowed.goto('https://mickmister.github.io/allowed/');
+  expect(await call(allowed)).toMatchObject({ ok: true });
+  await allowed.evaluate(() => history.pushState({}, '', '/outside/'));
+  expect(await call(allowed)).toMatchObject({ ok: true });
+  await allowed.reload();
+  expect(await call(allowed)).toMatchObject({ ok: false, error: expect.stringContaining('no approved') });
+  const before = await context.serviceWorkers()[0].evaluate(() => (globalThis as typeof globalThis & { __githubRequests: string[] }).__githubRequests.length);
+  await card.getByRole('button', { name: 'Revoke https://mickmister.github.io/allowed/', exact: true }).click();
+  expect(await call(blocked)).toMatchObject({ ok: false, error: expect.stringContaining('no approved') });
+  expect(await context.serviceWorkers()[0].evaluate(() => (globalThis as typeof globalThis & { __githubRequests: string[] }).__githubRequests.length)).toBe(before);
 });
 
 test('an older injected relay fails visibly during automatic connection before any GitHub request', async () => {
@@ -340,7 +392,7 @@ test('automatic restore does not replace an unavailable saved connection with an
     window.addEventListener('message', event => {
       if (event.data?.channel !== 'github-ultimate-page-v1') return;
       const result = event.data.request.operation === 'connections' ? [{ id: '22222222-2222-4222-8222-222222222222', name: 'Other App', appId: 999, installation: { id: 456, account: 'other' } }] : { protocolVersion: 1, capabilities: [] };
-      window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision: 2, requestId: event.data.requestId, ok: true, result }, location.origin);
+      window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision: 3, requestId: event.data.requestId, ok: true, result }, location.origin);
     });
   });
   await page.goto('https://mickmister.github.io/github-ultimate/previews/saved-connection/settings.html');

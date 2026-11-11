@@ -4,7 +4,7 @@ import { createDocumentBrowserController } from '../webapp/src/features/document
 
 const connection = { id: 'connection-a', name: 'Personal App', account: 'owner', installationId: 123 };
 const snapshot: DocumentSnapshotDTO = { id: 'snapshot-a', commit: 'a'.repeat(40), purpose: 'Research', documents: [{ id: 'note-a', path: 'notes/a.md', size: 5 }] };
-function setup() {
+function setup(navigation?: NonNullable<AppHooksV1['modules']['documents']['navigation']>) {
   const module = {
     version: 1 as const,
     connect: vi.fn(async () => [connection]),
@@ -12,6 +12,7 @@ function setup() {
     open: vi.fn(async () => snapshot),
     read: vi.fn(async () => 'Hello'),
     dispose: vi.fn(),
+    navigation,
   };
   const host: AppHooksV1 = { contractVersion: 1, modules: { documents: module } };
   const controller = createDocumentBrowserController(host);
@@ -29,6 +30,30 @@ async function ready(controller: ReturnType<typeof setup>, expected = snapshot) 
 }
 
 describe('document browser behavior independent of presentation', () => {
+  it('opens the saved workspace and latest version of its last document without a Discover command', async () => {
+    const saved = { connectionId: connection.id, installationId: 123, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'old-object-id', documentPath: 'notes/a.md' };
+    const navigation = { load: vi.fn(async () => saved), save: vi.fn(async () => {}), forget: vi.fn(async () => {}) };
+    const controller = setup(navigation);
+    controller.actions.connect();
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.module.discover).not.toHaveBeenCalled();
+    expect(controller.module.open).toHaveBeenCalledWith(saved);
+    expect(controller.getSnapshot()).toMatchObject({ repository: 'owner/storage', workspaceId: 'workspace-a', documentId: 'note-a', documentFullscreen: true });
+    expect(navigation.save).toHaveBeenLastCalledWith({ ...saved, documentId: 'note-a' });
+    controller.actions.forgetWorkspace?.();
+    expect(navigation.forget).toHaveBeenCalledOnce();
+    expect(controller.getSnapshot()).toMatchObject({ repository: '', snapshot: null, content: null });
+  });
+
+  it('does not replace an unavailable saved installation with a usable connection', async () => {
+    const navigation = { load: vi.fn(async () => ({ connectionId: connection.id, installationId: 999, repository: 'owner/storage', workspace: 'workspace-a' })), save: vi.fn(async () => {}), forget: vi.fn(async () => {}) };
+    const controller = setup(navigation);
+    controller.actions.connect();
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('no fallback'));
+    expect(controller.module.open).not.toHaveBeenCalled();
+    expect(navigation.save).not.toHaveBeenCalled();
+  });
+
   const linked = { connection: connection.id, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'note-a' };
 
   it('restores a cold document link through approved connections, discovery and verified reads', async () => {

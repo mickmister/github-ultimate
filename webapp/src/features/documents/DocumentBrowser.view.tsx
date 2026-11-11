@@ -16,7 +16,7 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
       <nav aria-label="Existing pages"><a href="../">Current dashboard</a><a href="../settings.html">Connection &amp; storage settings</a></nav>
     </header>
     <section className="connection-panel" aria-labelledby="connection-heading">
-      <div className="section-heading"><h2 id="connection-heading">Choose your workspace</h2><button onClick={actions.connect} disabled={model.busy}>Reconnect extension</button></div>
+       <div className="section-heading"><h2 id="connection-heading">Choose your workspace</h2><div><button onClick={actions.connect} disabled={model.busy}>Reconnect extension</button>{actions.forgetWorkspace && <button onClick={actions.forgetWorkspace} disabled={model.busy}>Forget saved workspace</button>}</div></div>
       <div className="connection-fields">
         <label>Approved connection<select value={model.connectionId} onChange={event => actions.selectConnection(event.target.value)}><option value="">Choose a connection</option>{model.connections.map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connection.account}</option>)}</select></label>
         <label>Storage repository<input value={model.repository} placeholder="owner/repository" autoComplete="off" spellCheck={false} onChange={event => actions.setRepository(event.target.value)} /></label>

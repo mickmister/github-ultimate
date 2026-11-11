@@ -24,6 +24,7 @@ export interface DocumentBrowserModel {
 }
 export interface DocumentBrowserActions {
   connect(): void;
+  forgetWorkspace?(): void;
   selectConnection(id: string): void;
   setRepository(repository: string): void;
   discoverWorkspaces(): void;

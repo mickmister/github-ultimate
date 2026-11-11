@@ -162,6 +162,46 @@ test('hosted access is exact-origin and connection scoped, read-only, revocable 
   await expect(broker.handleHosted(origin, { operation: 'connections' })).rejects.toThrow('no approved');
 });
 
+test('multiple document subtree pairs stay connection-scoped and atomic edits retire legacy broad grants', async () => {
+  const first = await login(), second = await login();
+  for (const record of [first, second]) await broker.handle({ operation: 'selectInstallation', id: record.id, installationId: 1 });
+  const origin = 'https://example.test';
+  await broker.handle({ operation: 'grantOrigin', id: first.id, origin, subpath: '/one' });
+  await broker.handle({ operation: 'grantOrigin', id: first.id, origin, subpath: '/extra/' });
+  await broker.handle({ operation: 'grantOrigin', id: second.id, origin, subpath: '/two/' });
+  expect(await broker.handleHosted(origin + '/one/doc', { operation: 'connections' })).toMatchObject([{ id: first.id }]);
+  expect(await broker.handleHosted(origin + '/two/', { operation: 'connections' })).toMatchObject([{ id: second.id }]);
+  expect(await broker.handleHosted(origin + '/extra/', { operation: 'connections' })).toMatchObject([{ id: first.id }]);
+  await expect(broker.handleHosted(origin + '/one-other/', { operation: 'connections' })).rejects.toThrow('no approved');
+  const before = calls.length;
+  await expect(broker.handleHosted(origin + '/one/', { operation: 'probe', id: second.id, repository: 'mickmister/workspace-storage' })).rejects.toThrow('not approved');
+  expect(calls).toHaveLength(before);
+  const legacy = (await store.get(first.id))!; legacy.origins = [origin]; delete legacy.hostedGrants; await store.put(legacy);
+  await broker.handle({ operation: 'grantOrigin', id: first.id, origin, subpath: '/narrow/', replace: { origin, subpath: '/' } });
+  expect((await store.get(first.id))!.origins).toBeUndefined();
+  await expect(broker.handleHosted(origin + '/one/', { operation: 'discover' })).rejects.toThrow('no approved');
+  await broker.handle({ operation: 'revokeOrigin', id: first.id, origin, subpath: '/narrow/' });
+  await expect(broker.handleHosted(origin + '/narrow/', { operation: 'discover' })).rejects.toThrow('no approved');
+});
+
+test('extension remembers only navigation hints per original document and revalidates saved access', async () => {
+  const record = await login(); await broker.handle({ operation: 'selectInstallation', id: record.id, installationId: 1 });
+  const origin = 'https://example.test';
+  await broker.handle({ operation: 'grantOrigin', id: record.id, origin });
+  const navigation = { connectionId: record.id, installationId: 1, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'note-a', documentPath: 'notes/a.md' };
+  await broker.handleHosted(origin + '/app/', { operation: 'saveNavigation', navigation });
+  broker = new Connections(store);
+  expect(await broker.handleHosted(origin + '/app/#/documents', { operation: 'loadNavigation' })).toEqual(navigation);
+  expect(await broker.handleHosted(origin + '/sibling/', { operation: 'loadNavigation' })).toBeNull();
+  await expect(broker.handleHosted(origin + '/app/', { operation: 'saveNavigation', navigation: { ...navigation, installationId: 99 } })).rejects.toThrow('installation changed');
+  expect(() => broker.handleHosted(origin + '/app/', { operation: 'saveNavigation', navigation: { ...navigation, content: 'private body' } })).toThrow();
+  await broker.handleHosted(origin + '/app/', { operation: 'forgetNavigation' });
+  expect(await broker.handleHosted(origin + '/app/', { operation: 'loadNavigation' })).toBeNull();
+  await broker.handleHosted(origin + '/app/', { operation: 'saveNavigation', navigation });
+  await broker.handle({ operation: 'revokeOrigin', id: record.id, origin });
+  await expect(broker.handleHosted(origin + '/app/', { operation: 'loadNavigation' })).rejects.toThrow('no approved');
+});
+
 test('Git object reads recheck repository authorization, restrict ref prefixes and strip API metadata', async () => {
   const connection = await login();
   const origin = 'https://mickmister.github.io';

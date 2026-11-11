@@ -1,6 +1,7 @@
 import type { ConnectionRequest, PublicConnection, Installation, Repository } from './connections';
 import { extensionAPI } from './extension-api';
 import { trustedOrigin, originPattern } from './hosted-protocol';
+import { trustedSubpath, type HostedGrant } from './hosted-access';
 
 const status = document.getElementById('status')!;
 const container = document.getElementById('connections')!;
@@ -54,6 +55,11 @@ function render() {
       card.append(installationArea);
       if (record.installation) {
         card.append(element('p', `Selected installation: ${record.installation.account} (${record.installation.id})`));
+        const recent = record.recentNavigation.at(-1);
+        if (recent) {
+          const resume = element('a', `Resume ${recent.navigation.workspace} · ${recent.navigation.repository}`);
+          resume.href = recent.source; resume.target = '_blank'; resume.rel = 'noopener noreferrer'; card.append(resume);
+        }
         const output = element('pre');
         output.setAttribute('aria-label', 'Read results');
         button(card, 'List repositories', async () => {
@@ -63,6 +69,8 @@ function render() {
         const label = element('label', 'Repository to read');
         const repository = element('input');
         repository.placeholder = 'owner/repository';
+        try { repository.value = localStorage.getItem(`connection-repository:${record.id}`) ?? recent?.navigation.repository ?? ''; } catch { repository.value = recent?.navigation.repository ?? ''; }
+        repository.addEventListener('change', () => { try { localStorage.setItem(`connection-repository:${record.id}`, repository.value.trim()); } catch { /* Optional preference storage. */ } });
         repository.autocomplete = 'off'; label.append(repository); card.append(label);
         button(card, 'Read repository', async () => {
           const result = await request({ operation: 'probe', id: record.id, repository: repository.value.trim() });
@@ -70,19 +78,27 @@ function render() {
           status.textContent = 'Repository read succeeded using this connection. This checks the default-branch Git ref, not raw Dolt data yet.';
         });
         card.append(output);
-        const originLabel = element('label', 'Hosted origin to approve (all paths)');
+        const originLabel = element('label', 'Hosted origin to approve');
         const originInput = element('input'); originInput.placeholder = 'https://your-app.example'; originLabel.append(originInput); card.append(originLabel);
-        card.append(element('small', 'Read access covers every app and branch preview on this origin, not just this repository path. Workflow dispatch is not granted. Reload the hosted page after approval.'));
+        const subpathLabel = element('label', 'Hosted subpath');
+        const subpathInput = element('input'); subpathInput.value = '/'; subpathLabel.append(subpathInput); card.append(subpathLabel);
+        const lastGrant = record.hostedGrants.at(-1);
+        if (lastGrant) { originInput.value = lastGrant.origin; subpathInput.value = lastGrant.subpath; }
+        let replacing: HostedGrant | undefined;
+        card.append(element('small', 'Approve the original loaded document directory and its descendants. / covers all paths on the origin. Browser host permission is broader; these rows control connection access. Reload after first approval. Workflow dispatch is not granted.'));
         button(card, 'Grant hosted read access', async () => {
           const origin = trustedOrigin(originInput.value.trim());
+          const subpath = trustedSubpath(subpathInput.value);
           // Must be the first asynchronous call after the user gesture.
           if (!await extensionAPI().permissions.request({ origins: [originPattern(origin)] })) throw new Error('Browser host access was declined.');
-          await request({ operation: 'grantOrigin', id: record.id, origin });
+          await request({ operation: 'grantOrigin', id: record.id, origin, subpath, replace: replacing });
           await reload(); status.textContent = 'Hosted read access granted. Reload the hosted page, then connect.';
         });
-        for (const origin of record.origins) {
-          const row = element('p', `Hosted reads approved: ${origin}`);
-          button(row, `Revoke ${origin}`, async () => { await request({ operation: 'revokeOrigin', id: record.id, origin }); await reload(); status.textContent = 'Hosted access revoked for this connection.'; });
+        for (const grant of record.hostedGrants) {
+          const { origin, subpath } = grant;
+          const row = element('p', `Hosted reads approved: ${origin}${subpath}${subpath === '/' ? ' (all paths)' : ' (directory and descendants)'}`);
+          button(row, `Edit ${origin}${subpath}`, async () => { replacing = grant; originInput.value = origin; subpathInput.value = subpath; originInput.focus(); status.textContent = 'Edit the pair, then Grant hosted read access to replace it.'; });
+          button(row, `Revoke ${origin}${subpath}`, async () => { await request({ operation: 'revokeOrigin', id: record.id, origin, subpath }); await reload(); status.textContent = 'Hosted access revoked for this connection.'; });
           card.append(row);
         }
       }

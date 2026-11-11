@@ -14,8 +14,9 @@ Hosted page UI -> window messages -> isolated content script
 1. Install the matching extension build. Open **GitHub App connections**, sign in
    to a client App, and select an installation.
 2. Open a deployed hosted preview. It displays its actual origin. In connection
-   settings, grant that exact origin read access and approve the browser host
-   permission. Reload the hosted page.
+   settings, add that exact origin and the app's directory subpath, then approve
+   the browser host permission. `/` permits every path on the origin. Reload the
+   hosted page after first approval.
 3. The landing page connects automatically and lists manifest-backed workspaces
    discovered through approved installation repositories. Open a workspace card
    to navigate to its detail page. Ambiguous access routes require a choice;
@@ -25,10 +26,14 @@ Hosted page UI -> window messages -> isolated content script
    still require an in-browser Dolt engine. **Settings** opens the former page,
    including connection selection, private-read proof, raw discovery, document
    text diagnostics and saved-selection controls.
-5. Revoke that origin in settings. New reads in the already-open page must fail.
+5. Revoke the matching origin/subpath pair in settings. New reads in the
+   already-open page must fail unless another matching pair remains approved.
 
 The reference operations are bounded: `discover`, `connections`, `repositories`,
 `probe` (default-branch ref), `gitRefs`, `gitCommit`, `gitTree` and `gitBlob`.
+`loadNavigation`, `saveNavigation` and `forgetNavigation` manage bounded
+navigation preferences for the original document entry path; they expose no
+credentials, document bodies or arbitrary storage access.
 Git reads carry the selected installation ID; commit/tree/blob requests also
 include the workspace namespace. Access follows the discovery connection without
 manual workspace bindings. Installation changes require reconnect/discovery.
@@ -49,6 +54,24 @@ access route; Settings also retains the prior automatic manifest/document-list
 restoration. Individual document contents are not restored from browser storage.
 A changed installation or unavailable saved connection asks for an explicit
 choice. Unavailable/corrupt browser storage does not prevent manual browsing.
+
+The modern `/app/` browser stores its last connection, installation, repository,
+workspace and optional document ID/path in both page-local preferences and the
+extension's privileged connection store. Preferences are isolated by original
+origin + document entry pathname, not the mutable hash router. A fresh landing
+visit opens and verifies the last workspace and document without clicking
+**Discover workspaces**. Discovery remains available to refresh/select another
+workspace. Explicit document/workspace links take precedence. No private document
+body, manifest or credentials are persisted in these navigation records. An
+unavailable saved connection or changed installation never silently switches
+Apps. A deleted document leaves the verified workspace available with an error;
+a changed file is reopened by its saved logical path from the newly verified
+snapshot. **Forget saved workspace** clears both preference stores. Extension
+connection settings also offer a resume link for the last visited app and
+remember the user's repository input. No personal defaults are bundled.
+
+The legacy dashboard resumes the last workspace on a fresh landing visit too;
+explicit `#/` still opens its workspace chooser.
 
 **Clear displayed data** clears in-memory workspace/read results while retaining
 the saved selection. **Forget saved selections** removes this preview's record
@@ -109,13 +132,29 @@ reported as incomplete when opened, rather than treated as a valid workspace or
 silently assigned a purpose. Repair uses nugs document/provision operations; the
 hosted browser remains read-only and does not migrate existing refs.
 
-Approval applies to scheme + hostname + port, not a path. GitHub Pages project
-paths and all branch previews share an origin. Only approve it if you trust all
-applications served at that origin. Browser host permissions/match patterns cover
+Approval applies to an exact scheme + hostname + port and a directory subtree.
+`/app` and `/app/` normalize to the same rule, matching `/app` and descendants
+under `/app/`, but not `/application`. Queries/fragments do not change access.
+Settings support multiple pairs per connection, including several subpaths on
+one origin. Editing a pair replaces it atomically. Legacy origin-only approvals
+map to explicit `/` grants; once a connection has path grants, the old field is
+never unioned back in. Overlapping pairs are additive, so a root grant covers
+all narrower rows until removed or edited.
+
+The isolated relay captures the document URL synchronously at `document_start`
+before page scripts. Every operation checks that immutable original path and the
+current grants. History API navigation cannot acquire another path's grants; an
+approved document retains its original scope through SPA navigation. A full
+navigation/reload establishes a new identity. Old relays lacking original-load
+metadata are denied and must reload. Browser host permissions/match patterns cover
 all ports, while broker grants still check the exact origin including its port.
 HTTP is allowed only on localhost/127.0.0.1 for development; deployed apps require
 HTTPS. The relay accepts top-level same-window messages only. The broker derives
-the actual sender origin from browser metadata, not a page-supplied claim.
+the actual sender origin from browser metadata and accepts original-load context
+only from its own isolated relay, never a page-supplied claim. Path grants are an
+extension policy, not a browser origin boundary: same-origin sibling windows
+with references can script each other. Mutually untrusted apps require separate
+origins for that stronger isolation.
 
 ## Build and publication
 
@@ -178,9 +217,9 @@ cleanup, size limits and stale-build handling explicit and testable.
 
 The obsolete inherited account-level custom domain has been removed. The project
 is served at `https://mickmister.github.io/github-ultimate/` with HTTPS enforced.
-Approve `https://mickmister.github.io` in connection settings, including the
-browser host permission. All projects and branch previews on this origin share
-that approval boundary.
+Enter the deployed origin and intended app directory in connection settings,
+including browser host permission. Choose a project or preview subtree at runtime;
+the extension has no built-in account, project or deployment grants.
 
 ## Verification boundary
 

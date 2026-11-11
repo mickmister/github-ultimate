@@ -1,6 +1,8 @@
 import { Connections, ConnectionError } from './connections';
 import { IndexedConnectionStore } from './connection-store';
 import { trustedOrigin, originPattern } from './hosted-protocol';
+import { hostedGrants, loadedDocument } from './hosted-access';
+import { hostedRelayRevision } from './bridge-channels';
 
 const api = (globalThis as typeof globalThis & { browser?: typeof chrome }).browser ?? chrome;
 const store = new IndexedConnectionStore();
@@ -8,7 +10,7 @@ const connections = new Connections(store);
 let registrationTail: Promise<unknown> = Promise.resolve();
 function syncRegistrations() {
   const work = registrationTail.catch(() => {}).then(async () => {
-    const patterns = [...new Set((await store.all()).flatMap(record => record.origins ?? []).map(originPattern))];
+    const patterns = [...new Set((await store.all()).flatMap(record => hostedGrants(record).map(grant => grant.origin)).map(originPattern))];
     const scripts: chrome.scripting.RegisteredContentScript[] = [];
     for (const pattern of patterns) {
       if (!await api.permissions.contains({ origins: [pattern] })) continue;
@@ -31,16 +33,18 @@ api.runtime.onInstalled.addListener(() => { void syncRegistrations().catch(() =>
 api.runtime.onStartup.addListener(() => { void syncRegistrations().catch(() => {}); });
 api.runtime.onMessage.addListener((message: unknown, sender, reply) => {
   if (sender.id !== api.runtime.id || !message || typeof message !== 'object') return false;
-  const { channel, request } = message as { channel?: string; request?: unknown };
+  const { channel, request, documentURL, relayRevision } = message as { channel?: string; request?: unknown; documentURL?: unknown; relayRevision?: unknown };
   const settings = channel === 'github-ultimate-connections-v1' && sender.url === api.runtime.getURL('connections.html') && (!sender.tab || sender.frameId === 0);
   const hosted = channel === 'github-ultimate-hosted-v1' && sender.tab && sender.frameId === 0 && sender.url;
   if (!settings && !hosted) return false;
   void Promise.resolve().then(async () => {
     if (!settings) {
+      if (relayRevision !== hostedRelayRevision || typeof documentURL !== 'string' || documentURL.length > 16384) throw new ConnectionError('The injected relay is outdated. Reload this page to verify its original document path.');
+      const original = loadedDocument(documentURL);
       const origin = trustedOrigin(new URL(sender.url!).origin);
-      if (sender.origin && sender.origin !== origin) throw new ConnectionError('Sender origin mismatch.');
+      if (original.origin !== origin || sender.origin && sender.origin !== origin) throw new ConnectionError('Sender origin mismatch.');
       if (!await api.permissions.contains({ origins: [originPattern(origin)] })) throw new ConnectionError('Browser host access has been revoked.');
-      return connections.handleHosted(origin, request);
+      return connections.handleHosted(original.href, request);
     }
     if ((request as { operation?: string })?.operation === 'grantOrigin') {
       const origin = trustedOrigin((request as { origin: string }).origin);

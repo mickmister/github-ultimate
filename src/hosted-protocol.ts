@@ -1,11 +1,15 @@
 import { z } from 'zod';
 import { pageChannel } from './bridge-channels';
 import { gitReadSchemas } from './git-reads';
+import { workspaceNavigationSchema } from './workspace-navigation';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('discover') }).strict(),
   z.object({ operation: z.literal('connections') }).strict(),
+  z.object({ operation: z.literal('loadNavigation') }).strict(),
+  z.object({ operation: z.literal('forgetNavigation') }).strict(),
+  z.object({ operation: z.literal('saveNavigation'), navigation: workspaceNavigationSchema }).strict(),
   z.object({ operation: z.literal('repositories'), id: z.string().uuid() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
@@ -19,7 +23,7 @@ export function trustedOrigin(input: string): string {
   if (url.username || url.password || url.origin === 'null' || (url.protocol !== 'https:' && !(url.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(url.hostname)))) {
     throw new Error('Use an HTTPS origin (or HTTP loopback for local development).');
   }
-  if (url.pathname !== '/' || url.search || url.hash) throw new Error('Enter only the origin, without a path, query or fragment. Grants cover every path on that origin.');
+  if (url.pathname !== '/' || url.search || url.hash) throw new Error('Enter only the origin; configure the subpath separately.');
   return url.origin;
 }
 

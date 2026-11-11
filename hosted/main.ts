@@ -150,5 +150,9 @@ async function render() {
     if (!root.childElementCount) root.append(element('h1', 'Workspaces'), element('p', 'Open Settings to check extension access, or reload this page after updating the extension.', 'empty'));
   }
 }
+// Only a fresh landing visit resumes the saved route. An explicit #/ means the
+// user chose the workspace chooser and must not redirect them back again.
+const last = remembered();
+if (!location.hash && last?.workspace) history.replaceState(null, '', workspaceURL({ connectionId: last.connectionId, installationId: last.installationId, repository: last.repository, workspace: last.workspace }));
 window.addEventListener('hashchange', () => void render());
 void render();

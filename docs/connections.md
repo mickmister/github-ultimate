@@ -106,9 +106,17 @@ grants and GitHub storage-repository access remain the authorization boundaries.
 
 The [hosted bridge demo](hosted-pages.md) exposes approved-connection discovery,
 repository listing and a default-branch Git-ref read. Add/revoke exact origin
-grants in settings; multiple connections may approve the same origin. Disconnect
+and directory-subpath grants in settings; multiple connections may approve the
+same origin, and each may have several pairs. `/` explicitly covers all paths;
+edit or revoke it to narrow an old origin approval. Grants follow the document's
+original load-time location, never a pathname acquired through SPA history.
+Disconnect
 also clears that connection's grants. Browser host permission alone does not
 grant a connection. Revocation blocks subsequent requests in already-open tabs.
+Repository inputs and last-workspace resume links use saved user preferences,
+not bundled account defaults. The modern hosted app remembers the last workspace
+and document in the extension too, scoped to its original document entry path;
+each automatic restoration still verifies the chosen connection and installation.
 Workflow dispatch still requires a future separate grant and operation.
 Actions write is broader than dispatch-only at GitHub's token layer;
 no Workflows/Contents write is needed for dispatching existing definitions.
