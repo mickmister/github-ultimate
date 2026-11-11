@@ -1,5 +1,101 @@
 import { test, expect } from '@playwright/test';
 
+test('global notes stay separate from questions and retain their value across review and zen', async ({ page }) => {
+  for (const theme of ['light', 'dark']) {
+    await page.goto(`/iframe.html?id=forms--pending&viewMode=story&args=theme:${theme}`);
+    const questions = page.getByRole('region', { name: 'Questions', exact: true });
+    const notes = page.getByRole('region', { name: 'Additional notes', exact: true });
+    await expect(notes).toBeVisible();
+    expect((await notes.boundingBox())!.y).toBeGreaterThanOrEqual((await questions.boundingBox())!.y + (await questions.boundingBox())!.height);
+    await expect(questions.locator('[name="additional_notes"]')).toHaveCount(0);
+    await notes.getByRole('textbox').fill(`Whole-form context in ${theme} mode.`);
+    await questions.getByRole('button', { name: '2. What context matters?', exact: true }).click();
+    await expect(notes.getByRole('textbox')).toHaveValue(`Whole-form context in ${theme} mode.`);
+    await questions.locator('.question-index').getByRole('button', { name: 'Review answers', exact: true }).click();
+    await expect(notes).toBeVisible();
+    await questions.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('region', { name: 'Additional notes', exact: true }).getByRole('textbox')).toHaveValue(`Whole-form context in ${theme} mode.`);
+    await page.getByRole('button', { name: 'Close zen', exact: true }).click();
+  }
+  await page.goto('/iframe.html?id=corner-cases--minimal-form&viewMode=story');
+  await expect(page.getByRole('region', { name: 'Additional notes', exact: true }).getByRole('textbox')).toHaveCount(1);
+  await page.goto('/iframe.html?id=corner-cases--notes-only&viewMode=story');
+  await expect(page.getByRole('region', { name: 'Additional notes', exact: true }).getByRole('textbox')).toHaveCount(1);
+  await expect(page.getByRole('region', { name: 'Questions', exact: true })).toHaveCount(0);
+});
+
+test('20-comment PR keeps five forms independently navigable and routes a posted response to its source', async ({ page }) => {
+  await page.goto('/iframe.html?id=corner-cases--twenty-comments-five-forms&viewMode=story');
+  await expect(page.locator('[data-story-renderer] .form-card')).toHaveCount(5);
+  await expect(page.locator('.gh-timeline > .gh-comment-row')).toHaveCount(20);
+  await expect(page.locator('.gh-thread-tabs')).toContainText('Conversation 20');
+  await page.evaluate(() => scrollTo(0, 0));
+  const pending = page.getByRole('region', { name: 'Pending forms', exact: true });
+  await expect(pending).toContainText('5 forms need input');
+  await pending.getByRole('combobox', { name: 'Choose pending form' }).selectOption({ label: 'Scope and priorities' });
+  await pending.getByRole('button', { name: 'Go to form', exact: true }).click();
+  let dialog = page.getByRole('dialog');
+  await expect(dialog).toHaveAccessibleName('Scope and priorities');
+  await dialog.getByRole('checkbox', { name: 'A small focused change', exact: true }).check();
+  await page.getByRole('button', { name: 'Close zen', exact: true }).click();
+  await page.getByRole('button', { name: 'Open GitHub Ultimate workspace', exact: true }).click();
+  const workspace = page.getByRole('complementary', { name: 'GitHub Ultimate PR workspace' });
+  await expect(workspace.locator('.record-link')).toHaveCount(5);
+  await workspace.getByRole('button', { name: 'Needs input · Follow-up work', exact: true }).click();
+  dialog = page.getByRole('dialog');
+  await expect(dialog).toHaveAccessibleName('Follow-up work');
+  await expect(dialog.getByRole('checkbox', { name: 'A small focused change', exact: true })).not.toBeChecked();
+  await dialog.getByRole('button', { name: '2. What context matters?', exact: true }).click();
+  await dialog.getByRole('textbox', { name: 'What context matters?', exact: true }).fill('Only the fifth form receives this response.');
+  await dialog.locator('.question-index').getByRole('button', { name: 'Review answers', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Continue discussion — don’t implement yet', exact: true }).click();
+  await dialog.getByRole('button', { name: 'Place in GitHub comment editor', exact: true }).click();
+  await page.getByRole('button', { name: 'Comment', exact: true }).click();
+  const forms = page.locator('[data-story-renderer] .form-card');
+  await expect(forms.nth(4)).toHaveAttribute('data-state', 'submitted');
+  await expect(forms.nth(0)).not.toHaveAttribute('data-state', 'submitted');
+  await expect(forms.nth(0).getByRole('checkbox', { name: 'A small focused change', exact: true })).toBeChecked();
+  await expect(page.locator('.gh-posted-timeline')).toContainText('Only the fifth form receives this response.');
+  await expect(page.locator('.gh-timeline > .gh-comment-row')).toHaveCount(20);
+});
+
+test('30-question phone form reaches its last question and reviews omissions without overflow', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/iframe.html?id=corner-cases--thirty-questions-phone&viewMode=story');
+  const index = page.locator('.question-index');
+  await expect(index.getByRole('button')).toHaveCount(31);
+  await expect(page.locator('.wizard-progress')).toHaveText('Question 1 of 30');
+  await index.getByRole('button', { name: '30. Recovery checkpoint 30', exact: true }).click();
+  await expect(page.locator('.wizard-progress')).toHaveText('Question 30 of 30');
+  await page.getByRole('textbox', { name: 'Recovery checkpoint 30', exact: true }).fill('Verify the last checkpoint.');
+  await page.locator('.wizard-header .wizard-navigation').getByRole('button', { name: 'Review answers', exact: true }).click();
+  await expect(page.locator('.wizard-progress')).toHaveText('Review · 30 questions');
+  await expect(page.locator('.answer-review')).toContainText('29 requested questions are unanswered');
+  await expect(page.locator('.answer-review')).toContainText('Verify the last checkpoint.');
+  expect(await page.locator('.wizard-header').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+  expect(await page.locator('.gh-mock').evaluate(node => node.scrollWidth <= node.clientWidth + 1)).toBe(true);
+});
+
+test('duplicate labels stay independent, notes-only skips the wizard, and long saved answers remain complete', async ({ page }) => {
+  await page.goto('/iframe.html?id=corner-cases--duplicate-visible-labels&viewMode=story');
+  const choices = page.getByRole('checkbox', { name: 'Production', exact: true });
+  await expect(choices).toHaveCount(2);
+  await expect(choices.nth(0)).toBeChecked();
+  await expect(choices.nth(1)).not.toBeChecked();
+  await choices.nth(1).check();
+  await choices.nth(0).uncheck();
+  await expect(choices.nth(1)).toBeChecked();
+  await page.goto('/iframe.html?id=corner-cases--notes-only&viewMode=story');
+  await expect(page.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveCount(1);
+  await expect(page.locator('.question-index')).toHaveCount(0);
+  await expect(page.locator('.wizard-progress')).toHaveCount(0);
+  await page.goto('/iframe.html?id=corner-cases--maximum-length-saved-answer&viewMode=story');
+  await page.getByRole('button', { name: 'View submitted answers', exact: true }).click();
+  const answer = await page.locator('.saved-answers blockquote').first().innerText();
+  expect(answer.trim().length).toBe(16000);
+  await expect(page.locator('.saved-answers textarea')).toHaveCount(0);
+});
+
 test('every indexed story renders the shipping UI or its intentional native fallback', async ({ page, request }) => {
   const index = await (await request.get('/index.json')).json();
   const entries = Object.values(index.entries) as { id: string; type: string }[];
@@ -8,8 +104,9 @@ test('every indexed story renders the shipping UI or its intentional native fall
   const errors: string[] = []; page.on('pageerror', error => errors.push(error.message));
   for (const story of stories) {
     await page.goto(`/iframe.html?id=${story.id}&viewMode=story`);
-    await expect(page.locator('[data-story-renderer]')).toBeVisible();
+    await expect(page.locator('[data-story-renderer]').first()).toBeVisible();
     await expect(page.locator('[data-story-renderer]').locator('.form-card, .snapshot, [role="alert"]')).not.toHaveCount(0);
+    if (story.id.startsWith('corner-cases--')) await expect(page.locator('[data-story-renderer] .error').filter({ hasText: /Invalid record|could not render/ })).toHaveCount(0);
   }
   expect(errors).toEqual([]);
 });

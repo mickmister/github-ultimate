@@ -7,7 +7,7 @@ export const form = {
   goal: 'Explore the real extension form, including Other, notes, review and native comment composition.',
   description: 'These are **fictional fixtures**. Nothing is sent to GitHub and no agent runs. Try typing `m`, opening notes, switching questions, and opening zen.',
   questions: [
-    { id: 'approach', title: 'What kind of change should we make?', type: 'choices', description: 'The author suggests one option, but every checkbox remains independent. Other is added by the shipping renderer.', required: true,
+    { id: 'approach', title: 'What kind of change should we make?', type: 'choices', description: '', required: true,
       choices: [
         { id: 'focused', label: 'A small focused change', description: 'Fix the immediate problem first.', is_recommended_reason: 'Faster review and verification.', prosAndCons: { pros: ['Small diff', 'Fast feedback'], cons: ['May leave broader cleanup for later'] } },
         { id: 'investigate', label: 'A broader investigation', description: 'Explore the surrounding behavior before choosing a fix.', assumedTrue: true },
