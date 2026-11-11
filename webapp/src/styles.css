@@ -69,6 +69,9 @@ label:not(.monaco-editor *) { display: grid; gap: 6px; font-size: .875rem; font-
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 24px 0 12px; }
 .markdown-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 16px; border: 1px solid var(--line); border-radius: 8px; }
 .markdown-preview code { font: .875rem/1.6 ui-monospace, monospace; }
+.markdown-diagram { max-width: 100%; overflow-x: auto; margin-block: 20px; }
+.markdown-diagram svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
+.markdown-diagram-error { color: var(--muted); }
 .markdown-preview blockquote { border-left: 3px solid var(--accent); margin: 16px 0; padding: 4px 16px; color: var(--muted); }
 .markdown-preview table { border-collapse: collapse; display: block; max-width: 100%; overflow: auto; margin: 16px 0; }
 .markdown-preview th, .markdown-preview td { padding: 8px 12px; border: 1px solid var(--line); }

@@ -1,5 +1,33 @@
 import { test, expect } from '@playwright/test';
 
+test('Markdown renders Mermaid flowcharts and keeps source mode and ordinary code intact', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-document-browser--mermaid-diagrams&viewMode=story');
+  const preview = page.getByRole('region', { name: 'Markdown preview', exact: true });
+  await expect(preview.getByRole('img', { name: 'Mermaid diagram' })).toHaveCount(2, { timeout: 20000 });
+  await expect(preview.locator('svg').first()).toBeVisible();
+  await expect(preview.locator('svg').first()).toContainText('Read snapshot');
+  await expect(preview.locator('svg').first()).toContainText('Apply changeset');
+  await expect(preview.locator('code.language-text')).toContainText('flowchart TD');
+  await page.getByRole('button', { name: 'Source', exact: true }).click();
+  await expect(page.getByLabel('Document content')).toContainText('```mermaid');
+  await page.getByRole('button', { name: 'Markdown preview', exact: true }).click();
+  await expect(preview.getByRole('img', { name: 'Mermaid diagram' })).toHaveCount(2);
+  await page.setViewportSize({ width: 375, height: 812 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('invalid Mermaid preserves readable source and does not block later diagrams', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto('/iframe.html?id=web-app-document-browser--invalid-mermaid&viewMode=story');
+  const preview = page.getByRole('region', { name: 'Markdown preview', exact: true });
+  await expect(preview).toContainText('Unable to render Mermaid diagram', { timeout: 20000 });
+  await expect(preview.locator('code.language-mermaid').first()).toContainText('A[Unclosed node');
+  await expect(preview).toContainText('The rest of the document still renders.');
+  await expect(preview.getByRole('img', { name: 'Mermaid diagram' })).toContainText('Still renders');
+  expect(errors).toEqual([]);
+});
+
 test('interactive mock host runs the real document controller without extension or API requests', async ({ page }) => {
   const messages: string[] = [], errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
