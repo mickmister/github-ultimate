@@ -30,7 +30,6 @@ jobs:
         uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
         timeout-minutes: 2
         with:
-          secrets_to_redact: ${{ toJSON(secrets) }}
           self_monitoring: 'false'
         env:
           OTEL_SERVICE_NAME: github-ultimate-assets
@@ -178,7 +177,6 @@ jobs:
         uses: plengauer/Thoth/actions/instrument/job@60ff0df1106176453b5ec87f96f927233759caea
         timeout-minutes: 2
         with:
-          secrets_to_redact: ${{ toJSON(secrets) }}
           self_monitoring: 'false'
         env:
           OTEL_SERVICE_NAME: github-ultimate-pages
