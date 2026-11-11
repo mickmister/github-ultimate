@@ -150,33 +150,57 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     const fieldset = el('fieldset'); fieldset.append(el('legend', q.title), markdown(q.id === 'additional_notes' ? ADDITIONAL_NOTES_DESCRIPTION : q.description));
     fields.set(q.id, fieldset);
     if (q.type === 'choices') {
+      const hint = el('p', 'Select all that apply.', 'choice-hint muted'); hint.id = `choice-hint-${q.id}`;
+      fieldset.append(hint); fieldset.setAttribute('aria-describedby', hint.id);
       const choices = choiceOptions(form, q);
       values[q.id] = Object.fromEntries(choices.map(c => [c.id, false]));
       const grouped = new Set((q.choiceGroups ?? []).flatMap(g => g.choiceIds));
       const choiceNodes = new Map<string, HTMLElement>();
       for (const c of choices) {
         const row = el('div', undefined, 'choice'); const label = el('label', undefined, 'choice-label'); const input = el('input');
+        const content = el('div', undefined, 'choice-content');
         input.type = 'checkbox'; input.name = q.id; input.value = c.id;
         controls.set(`${q.id}:${c.id}`, input);
         input.addEventListener('change', () => {
           (values[q.id] as Record<string, boolean>)[c.id] = input.checked;
         });
-        label.append(input, el('span', c.label)); row.append(label);
-        if (c.assumedTrue) row.append(el('span', 'Author assumption · not preselected', 'badge'));
-        if (c.description) row.append(markdown(c.description));
-        if (c.is_recommended_reason) row.append(el('p', `Recommended · ${c.is_recommended_reason}`, 'recommended'));
-        if (c.prosAndCons) for (const [kind, items] of Object.entries(c.prosAndCons)) if (items?.length) row.append(markdown(`**${kind === 'pros' ? 'Pros' : 'Cons'}**\n${items.map(s => `- ${s}`).join('\n')}`));
+        const choiceTitle = el('span', c.label);
+        if (c.is_recommended_reason) {
+          const recommendation = el('span', ' - Recommended'); recommendation.id = `choice-recommendation:${q.id}:${c.id}`;
+          recommendation.setAttribute('aria-hidden', 'true'); choiceTitle.append(recommendation);
+          input.setAttribute('aria-describedby', recommendation.id);
+        }
+        label.append(input, choiceTitle); row.append(label);
+        if (c.description || c.assumedTrue) {
+          const description = markdown(c.description); description.id = `choice-description:${q.id}:${c.id}`;
+          if (c.assumedTrue) {
+            const paragraph = description.lastElementChild?.tagName === 'P' ? description.lastElementChild : el('p');
+            if (!paragraph.parentElement) description.append(paragraph);
+            paragraph.append(document.createTextNode(`${paragraph.textContent ? ' ' : ''}The author assumes this applies; it is not preselected.`));
+          }
+          input.setAttribute('aria-describedby', [input.getAttribute('aria-describedby'), description.id].filter(Boolean).join(' ')); content.append(description);
+        }
+        if (c.prosAndCons) {
+          const tradeoffs = el('div', undefined, 'choice-tradeoffs');
+          for (const [kind, items] of Object.entries(c.prosAndCons)) if (items?.length) tradeoffs.append(markdown(`**${kind === 'pros' ? 'Pros' : 'Cons'}**\n${items.map(s => `- ${s}`).join('\n')}`));
+          content.append(tradeoffs);
+        }
         const note = notes(`Add note about ${c.label}`, `${q.id}_${c.id}_more_info`, values);
         if (isOtherChoice(c)) {
+          row.classList.add('choice-other');
           note.querySelector('textarea')!.placeholder = 'Describe your other option';
           input.addEventListener('change', () => {
             if (input.checked) { note.querySelector('textarea')!.hidden = false; note.querySelector('button')!.setAttribute('aria-expanded', 'true'); }
           });
         }
-        row.append(note); choiceNodes.set(c.id, row);
+        row.append(content, note); choiceNodes.set(c.id, row);
       }
       for (const g of q.choiceGroups ?? []) {
-        const block = el('section', undefined, 'choice-group'); if (g.title) block.append(el('h4', g.title));
+        const block = el('section', undefined, 'choice-group');
+        if (g.title) {
+          const heading = el('h4', g.title); heading.id = `choice-group:${q.id}:${g.id}`;
+          block.setAttribute('role', 'group'); block.setAttribute('aria-labelledby', heading.id); block.append(heading);
+        }
         if (g.description) block.append(markdown(g.description));
         if (g.mode !== 'any') block.append(el('p', 'The author suggests one option; you may select several or choose Other.', 'muted'));
         for (const name of g.choiceIds) block.append(choiceNodes.get(name)!); fieldset.append(block);
@@ -203,7 +227,8 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   for (const p of form.nextInstructionPresets ?? [{ label: 'Discuss remaining questions', value: 'Ask follow-up questions before implementing.' }]) presets.append(button(p.label, () => { nextInput.value = p.value; nextInput.dispatchEvent(new Event('input', { bubbles: true })); }));
   next.append(presets, nextInput);
   const submissionControls = el('section', undefined, 'submission-controls'); submissionControls.append(next); htmlForm.append(submissionControls);
-  const actions = el('div', undefined, 'actions');
+  const actions = el('div', undefined, 'actions submission-actions');
+  actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', 'Choose how to continue'); actions.tabIndex = -1;
   const config = typeof form.allowCodeFileChanges === 'object' ? form.allowCodeFileChanges : undefined;
   const preview = el('section', undefined, 'preview'); preview.hidden = true;
   controller.isComposingResponse = () => !preview.hidden;
@@ -242,14 +267,35 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   review.hidden = true;
   const stepButtons: HTMLButtonElement[] = [];
   const navigation: Array<{ previous: HTMLButtonElement; next: HTMLButtonElement }> = [];
+  function finalize() {
+    actions.focus({ preventScroll: true });
+    actions.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'instant' : 'smooth', block: 'center' });
+    actions.classList.remove('is-ready');
+    // Restart the one-shot emphasis if Finalize is used again.
+    void actions.offsetWidth;
+    actions.classList.add('is-ready');
+    viewChanged();
+  }
   function goTo(index: number) {
+    const headerStyle = getComputedStyle(headerSteps);
+    const scrollportTop = dialog.open ? zenBody.getBoundingClientRect().top + zenBody.clientTop : 0;
+    const scrollportPadding = dialog.open ? parseFloat(getComputedStyle(zenBody).paddingTop) || 0 : 0;
+    const stickyTop = scrollportTop + scrollportPadding + (parseFloat(headerStyle.top) || 0);
+    // Measure before changing content: a shorter question can clamp the scroll position.
+    const wasSticky = headerStyle.position === 'sticky' && questionStart.getBoundingClientRect().top < stickyTop - 1;
     step = Math.max(0, Math.min(index, questions.length)); renderStep(); save(); viewChanged();
-    questionStart.scrollIntoView({ behavior: 'instant', block: 'start' });
+    if (wasSticky) {
+      // Use the actual sticky edge, without GitHub's scroll-padding or
+      // scrollIntoView moving additional ancestor scroll containers.
+      const top = questionStart.getBoundingClientRect().top - stickyTop;
+      if (dialog.open) zenBody.scrollBy({ top, behavior: 'instant' });
+      else window.scrollBy({ top, behavior: 'instant' });
+    }
   }
   function navigationRow(includeTools = false) {
     const row = el('div', undefined, 'wizard-navigation');
     const previous = button('Previous', () => goTo(step - 1));
-    const next = button('Next', () => goTo(step + 1), 'primary');
+    const next = button('Next', () => step === questions.length ? finalize() : goTo(step + 1), 'primary');
     row.append(previous, renderRecordTools(includeTools ? openZen : undefined, includeTools ? toggleOriginal : undefined), next); navigation.push({ previous, next }); return row;
   }
   const headerSteps = el('div', undefined, 'wizard-header');
@@ -269,7 +315,8 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
     const reviewing = step === questions.length;
     progress.textContent = reviewing ? `Review · ${questions.length} questions` : `Question ${step + 1} of ${questions.length}`;
     submissionControls.hidden = !reviewing; review.hidden = !reviewing; preview.hidden = true;
-    for (const pair of navigation) { pair.previous.disabled = step === 0; pair.next.hidden = reviewing; pair.next.textContent = step === questions.length - 1 ? 'Review answers' : 'Next'; }
+    actions.classList.remove('is-ready');
+    for (const pair of navigation) { pair.previous.disabled = step === 0; pair.next.textContent = reviewing ? 'Finalize' : step === questions.length - 1 ? 'Review answers' : 'Next'; }
     if (reviewing) {
       review.replaceChildren(el('h3', 'Review answers'));
       const omitted = omittedQuestions(form, values);

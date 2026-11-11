@@ -7,6 +7,7 @@ playwright-report/
 *.tsbuildinfo
 playground-dist/
 storybook-static/
+debug-storybook.log
 hosted-dist/
 pages-site/
 webapp/.tanstack/

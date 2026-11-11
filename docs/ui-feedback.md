@@ -41,6 +41,47 @@ Clipboard access requires a secure origin and browser permission/user activation
 Use the actual Copy button; if the browser denies access, retry without losing
 the draft. Workflow dispatch and server-side comment publication are future work.
 
+## Inline document comments
+
+Queued comments on the open document appear beside their selected passages.
+Rendered Markdown uses non-destructive highlight overlays; source uses Monaco
+model decorations, including multiple selected ranges. Numbered indicators and
+clicking a highlighted passage focus its side comment. **Show passage** scrolls
+back to the selection. Overlapping comments retain separate indicators and
+non-overlapping comment cards. On narrow screens the cards stack below the
+document, with touch-sized indicators beside the text.
+
+Edit or delete a comment beside the document or in **Comments · N**. Both views
+use the same queue, so changes persist across reloads and deleting/exporting a
+comment removes its indicators. Comments without selections remain visible as
+whole-document comments. Resource kind/ID, repository, workspace, path and
+revision must match before a comment is shown on a document.
+
+New rendered selections include `selection.textRange` text-node offsets within
+the content region, excluding toolbars and feedback controls. These are **not
+Markdown source offsets**. Saved offsets are checked against the quote; older
+drafts can be anchored using the quote and its surrounding context. Ambiguous
+or missing passages stay in the side list with an explanation rather than
+highlighting a guessed match. Comments selected in another representation
+remain visible, with **Show selected view** for Markdown/source switching.
+
+The reusable `FeedbackAnnotations` component accepts the same `FeedbackTarget`
+as its enclosing `AttachableContext`, plus an optional `showRepresentation`
+callback. Wrap the actual content renderer, not its toolbar:
+
+```tsx
+<AttachableContext target={target}>
+  <FeedbackAnnotations target={target}>
+    <DocumentContent />
+  </FeedbackAnnotations>
+</AttachableContext>
+```
+
+Non-DOM editors can register an annotation adapter with
+`registerFeedbackAnnotations` for decoration updates, positioning, revealing a
+selection and layout/scroll notifications. Disposing the editor unregisters the
+adapter. Neither annotations nor their positioning add URLs to feedback events.
+
 ## Integrating another production component
 
 Mount `FeedbackProvider` above the router or panels. The app root already does
@@ -101,8 +142,12 @@ the wrapper owns invocation so it can freeze selection before menu focus changes
 Queue/controller logic is independent of Ark and document-browser actions.
 Intrinsic JSX remains in view files. Public styling variables are
 `--feedback-panel`, `--feedback-fg`, `--feedback-accent`, `--feedback-selected`, and
-`--feedback-radius`; the defaults follow the app's light/dark colors.
+`--feedback-radius`; the defaults follow the app's light/dark colors. Annotation
+colors expose `--feedback-highlight`, `--feedback-highlight-active` and
+`--feedback-highlight-border`.
 
 Stories use the real feedback and rendering components. **Web app → Feedback →
 Nested targets** demonstrates composition. The document-browser stories exercise
-the production reader, source editor and tree integrations.
+the production reader, source editor and tree integrations. **Web app → Feedback
+→ Inline comments** demonstrates the production annotation wrapper: select text
+and queue comments to see, edit and remove their indicators.

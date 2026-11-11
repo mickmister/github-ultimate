@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('original record button defaults off and follows the Storybook setting control', async ({ page }) => {
   await page.goto('/?path=/story/forms--pending');
+  await expect(page.locator('#storybook-preview-iframe')).toBeVisible();
   const canvas = page.frameLocator('#storybook-preview-iframe');
   const button = canvas.getByRole('button', { name: 'Show / hide original record', exact: true });
   await expect(canvas.getByRole('heading', { name: 'Plan the next change', exact: true })).toBeVisible();

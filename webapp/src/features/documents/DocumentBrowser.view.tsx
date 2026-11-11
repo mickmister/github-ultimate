@@ -6,6 +6,7 @@ import { DocumentTree } from './DocumentTree';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { AttachableContext } from '../feedback/AttachableContext';
 import { documentFeedbackTarget } from './feedback-target';
+import { FeedbackAnnotations } from '../feedback/FeedbackAnnotations';
 
 export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
   const selected = model.snapshot?.documents.find(document => document.id === model.documentId);
@@ -49,8 +50,12 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
             </div>
           </div>
           {model.documentMode === 'markdown' && isMarkdown(selected.path)
-            ? <AttachableContext key={`markdown:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.markdown-renderer', 'rendered-markdown')}><MarkdownDocument content={model.content} /></AttachableContext>
-            : <AttachableContext key={`source:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')}><MonacoDocument key={model.snapshot.id + ':' + selected.id} path={selected.path} content={model.content} /></AttachableContext>}
+            ? <AttachableContext key={`markdown:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.markdown-renderer', 'rendered-markdown')}>
+              <FeedbackAnnotations target={documentFeedbackTarget(model, selected, 'documents.markdown-renderer', 'rendered-markdown')} showRepresentation={representation => { if (representation === 'source') actions.setDocumentMode('source'); }}><MarkdownDocument content={model.content} /></FeedbackAnnotations>
+            </AttachableContext>
+            : <AttachableContext key={`source:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')}>
+              <FeedbackAnnotations target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')} showRepresentation={representation => { if (representation === 'rendered-markdown' && isMarkdown(selected.path)) actions.setDocumentMode('markdown'); }}><MonacoDocument key={model.snapshot.id + ':' + selected.id} path={selected.path} content={model.content} /></FeedbackAnnotations>
+            </AttachableContext>}
         </> : <><p className="document-placeholder" aria-label="Document content">{model.documentId && model.busy ? 'Reading…' : selected && model.error ? 'This document could not be loaded.' : 'Choose a document to read its verified contents.'}</p>
           {selected && model.error && <button onClick={() => actions.selectDocument(selected.id)}>Retry document</button>}</>}
       </article>

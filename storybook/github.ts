@@ -10,6 +10,8 @@ export type GitHubOptions = {
   thread?: 'pull' | 'issue';
   conversation?: 'short' | 'long';
   workspaceOpen?: boolean;
+  commentCount?: number;
+  recordCount?: number;
 };
 
 function nativeMarkdown(value: string): HTMLElement {
@@ -44,10 +46,10 @@ export function githubEnvironment(options: GitHubOptions) {
   if (!isolated) {
     const title = el('header', undefined, 'gh-thread-header');
     const heading = el('h1', undefined, 'gh-thread-title'); heading.append('Make workspace feedback easier to review ', el('span', '#42', 'gh-muted'));
-    const subtitle = el('div', undefined, 'gh-thread-subtitle'); subtitle.append(el('span', '◉ Open', 'gh-open'), el('span', issue ? 'alex opened this issue · 4 comments' : 'alex wants to merge 2 commits into main from feedback-ui'));
+    const subtitle = el('div', undefined, 'gh-thread-subtitle'); subtitle.append(el('span', '◉ Open', 'gh-open'), el('span', issue ? `alex opened this issue · ${options.commentCount ?? 4} comments` : 'alex wants to merge 2 commits into main from feedback-ui'));
     title.append(heading, subtitle);
     const tabs = el('nav', undefined, 'gh-thread-tabs'); tabs.setAttribute('aria-label', 'Conversation navigation (visual fixture)');
-    for (const text of issue ? ['Conversation  4'] : ['Conversation  4', 'Commits  2', 'Checks  4', 'Files changed  3']) tabs.append(el('span', text, text.startsWith('Conversation') ? 'selected' : ''));
+    for (const text of issue ? [`Conversation  ${options.commentCount ?? 4}`] : [`Conversation  ${options.commentCount ?? 4}`, 'Commits  2', 'Checks  4', 'Files changed  3']) tabs.append(el('span', text, text.startsWith('Conversation') ? 'selected' : ''));
     title.append(tabs); main.append(title);
   }
   const grid = el('div', undefined, 'gh-grid'); main.append(grid);
@@ -64,13 +66,27 @@ export function githubEnvironment(options: GitHubOptions) {
     const footer = el('div', '☺  Add a reaction', 'gh-comment-footer'); card.append(header, content, footer); row.append(card); target.append(row);
     return row;
   }
-  if (!isolated) {
+  if (!isolated && options.commentCount === undefined) {
     appendComment(nativeMarkdown('## What this changes\n\nThis update makes human–agent feedback easier to review directly in a conversation.\n\n- Keep questions and decisions next to the code.\n- Preserve the native GitHub comment workflow.\n- Make forms comfortable on desktop and mobile.'), 'alex', '2 hours ago');
     const event = el('div', '✓  alex added 2 commits · all 4 checks passed', 'gh-timeline-event'); timeline.append(event);
     if (options.conversation === 'long') for (let index = 0; index < 6; index++) appendComment(nativeMarkdown(`### Review note ${index + 1}\n\nWe discussed layout, keyboard focus, and how the form fits into the surrounding conversation. Scroll to the form, or use the extension’s pending-form control to open it in zen.\n\nThis extra timeline content lets you inspect offscreen navigation and the workspace overlay.`), index % 2 ? 'taylor' : 'alex', `${70 - index * 5} minutes ago`);
   }
-  const recordBody = el('div'); recordBody.dataset.mockRecord = '';
-  const sourceRow = appendComment(recordBody, 'github-ultimate[bot]', '20 minutes ago');
+  const recordBodies = Array.from({ length: options.recordCount ?? 1 }, () => {
+    const body = el('div'); body.dataset.mockRecord = ''; return body;
+  });
+  const sourceRows: HTMLElement[] = [];
+  if (options.commentCount !== undefined && !isolated) {
+    let recordIndex = 0;
+    for (let index = 1; index <= options.commentCount; index++) {
+      const nextSlot = Math.ceil((recordIndex + 1) * options.commentCount / recordBodies.length);
+      if (recordIndex < recordBodies.length && index === nextSlot) {
+        sourceRows.push(appendComment(recordBodies[recordIndex++], 'github-ultimate[bot]', `${(options.commentCount - index) * 3 + 1} minutes ago`));
+      } else {
+        appendComment(nativeMarkdown(`### Review comment ${index}\n\n${['The desktop layout looks good; please check the narrow-screen version too.', 'Can we preserve the earlier decision while updating the implementation?', 'The latest checks passed. I left follow-up context for the next planning form.'][index % 3]}`), index % 2 ? 'alex' : 'taylor', `${(options.commentCount - index) * 3 + 1} minutes ago`);
+      }
+    }
+  } else for (const body of recordBodies) sourceRows.push(appendComment(body, 'github-ultimate[bot]', '20 minutes ago'));
+  const [recordBody] = recordBodies, [sourceRow] = sourceRows;
   const postedTimeline = el('div', undefined, 'gh-posted-timeline'); timeline.append(postedTimeline);
   const native = el('form', undefined, 'gh-composer'); native.setAttribute('aria-label', 'Local comment composer');
   const nativeHeading = el('h2', 'Leave a comment');
@@ -113,23 +129,31 @@ export function githubEnvironment(options: GitHubOptions) {
   panelHeader.append(button('Close', () => { panel.hidden = true; launcher.focus(); }, 'panel-close'), el('div', 'GitHub Ultimate', 'eyebrow'), el('h2', 'Your PR workspace'), el('p', 'example/project #42', 'muted'));
   const panelBody = el('div', undefined, 'panel-body'); panel.append(panelHeader, panelBody); workspaceRoot.append(panel);
   const pending = el('section', undefined, 'pending-navigation'); pending.hidden = true; pending.setAttribute('aria-label', 'Pending forms');
-  pending.append(el('span', '1 form needs input', 'pending-count'), button('Go to form', () => { openForm(); panel.hidden = true; }, 'primary')); workspaceRoot.append(pending);
-  let openForm = () => sourceRow.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  let isComposing = () => false;
-  let formTitle = '', hasForm = false, postedCount = 0, superseded = false;
+  const pendingCount = el('span', '', 'pending-count');
+  const pendingSelect = el('select'); pendingSelect.setAttribute('aria-label', 'Choose pending form');
+  let selectedForm = 0;
+  pendingSelect.addEventListener('change', () => { selectedForm = Number(pendingSelect.value); updatePending(); });
+  pending.append(pendingCount, button('Go to form', () => { forms.get(selectedForm)?.open(); panel.hidden = true; }, 'primary'), pendingSelect); workspaceRoot.append(pending);
+  const forms = new Map<number, { title: string; superseded: boolean; posted: number; open: () => void; composing: () => boolean }>();
   function refreshPanel() {
     panelBody.replaceChildren();
     panelBody.append(el('p', 'Storybook workspace scaffold using extension styles. Form/zen and saved-record controls use the shipping renderer.', 'tab-hint'));
     panelBody.append(el('h3', 'Forms & decisions'));
-    if (hasForm) panelBody.append(button(`${superseded ? 'Superseded' : postedCount ? 'Submitted' : 'Needs input'} · ${formTitle}`, () => { panel.hidden = true; openForm(); }, 'record-link'));
-    else panelBody.append(button('Find saved record', () => { panel.hidden = true; sourceRow.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 'record-link'));
+    for (const form of forms.values()) panelBody.append(button(`${form.superseded ? 'Superseded' : form.posted ? 'Submitted' : 'Needs input'} · ${form.title}`, () => { panel.hidden = true; form.open(); }, 'record-link'));
+    if (!forms.size) panelBody.append(button('Find saved record', () => { panel.hidden = true; sourceRow.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 'record-link'));
+    const postedCount = [...forms.values()].reduce((sum, form) => sum + form.posted, 0);
     panelBody.append(el('p', postedCount ? `${postedCount} immutable response${postedCount === 1 ? '' : 's'}` : 'No response has been posted.', 'muted'));
   }
   function updatePending() {
-    const bounds = sourceRow.getBoundingClientRect();
+    const available = [...forms.entries()].filter(([, form]) => !form.superseded && !form.posted);
+    if (!available.some(([index]) => index === selectedForm)) selectedForm = available[0]?.[0] ?? 0;
+    pendingSelect.replaceChildren(...available.map(([index, form]) => { const option = el('option', form.title); option.value = String(index); return option; }));
+    pendingSelect.value = String(selectedForm); pendingSelect.hidden = available.length < 2;
+    pendingCount.textContent = `${available.length} form${available.length === 1 ? ' needs' : 's need'} input`;
+    const bounds = (sourceRows[selectedForm] ?? sourceRow).getBoundingClientRect();
     const inView = bounds.top < innerHeight - 60 && bounds.bottom > 80;
     const active = document.activeElement;
-    pending.hidden = isolated || !hasForm || superseded || postedCount > 0 || inView || isComposing() || Boolean(recordBody.querySelector('[data-gu-root]')?.shadowRoot?.querySelector('dialog[open]')) || Boolean(active && native.contains(active)) || editor.value.includes('```github-response');
+    pending.hidden = isolated || !available.length || inView || [...forms.values()].some(form => form.composing()) || recordBodies.some(body => Boolean(body.querySelector('[data-gu-root]')?.shadowRoot?.querySelector('dialog[open]'))) || Boolean(active && native.contains(active)) || editor.value.includes('```github-response');
   }
   const onFocus = () => queueMicrotask(updatePending);
   window.addEventListener('scroll', updatePending, { passive: true });
@@ -140,13 +164,13 @@ export function githubEnvironment(options: GitHubOptions) {
   workspace.addEventListener('gu-key', event => { if ((event as CustomEvent<KeyboardEvent>).detail.key === 'Escape') { panel.hidden = true; launcher.focus(); } });
   setEditorTab(false); refreshPanel();
   return {
-    frame, recordBody, native, editor, receipt,
+    frame, recordBody, recordBodies, native, editor, receipt,
     setPost(handler: () => void) { post = handler; },
-    setForm(title: string, invalidated: boolean, open: () => void, composing: () => boolean) {
-      hasForm = true; formTitle = title; superseded = invalidated; openForm = open; isComposing = composing;
+    setForm(title: string, invalidated: boolean, open: () => void, composing: () => boolean, index = 0) {
+      forms.set(index, { title, superseded: invalidated, open, composing, posted: 0 });
       refreshPanel(); updatePending();
     },
-    setPosted(count: number) { postedCount = count; refreshPanel(); updatePending(); },
+    setPosted(count: number, index = 0) { const form = forms.get(index); if (form) form.posted = count; refreshPanel(); updatePending(); },
     resetEditor() { editor.value = ''; setEditorTab(false); },
     appendPosted(body: HTMLElement, author = 'you') { appendComment(body, author, 'just now', postedTimeline); },
     appendNativePosted(value: string) { appendComment(nativeMarkdown(value), 'you', 'just now', postedTimeline); },

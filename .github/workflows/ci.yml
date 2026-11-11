@@ -117,7 +117,7 @@ jobs:
           - suite: storybook
             browsers: chromium
           - suite: webapp-storybook
-            browsers: chromium
+            browsers: chromium webkit
     steps:
       - name: Observe browser tests
         uses: mickmister/github-ultimate/.github/actions/observability@vk/46e5-vd-multi-instanc

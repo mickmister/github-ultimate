@@ -8,6 +8,7 @@ export function registerFeedbackSelection(element: HTMLElement, capture: () => F
 }
 
 export function captureFeedbackSelection(root: HTMLElement, representation = 'rendered-text'): FeedbackSelection | null {
+  root = root.querySelector<HTMLElement>('[data-feedback-content]') ?? root;
   for (const element of [root, ...root.querySelectorAll<HTMLElement>('[data-feedback-selection]')]) {
     const capture = adapters.get(element);
     if (capture) return capture();
@@ -27,5 +28,6 @@ export function captureFeedbackSelection(root: HTMLElement, representation = 're
   const before = range.cloneRange(), after = range.cloneRange();
   before.selectNodeContents(root); before.setEnd(range.startContainer, range.startOffset);
   after.selectNodeContents(root); after.setStart(range.endContainer, range.endOffset);
-  return { text, representation, prefix: before.toString().slice(-80), suffix: after.toString().slice(0, 80) };
+  const startOffset = before.toString().length;
+  return { text, representation, prefix: before.toString().slice(-80), suffix: after.toString().slice(0, 80), textRange: { startOffset, endOffset: startOffset + range.toString().length } };
 }
