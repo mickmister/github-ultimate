@@ -139,6 +139,11 @@ hosting; no domains/association files are provisioned here.
 
 ## Checks and remaining acceptance
 
+Manual cloud builds and installed-shell OTA updates are available through the
+[EAS dispatch workflows](mobile-eas.md). Updates require an EAS-enabled native
+build and a matching native fingerprint. Builds without a configured Expo
+project keep EAS Updates disabled and continue to work as the local M1 shell.
+
 ```sh
 pnpm run check
 pnpm --dir mobile run check

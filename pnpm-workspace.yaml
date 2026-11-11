@@ -9,3 +9,6 @@ allowBuilds:
   '@ast-grep/cli': true
   '@mickmister/openlint': true
   esbuild: true
+  # EAS CLI: optional native tracing and version-advice-only postinstall.
+  dtrace-provider: false
+  protobufjs: false
