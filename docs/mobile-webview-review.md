@@ -2,6 +2,14 @@
 
 ## Goal
 
+**Decision update:** keep the custom WebView for the Alohak pilot. The RNWV
+assessment below is the historical migration recommendation, not an active
+migration task. The current implementation addresses the concrete reply issue
+with imperative request/frame-bound replies (WK reply promises and AndroidX
+reply proxies), correlates iOS navigation failures, and uses Android commit
+readiness with original-URL matching. These changes still require signed-device
+lifecycle/isolation acceptance; see [mobile-alohak.md](mobile-alohak.md).
+
 Use `react-native-webview` (RNWV) for the companion's WebView implementation,
 retaining only the native integration needed for document-bound RPC. Recommend
 migration before adding GitHub authentication or more native browser features.

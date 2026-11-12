@@ -14,6 +14,8 @@ export function releasePlan(env) {
   if (!/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(env.EXPO_PROJECT_ID ?? '')) throw new Error('Configure repository secret EXPO_PROJECT_ID with the Alohak project UUID.');
   if (!/^[\w-]+$/.test(env.EXPO_OWNER ?? '')) throw new Error('Configure repository secret EXPO_OWNER with the Expo account/organization name.');
   const entry = env.EXPO_PUBLIC_ALOHAK_URL ?? '';
+  const githubConnections = env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS || '0';
+  if (!['0', '1'].includes(githubConnections)) throw new Error('EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS must be 0 or 1. Enable only after device isolation acceptance.');
   if (entry) {
     const url = new URL(entry);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('EXPO_PUBLIC_ALOHAK_URL must be a public HTTPS entry URL, without credentials.');
@@ -27,7 +29,7 @@ export function releasePlan(env) {
     operation, platform, profile, args,
     // These are PUBLIC configuration, also uploaded in eas.json so the remote
     // build resolves the SAME project/entry as the dispatch runner. No tokens.
-    publicEnv: { EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER, EXPO_PUBLIC_ALOHAK_URL: entry },
+    publicEnv: { EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER, EXPO_PUBLIC_ALOHAK_URL: entry, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: githubConnections },
   };
 }
 

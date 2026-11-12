@@ -29,7 +29,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-eas.test.ts
+      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/mobile-eas.test.ts
       - name: Build on EAS and publish links
         env:
           EAS_OPERATION: build
@@ -39,6 +39,7 @@ jobs:
           EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
           EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
           EXPO_PUBLIC_ALOHAK_URL: ${{ secrets.EXPO_PUBLIC_ALOHAK_URL }}
+          EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: ${{ secrets.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS }}
           EAS_RESULT_PATH: ${{ runner.temp }}/eas-build.json
           EXPO_NO_TELEMETRY: '1'
         run: node scripts/eas-mobile.mjs

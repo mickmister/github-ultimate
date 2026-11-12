@@ -7,8 +7,9 @@ const config: ExpoConfig = {
   platforms: ['ios', 'android'],
   ios: { bundleIdentifier: 'dev.alohak.mobile', supportsTablet: true },
   android: { package: 'dev.alohak.mobile', permissions: ['INTERNET'] },
+  plugins: ['expo-secure-store'],
   owner: process.env.EXPO_OWNER,
-  extra: { entryURL: process.env.EXPO_PUBLIC_ALOHAK_URL ?? '', ...(projectId ? { eas: { projectId } } : {}) },
+  extra: { entryURL: process.env.EXPO_PUBLIC_ALOHAK_URL ?? '', githubConnectionsEnabled: process.env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS === '1', ...(projectId ? { eas: { projectId } } : {}) },
   // Manual EAS releases may update the bundled RN shell/policy. Native APIs
   // remain compiled into the binary; fingerprints prevent incompatible updates.
   runtimeVersion: { policy: 'fingerprint' },

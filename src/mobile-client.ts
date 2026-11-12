@@ -16,14 +16,14 @@ export class MobileClient {
     page.addEventListener('alohak-native-message', this.receive);
     page.addEventListener('pagehide', this.close);
   }
-  request(method: string, params: Record<string, unknown>): Promise<unknown> {
+  request(method: string, params: Record<string, unknown>, timeoutMs = 30000): Promise<unknown> {
     const transport = this.page.alohakNative;
     if (this.closed) return Promise.reject(new Error('Native client closed.'));
     if (!transport || transport.protocolVersion !== mobileProtocol) return Promise.reject(new Error('Native bridge is not ready or compatible.'));
     if (this.pending.size >= 8) return Promise.reject(new Error('Too many pending native requests.'));
     const id = `mobile_${++requestSequence}`;
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Native request timed out; reconnect explicitly.')); }, 10000);
+      const timer = setTimeout(() => { this.pending.delete(id); reject(new Error('Native request timed out; reconnect explicitly.')); }, timeoutMs);
       this.pending.set(id, { documentId: transport.documentId, resolve, reject, timer });
       try { transport.postMessage(JSON.stringify({ jsonrpc: '2.0', id, method, params })); }
       catch { clearTimeout(timer); this.pending.delete(id); reject(new Error('Native transport failed.')); }

@@ -1,6 +1,7 @@
 // Portable protocol/policy shared by the installed shell and remote proof page.
-// M1 deliberately has no credential store, general fetch or GitHub/S3 methods.
+// Fixture/storage grants are independent of optional native GitHub connections.
 import { pageKVBytes, PageKVService, type PageKVStore } from './page-kv';
+import type { MobileGitHub } from './mobile-github';
 export const mobileProtocol = 1;
 export const alohakScheme = 'alohak';
 export const maxMobileMessageBytes = 16 * 1024;
@@ -63,7 +64,7 @@ export class MobileFixtureBroker {
   private grant?: MobileGrant;
   private storageGrant?: MobileGrant;
   private storage?: PageKVService;
-  constructor(store?: PageKVStore) {
+  constructor(store?: PageKVStore, private github?: MobileGitHub) {
     if (store) this.storage = new PageKVService(store, url => Boolean(this.storageGrant && matchesMobileGrant(this.storageGrant, url)));
   }
   approveStorage(grant?: MobileGrant) { this.storageGrant = grant && { ...grant }; }
@@ -74,10 +75,15 @@ export class MobileFixtureBroker {
     if (pageKVBytes(raw) > maxMobileMessageBytes) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Message exceeds 16 KiB.' } };
     let input: Record<string, unknown>;
     try { input = JSON.parse(raw); } catch { return this.handle(context, raw); }
-    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.')) return this.handle(context, raw);
+    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request') return this.handle(context, raw);
     const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
     const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
-    if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive storage RPC.');
+    if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive native RPC.');
+    if (input.method === 'github.request') {
+      if (!this.github || !this.isCurrent(context)) return error('GitHub bridge or native document unavailable.');
+      try { return { jsonrpc: '2.0', id, result: await this.github.hosted(context.documentURL, input.params, () => this.isCurrent(context)) }; }
+      catch (cause) { return error(cause instanceof Error ? cause.message : 'GitHub request failed. Check the native connection and retry.'); }
+    }
     const operation = ({ 'kv.snapshot': 'kvSnapshot', 'kv.set': 'kvSet', 'kv.remove': 'kvRemove', 'kv.clear': 'kvClear' } as Record<string, string>)[input.method];
     if (!operation || !this.storage || !this.isCurrent(context)) return error('Storage method or native document unavailable.');
     // Do not allow params to overwrite the broker-selected operation.
@@ -121,9 +127,16 @@ export function mobileBootstrap(documentId: string, platform: 'ios' | 'android')
   return `(() => {
     if (window.top !== window) return;
     const generation = ${JSON.stringify(documentId)};
-    const post = ${platform === 'ios' ? '(data) => window.webkit.messageHandlers.alohak.postMessage(data)' : '(data) => window.alohak.postMessage(data)'};
+    const post = ${platform === 'ios' ? `(data) => {
+      Promise.resolve(window.webkit.messageHandlers.alohak.postMessage(data)).then(reply => {
+        if (typeof reply === 'string') window.alohakReceive?.(generation, reply);
+      }, () => {
+        try { const request = JSON.parse(data); window.alohakReceive?.(generation, JSON.stringify({ jsonrpc: '2.0', id: request.id, error: { code: -32001, message: 'Native request rejected or document changed.' } })); } catch {}
+      });
+    }` : '(data) => window.alohak.postMessage(data)'};
     window.alohakNative = Object.freeze({ protocolVersion: 1, documentId: generation, postMessage: (data) => { if (typeof data === 'string') post(data); } });
     window.alohakReceive = (expected, data) => { if (expected === generation) window.dispatchEvent(new CustomEvent('alohak-native-message', { detail: data })); };
+    ${platform === 'android' ? 'window.alohak.onmessage = event => window.alohakReceive?.(generation, event.data);' : ''}
     window.dispatchEvent(new Event('alohak-native-ready'));
   })(); true;`;
 }

@@ -6,8 +6,8 @@ Based on `mickmister/handy-actions` branch `vk/ddd8-lock-screen-acti`:
 
 | Workflow | Choices | Result |
 | --- | --- | --- |
-| `build-mobile.yml` | all/android/ios; development/preview/production | Cloud EAS Build, waits for completion; links + JSON artifact |
-| `update-mobile.yml` | all/android/ios; development/preview/production; message | EAS Update to matching channel/environment; links + JSON artifact |
+| `mobile-build-eas.yml` | all/android/ios; development/preview/production | Cloud EAS Build, waits for completion; links + JSON artifact |
+| `mobile-update-eas.yml` | all/android/ios; development/preview/production; message | EAS Update to matching channel/environment; links + JSON artifact |
 
 The workflow ref is the source being released. No automatic store submission
 is included. Build failure/publish failure fails the job; CLI diagnostics are
@@ -17,9 +17,10 @@ credential-free and independent.
 
 ## One-time setup
 
-Create/select an Expo project **for Alohak**, with slug
-`alohak` (do not reuse Handy Actions' project ID). Configure
-these repository settings:
+The app config defaults to Alohak project
+`c198f19d-590b-4362-85f8-9e48c34db45a`, slug `alohak`. The release helper
+requires explicit project/owner settings so dispatched builds and updates use
+the same project. Configure these repository settings:
 
 | Setting | Kind | Meaning |
 | --- | --- | --- |
@@ -27,6 +28,7 @@ these repository settings:
 | `EXPO_PROJECT_ID` | GitHub Actions secret | Expo project UUID |
 | `EXPO_OWNER` | GitHub Actions secret | Expo account/organization owning the project |
 | `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions secret | Public HTTPS entry URL to prefill native settings; does not grant access |
+| `EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` | Optional GitHub Actions secret | Public feature flag: unset/`0` disables GitHub sign-in/reads; `1` enables only after signed-device isolation acceptance |
 
 The runtime connection credentials remain device-local. `EXPO_TOKEN` is release
 authentication, not GitHub OAuth/S3 credentials or a managed runtime auth backend.
@@ -56,12 +58,12 @@ public distribution. Development builds include
 `expo-dev-client`; preview produces an internally distributed app (Android APK),
 and production produces store builds. Expo usage/queue limits apply.
 
-The helper temporarily injects only public project/owner/entry configuration
+The helper temporarily injects only public project/owner/entry/feature configuration
 into `eas.json`'s inherited base profile before EAS uploads the worktree. This
 ensures EAS cloud workers receive the same values as the dispatch runner, even
 though GitHub secrets are not automatically present on EAS. It restores the
 file after command completion/failure. Do not configure contradictory project,
-owner or entry values in EAS environments. The environment for each build and
+owner, entry or feature values in EAS environments. The environment for each build and
 update is explicitly the selected profile name.
 
 ## Dispatch
@@ -69,10 +71,10 @@ update is explicitly the selected profile name.
 Use Actions' **Run workflow**, selecting the integration branch, or:
 
 ```sh
-gh workflow run build-mobile.yml --repo mickmister/github-ultimate \
+gh workflow run mobile-build-eas.yml --repo mickmister/github-ultimate \
   --ref vk/46e5-vd-multi-instanc -f platform=all -f profile=preview
 
-gh workflow run update-mobile.yml --repo mickmister/github-ultimate \
+gh workflow run mobile-update-eas.yml --repo mickmister/github-ultimate \
   --ref vk/46e5-vd-multi-instanc -f platform=all -f profile=preview \
   -f message='Alohak fixture update'
 ```
@@ -101,6 +103,11 @@ Origin-scoped page storage adds the native AsyncStorage dependency. Install a
 new matching build before testing that feature; an OTA-only update of an older
 fixture binary cannot supply it. See [page-storage.md](page-storage.md).
 
+Native GitHub connections add `expo-secure-store`, `expo-crypto`, and imperative
+request/frame-bound reply methods in both native adapters. Install a fresh
+matching binary before testing them. The default-off feature flag does not
+replace the outstanding signed-device checks in [mobile-alohak.md](mobile-alohak.md).
+
 The installed React Native JavaScript, including native-screen/policy logic,
 can now be changed by an authorized EAS update. This supersedes M1's original
 OTA-disabled setting. EAS release access is therefore part of the trusted app
@@ -111,8 +118,8 @@ EAS updates are separate from ordinary remote GitHub Pages UI deployments.
 The previously compiled M1 binaries without `expo-updates` cannot receive this
 feature via OTA: install a new EAS-enabled binary first. Development clients
 normally use Metro/dev tooling; preview/release builds establish actual OTA
-download/application behavior. This work does not introduce GitHub/S3 methods
-or bypass pending device isolation acceptance.
+download/application behavior. S3 remains unavailable on mobile; GitHub sign-in
+and read methods are separately gated pending device isolation acceptance.
 
 ## Verification scope
 

@@ -17,7 +17,7 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
       <nav aria-label="Existing pages"><a href={`#/reviews${model.snapshot ? '?' + new URLSearchParams({ connection: model.connectionId, repository: model.repository, workspace: model.workspaceId }) : ''}`}>Review requests</a><a href="../">Current dashboard</a><a href="../settings.html">Connection &amp; storage settings</a><a href="../s3.html">S3 object storage</a></nav>
     </header>
     <section className="connection-panel" aria-labelledby="connection-heading">
-       <div className="section-heading"><h2 id="connection-heading">Choose your workspace</h2><div><button onClick={actions.connect} disabled={model.busy}>Reconnect extension</button>{actions.forgetWorkspace && <button onClick={actions.forgetWorkspace} disabled={model.busy}>Forget saved workspace</button>}</div></div>
+       <div className="section-heading"><h2 id="connection-heading">Choose your workspace</h2><div><button onClick={actions.connect} disabled={model.busy}>Reconnect host</button>{actions.forgetWorkspace && <button onClick={actions.forgetWorkspace} disabled={model.busy}>Forget saved workspace</button>}</div></div>
       <div className="connection-fields">
         <label>Approved connection<select value={model.connectionId} onChange={event => actions.selectConnection(event.target.value)}><option value="">Choose a connection</option>{model.connections.map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connection.account}</option>)}</select></label>
         <label>Storage repository<input value={model.repository} placeholder="owner/repository" autoComplete="off" spellCheck={false} onChange={event => actions.setRepository(event.target.value)} /></label>
@@ -59,6 +59,6 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
         </> : <><p className="document-placeholder" aria-label="Document content">{model.documentId && model.busy ? 'Reading…' : selected && model.error ? 'This document could not be loaded.' : 'Choose a document to read its verified contents.'}</p>
           {selected && model.error && <button onClick={() => actions.selectDocument(selected.id)}>Retry document</button>}</>}
       </article>
-    </section> : <section className="welcome"><h2>Your documents, pinned to a snapshot</h2><p>Choose an approved connection and storage repository, discover a workspace, then browse its documents.</p><p className="muted">Sign-in and origin approval remain in extension connection settings. Document contents stay in this tab.</p></section>}
+    </section> : <section className="welcome"><h2>Your documents, pinned to a snapshot</h2><p>Choose an approved connection and storage repository, discover a workspace, then browse its documents.</p><p className="muted">Manage sign-in and deployment approval in extension connection settings or Alohak native settings. Document contents stay in this tab.</p></section>}
   </main></FeedbackProvider>;
 }

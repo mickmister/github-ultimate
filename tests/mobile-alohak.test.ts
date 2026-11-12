@@ -71,6 +71,18 @@ describe('custom-scheme navigation-only links', () => {
 });
 
 describe('installed bootstrap, safe replies and page-side JSON-RPC', () => {
+  it('delivers concurrent iOS request-bound replies independently and out of order', async () => {
+    const page = new EventTarget() as EventTarget & Record<string, any>;
+    page.top = page;
+    const replies: { id: string; resolve(value: string): void }[] = [];
+    page.webkit = { messageHandlers: { alohak: { postMessage(raw: string) { return new Promise<string>(resolve => replies.push({ id: JSON.parse(raw).id, resolve })); } } } };
+    runInNewContext(mobileBootstrap('doc1', 'ios'), { window: page, Event, CustomEvent });
+    const client = new MobileClient(page as unknown as Window);
+    const first = client.request('fixture.echo', { text: 'first' }), second = client.request('fixture.echo', { text: 'second' });
+    replies[1].resolve(JSON.stringify({ jsonrpc: '2.0', id: replies[1].id, result: 'second' }));
+    replies[0].resolve(JSON.stringify({ jsonrpc: '2.0', id: replies[0].id, result: 'first' }));
+    expect(await Promise.all([first, second])).toEqual(['first', 'second']); client.close();
+  });
   it('treats scripts in reply bodies as inert data and checks document generation', () => {
     const page = new EventTarget() as EventTarget & Record<string, any>;
     page.top = page; page.webkit = { messageHandlers: { alohak: { postMessage() {} } } };

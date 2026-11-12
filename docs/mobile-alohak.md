@@ -1,4 +1,4 @@
-# Alohak: fixture shell and page storage
+# Alohak: native GitHub connections and page storage
 
 Alohak is an Expo/React Native app for **iOS and Android**. Its
 WebView loads an explicitly configured remote HTTPS deployment. The installed
@@ -6,11 +6,11 @@ app exposes JSON-RPC through a native, document-bound transport. The desktop
 extension retains its existing protocol and behavior.
 
 The shell implements `alohak.discover`, `fixture.echo` and independently
-approved `kv.snapshot/set/remove/clear` page-data operations. No
-GitHub/S3 credentials, OAuth, private reads or remote write methods are present. Device
-flow, GitHub reads, then S3 are the selected subsequent direction; an optional
-managed backend is not required by this shell. Eventual store distribution is
-intended, with a personal device pilot first.
+approved `kv.snapshot/set/remove/clear` page-data operations. Optional native
+GitHub App device flow and private reads reuse the extension's connection
+engine. They are **disabled by default**, pending the signed-device isolation
+acceptance below. No managed auth backend is required. Eventual store
+distribution is intended, with a personal device pilot first.
 
 ## Run on devices
 
@@ -30,8 +30,9 @@ signing team for a physical device. Android requires a current System WebView
 supporting `WEB_MESSAGE_LISTENER`; unsupported versions fail closed.
 
 App IDs are `dev.alohak.mobile` (both platforms), and the scheme is
-`alohak`. No cloud build
-account, OAuth backend, signing identity or store project is embedded.
+`alohak`. The default Expo project is
+`c198f19d-590b-4362-85f8-9e48c34db45a`; `EXPO_PROJECT_ID` can override it.
+No OAuth backend, signing identity or GitHub App credentials are embedded.
 
 Build/publish the normal branch Pages preview, which now includes
 `mobile-proof.html` beside the dashboard. Alternatively serve the same build on
@@ -44,8 +45,9 @@ a controlled HTTPS host. On the device:
 3. On the remote page, tap **Discover and echo**. Expect protocol 1, `fixtureOnly:
    true`, the two allowed methods, and echoed text.
 4. Revoke the grant in native settings and repeat; expect denial. Re-enable
-   explicitly. Grants and the selected deployment are intentionally in-memory
-   for M1 and require setup after a cold launch. There is no credential import.
+   explicitly. Fixture/page-storage grants and the selected deployment are
+   intentionally in-memory and require setup after a cold launch. GitHub
+   connections have separate persistent grants, described below.
 
 To test page data, enable **Approve page storage** independently, choose
 **Alohak** in the proof page's storage backend selector, and tap
@@ -60,6 +62,64 @@ descendants, not all paths on the Pages origin. Configure a dedicated proof
 directory if approving the entire branch preview is too broad. Only trust
 scripts within the approved deployment. Same-origin path separation does not
 isolate hostile scripts/service workers from one another.
+
+## Native GitHub App connections (gated pilot)
+
+Keep `EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` unset or `0` until
+`task-3vt.39.6.3` passes. An explicitly enabled build/update uses `1`.
+Native settings still allow listing, disconnecting, removing and revoking
+existing connections when the feature is disabled. The flag is public release
+configuration, not an authorization secret or substitute for native checks.
+
+After acceptance, configure the hosted **`app/`** HTTPS URL as the deployment:
+
+1. In **GitHub App connections**, enter a connection name, public **GitHub App
+   ID** and **client ID**, then **Add GitHub connection**. Users choose their
+   Apps; multiple named connections can use different Apps or the same App.
+2. Enable device flow and expiring user tokens on that App, install it on the
+   repositories to read, and use read-only repository permissions. The shared
+   engine rejects installations with write permissions beyond Actions.
+3. Tap **Start GitHub sign-in**, then **Open GitHub verification**. Enter the
+   displayed user code at GitHub in the system browser. Polling resumes while
+   Alohak is in the foreground; **Check sign-in** retries explicitly after an
+   error. No client secret or App private key is requested.
+4. **Load installations**, select the intended installation, optionally **List
+   repositories**, then **Grant this deployment GitHub reads** for that
+   connection. Repeat separately for other connections. Fixture/page-storage
+   approvals do not grant GitHub access.
+5. Reload the hosted page, select the approved connection and private storage
+   repository, discover a workspace, browse its manifest and read a document.
+   Git blob identity/bytes are verified by the hosted reader. Alohak waits for
+   the native bootstrap and uses `github.request`; it does not fall back to an
+   extension when native startup fails.
+
+Only connection discovery, repository/probe/Git reads and workspace navigation
+preferences are allowed through this transport. Review writes, S3, sign-in,
+grant changes, arbitrary fetch and token export are unavailable to page RPC.
+Private document bytes are intentionally visible to approved deployment scripts.
+
+Connection metadata, installation choices and per-connection directory grants
+persist in AsyncStorage. Access/refresh tokens and pending device codes are
+stored only in Expo SecureStore (`WHEN_UNLOCKED_THIS_DEVICE_ONLY` on iOS).
+SecureStore's config plugin excludes Android credentials from backup. Restored
+metadata without its secret requires fresh sign-in, installation selection and
+grants. Locked/unavailable secure storage fails without a plaintext fallback.
+Page key/value data uses a separate exact-origin namespace.
+
+Each secret update writes a new secure generation before committing its metadata
+pointer, then deletes the old generation. An interrupted or failed update may
+require explicit reconnection, particularly after upstream refresh rotation;
+unreachable orphan secrets can remain if OS deletion fails. Disconnect/remove
+make credentials unreachable locally; revoke upstream authorization in GitHub
+settings when needed. Upstream revocation may affect other connections to the
+same App. Installation changes and grant revocation suppress pending results
+immediately. There is no implicit switch to another connection or installation.
+
+On cold launch, reconfigure the same deployment; GitHub credentials/grants
+persist independently of the shell's in-memory deployment selection. Verify
+restart, automatic expired-token rotation, **Refresh credentials**, revocation
+during a read, and disconnect/remove for one connection while another still
+works. These require physical-device proof, not just the fixture tests.
 
 ## Songdrive reference and differences
 
@@ -88,11 +148,14 @@ identity. This view uses native checks:
 - Both deny external/subframe navigations and popups in the bridged view,
   reject non-HTTPS entries, and invalidate generations on load/failure/process
   loss. Android disables file/content access and mixed content; certificate
-  errors are never bypassed. Blocked external URLs are not auto-opened; a
-  separate explicit system-browser action belongs with future login support.
-- Replies/bootstrap props include the native document ID. Native checks it
-  **before** evaluating the app-bundled script; the injected receiver checks
-  it again. Serialized response bytes cannot become executable source.
+  errors are never bypassed. Blocked external URLs are not auto-opened; native
+  settings open fixed GitHub verification/installation URLs only on user action.
+- Replies use imperative, request/frame-bound native commands, not a shared
+  React response prop: iOS resolves the original
+  `WKScriptMessageHandlerWithReply` promise; Android replies through the
+  sending frame's `JavaScriptReplyProxy`. At most eight native replies are
+  pending; navigation/failure/disposal invalidates them. Bootstrap evaluation
+  still checks a document ID and needs lifecycle/race verification on devices.
 - The bundled TypeScript broker rechecks the native context and current grant
   for every call, including discovery. Fixture methods are synchronous. Page
   storage is asynchronous, serialized, and rechecks the storage grant and
@@ -102,15 +165,17 @@ identity. This view uses native checks:
   must be JSON-RPC 2.0 with a bounded string ID/named params, <=16 KiB UTF-8;
   echo is <=1024 characters. Batches, notifications, unknown methods/fields and
   incompatible protocol versions are rejected. The page adapter bounds pending
-  calls at eight, times them out and discards stale generations.
+  calls at eight, times them out and discards stale generations. GitHub calls
+  use the connection's own grants and recheck native context and revocation
+  generation before/after work and before disclosing results.
 - Native settings cannot be opened/approved through page RPC. Backgrounding
   invalidates the broker; foregrounding recreates the WebView. Reload is the
   recovery path for process failure. Native settings remain available if the
   remote page fails. Native back navigation, download/file-picker integration
   and full offline persistence are not claimed by M1.
 
-The UA marker only suppresses handoff UI before bridge initialization; it is
-not an authorization signal. Neither an injected nonce nor page-side checks
+The UA marker suppresses handoff UI and selects the native transport before
+bridge initialization; it is not an authorization signal. Neither an injected nonce nor page-side checks
 replace the native trust boundary. Approved-page scripts can see everything
 their methods return. Do not enable real credentials until device acceptance.
 
@@ -153,13 +218,14 @@ hosting; no domains/association files are provisioned here.
 
 Manual cloud builds and installed-shell OTA updates are available through the
 [EAS dispatch workflows](mobile-eas.md). Updates require an EAS-enabled native
-build and a matching native fingerprint. Builds without a configured Expo
-project keep EAS Updates disabled and continue to work as the local M1 shell.
+build and a matching native fingerprint. SecureStore, Expo Crypto and the new
+native reply API require a new matching binary before testing these changes;
+an OTA-only update cannot add them to an older shell.
 
 ```sh
 pnpm run check
 pnpm --dir mobile run check
-pnpm exec vitest run tests/mobile-alohak.test.ts tests/page-storage.test.ts
+pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/page-storage.test.ts
 pnpm --dir mobile exec expo install --check
 pnpm --dir mobile exec expo-modules-autolinking resolve --platform apple
 pnpm --dir mobile exec expo-modules-autolinking resolve --platform android
@@ -173,7 +239,7 @@ navigation-only links, actual bootstrap/reply execution with hostile strings,
 and the actual page client's structured round trip. They **do not** establish
 WKWebView/Android WebView isolation. Expo export builds both Hermes bundles;
 prebuild/autolinking confirm project generation, not Swift/Kotlin compilation.
-`mobile-alohak.yml` compiles the Android debug app and iOS simulator app in
+`mobile-build-local.yml` compiles the Android debug app and iOS simulator app in
 CI, with no release-signing secrets. Native compilation is not device evidence.
 
 Physical-device acceptance remains `task-3vt.39.6.3`. Record source SHA, native
@@ -191,8 +257,12 @@ build, OS/System WebView versions, URLs, expected/actual results for:
 | Cold/warm/duplicate links and malicious route parameters | Only the configured deployment opens; no authority granted |
 | Offline/TLS/load failure | Native settings/retry available; no certificate bypass |
 | Page/app protocol mismatch | Explicit incompatibility error |
+| Concurrent replies completed out of order; navigation during completion | Each original caller receives only its own result; no replacement-document disclosure |
+| GitHub restart/refresh rotation and independent connection grants | Private document reads succeed only through the explicitly selected approved connection |
+| GitHub revocation/disconnect during queued or pending reads | Result suppressed; other connections remain independent |
 
-M1 stays unaccepted until the signed/device round trip passes. Next is native
-secure storage and real device-flow/private-read proof, then S3; no actual
-GitHub auth, S3 access, mobile Dolt WASM viability or App Store acceptance can
-be inferred from this fixture shell.
+The signed/device round trip remains unaccepted. Unit tests cover secure-store
+restart/rotation/failure and policy checks; the browser native-RPC fixture reads
+a private document through the shared broker without exposing credentials.
+Neither launches the native WebView or proves actual GitHub authorization on a
+device. S3, mobile Dolt WASM viability and App Store acceptance remain separate.

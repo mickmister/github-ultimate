@@ -8,6 +8,7 @@ import android.net.http.SslError
 import android.webkit.*
 import androidx.webkit.WebViewCompat
 import androidx.webkit.WebViewFeature
+import androidx.webkit.JavaScriptReplyProxy
 import expo.modules.kotlin.AppContext
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
@@ -24,7 +25,7 @@ class AlohakWebViewModule : Module() {
       Prop("entryURL") { view: AlohakWebView, value: String -> view.entry = value }
       Prop("scopeURL") { view: AlohakWebView, value: String -> view.scope = value }
       Prop("bootstrap") { view: AlohakWebView, value: String -> view.runBound(value) }
-      Prop("reply") { view: AlohakWebView, value: String -> view.runBound(value) }
+      AsyncFunction("respond") { view: AlohakWebView, replyId: String, data: String -> view.respond(replyId, data) }
       OnViewDidUpdateProps { view: AlohakWebView -> view.loadEntry() }
       OnViewDestroys { view: AlohakWebView -> view.dispose() }
     }
@@ -43,6 +44,7 @@ class AlohakWebView(context: Context, appContext: AppContext) : ExpoView(context
   private var ready = false
   private var listenerInstalled = false
   private val web = WebView(context)
+  private val pending = mutableMapOf<String, Pair<String, JavaScriptReplyProxy>>()
 
   init {
     addView(web, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
@@ -69,8 +71,10 @@ class AlohakWebView(context: Context, appContext: AppContext) : ExpoView(context
         // Captured from the native navigation lifecycle, not history-mutated JS.
         documentURL = url
       }
-      override fun onPageFinished(view: WebView, url: String) {
-        if (!allowed(documentURL) || documentURL.isEmpty() || url != documentURL) return
+      override fun onPageCommitVisible(view: WebView, url: String) {
+        // Readiness follows a committed document, never a late finish callback
+        // or a History API URL update. Keep the original onPageStarted URL.
+        if (url != documentURL || !allowed(documentURL) || documentURL.isEmpty()) return
         ready = true
         onDocument(mapOf("state" to "ready", "documentId" to documentId, "documentURL" to documentURL))
       }
@@ -102,11 +106,13 @@ class AlohakWebView(context: Context, appContext: AppContext) : ExpoView(context
       val origin = "https://${base.host}" + if (base.port >= 0) ":${base.port}" else ""
       // Unlike addJavascriptInterface, AndroidX reports native source origin and
       // main-frame identity. There is deliberately no insecure fallback.
-      WebViewCompat.addWebMessageListener(web, "alohak", setOf(origin)) { _, message, sourceOrigin, isMainFrame, _ ->
+      WebViewCompat.addWebMessageListener(web, "alohak", setOf(origin)) { _, message, sourceOrigin, isMainFrame, replyProxy ->
         val data = message.data
         val expected = Uri.parse(documentURL)
-        if (ready && isMainFrame && allowed(documentURL) && sourceOrigin.scheme == "https" && sourceOrigin.host == expected.host && sourceOrigin.port == expected.port && data != null && data.toByteArray(Charsets.UTF_8).size <= 16384) {
-          onMessage(mapOf("documentId" to documentId, "documentURL" to documentURL, "isMainFrame" to true, "data" to data))
+        if (ready && isMainFrame && allowed(documentURL) && sourceOrigin.scheme == "https" && sourceOrigin.host == expected.host && sourceOrigin.port == expected.port && data != null && data.toByteArray(Charsets.UTF_8).size <= 16384 && pending.size < 8) {
+          val replyId = UUID.randomUUID().toString()
+          pending[replyId] = Pair(documentId, replyProxy)
+          onMessage(mapOf("documentId" to documentId, "documentURL" to documentURL, "isMainFrame" to true, "data" to data, "replyId" to replyId))
         }
       }
       listenerInstalled = true
@@ -115,10 +121,12 @@ class AlohakWebView(context: Context, appContext: AppContext) : ExpoView(context
   }
 
   private fun invalidateDocument() {
+    pending.clear()
     ready = false; documentId = UUID.randomUUID().toString(); documentURL = ""
     onDocument(mapOf("state" to "loading", "documentId" to documentId, "documentURL" to ""))
   }
   private fun fail(message: String) {
+    pending.clear()
     ready = false; documentId = UUID.randomUUID().toString(); documentURL = ""
     onDocument(mapOf("state" to "error", "documentId" to documentId, "documentURL" to "", "message" to message))
   }
@@ -129,7 +137,12 @@ class AlohakWebView(context: Context, appContext: AppContext) : ExpoView(context
       if (data.getString("documentId") == documentId) web.evaluateJavascript(data.getString("script"), null)
     } catch (_: Exception) { /* Prop updates from a stale/unmounted view fail closed. */ }
   }
+  fun respond(replyId: String, data: String) {
+    val request = pending.remove(replyId) ?: return
+    if (ready && request.first == documentId) request.second.postMessage(data)
+  }
   fun dispose() {
+    pending.clear()
     ready = false
     if (listenerInstalled) WebViewCompat.removeWebMessageListener(web, "alohak")
     web.stopLoading(); web.destroy()
