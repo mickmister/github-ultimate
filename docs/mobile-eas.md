@@ -24,9 +24,9 @@ these repository settings:
 | Setting | Kind | Meaning |
 | --- | --- | --- |
 | `EXPO_TOKEN` | GitHub Actions secret | Expo token authorized to build/publish this project |
-| `EXPO_PROJECT_ID` | GitHub Actions variable | Expo project UUID |
-| `EXPO_OWNER` | GitHub Actions variable | Expo account/organization owning the project |
-| `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions variable | Public HTTPS entry URL to prefill native settings; does not grant access |
+| `EXPO_PROJECT_ID` | GitHub Actions secret | Expo project UUID |
+| `EXPO_OWNER` | GitHub Actions secret | Expo account/organization owning the project |
+| `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions secret | Public HTTPS entry URL to prefill native settings; does not grant access |
 
 The runtime connection credentials remain device-local. `EXPO_TOKEN` is release
 authentication, not GitHub OAuth/S3 credentials or a managed runtime auth backend.
@@ -59,7 +59,7 @@ and production produces store builds. Expo usage/queue limits apply.
 The helper temporarily injects only public project/owner/entry configuration
 into `eas.json`'s inherited base profile before EAS uploads the worktree. This
 ensures EAS cloud workers receive the same values as the dispatch runner, even
-though GitHub variables are not automatically present on EAS. It restores the
+though GitHub secrets are not automatically present on EAS. It restores the
 file after command completion/failure. Do not configure contradictory project,
 owner or entry values in EAS environments. The environment for each build and
 update is explicitly the selected profile name.

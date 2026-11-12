@@ -11,8 +11,8 @@ export function releasePlan(env) {
   if (!['all', 'android', 'ios'].includes(platform)) throw new Error('Choose all, android or ios.');
   if (!['development', 'preview', 'production'].includes(profile)) throw new Error('Choose development, preview or production.');
   if (!env.EXPO_TOKEN) throw new Error('Configure the repository EXPO_TOKEN secret.');
-  if (!/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(env.EXPO_PROJECT_ID ?? '')) throw new Error('Configure repository variable EXPO_PROJECT_ID with the Alohak project UUID.');
-  if (!/^[\w-]+$/.test(env.EXPO_OWNER ?? '')) throw new Error('Configure repository variable EXPO_OWNER with the Expo account/organization name.');
+  if (!/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(env.EXPO_PROJECT_ID ?? '')) throw new Error('Configure repository secret EXPO_PROJECT_ID with the Alohak project UUID.');
+  if (!/^[\w-]+$/.test(env.EXPO_OWNER ?? '')) throw new Error('Configure repository secret EXPO_OWNER with the Expo account/organization name.');
   const entry = env.EXPO_PUBLIC_ALOHAK_URL ?? '';
   if (entry) {
     const url = new URL(entry);
