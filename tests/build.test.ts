@@ -22,5 +22,7 @@ for (const browser of ['chrome', 'safari']) {
     expect(manifest.background).toEqual(browser === 'safari' ? { scripts: ['background.js'], persistent: false } : { service_worker: 'background.js' });
     expect(readFileSync(`${directory}/connections.html`, 'utf8')).toContain('connections-page.js');
     expect(readFileSync(`${directory}/background.js`, 'utf8')).toContain('github-ultimate-connections-v1');
-  });
+  // These are full packaging checks, including high-resolution icon generation.
+  // Allow CI runners more than Vitest's five-second unit-test default.
+  }, 60000);
 }
