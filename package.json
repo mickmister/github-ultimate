@@ -18,6 +18,7 @@
     "hosted:storybook:stage": "node scripts/stage-hosted-storybook.mjs",
     "pages:build": "pnpm run hosted:build && pnpm run webapp:storybook:build && pnpm run hosted:storybook:stage",
     "form": "node --experimental-strip-types cli/form.ts",
+    "review": "node --experimental-strip-types cli/review.ts",
     "playground": "vite --config playground/vite.config.ts",
     "storybook": "storybook dev --host 127.0.0.1 --port ${PORT:-6006} --ci --no-open --disable-telemetry",
     "storybook:build": "storybook build --disable-telemetry",

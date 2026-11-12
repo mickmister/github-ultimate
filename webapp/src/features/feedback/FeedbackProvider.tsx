@@ -19,13 +19,14 @@ export function useFeedback() {
 }
 
 /** Place once above the router/panels; nested consumers also work as standalone presentations. */
-export function FeedbackProvider({ children, includePageUrl = false, storageKey = feedbackStorageKey }: FeedbackOptions & { children: ReactNode; storageKey?: string }) {
+export function FeedbackProvider({ children, includePageUrl = false, storageKey = feedbackStorageKey, queue }: FeedbackOptions & { children: ReactNode; storageKey?: string; queue?: ReturnType<typeof createFeedbackQueue> }) {
   const parent = useContext(FeedbackContext);
-  return parent ? <>{children}</> : <FeedbackRoot key={storageKey} includePageUrl={includePageUrl} storageKey={storageKey}>{children}</FeedbackRoot>;
+  return parent && !queue ? <>{children}</> : <FeedbackRoot key={storageKey} includePageUrl={includePageUrl} storageKey={storageKey} providedQueue={queue}>{children}</FeedbackRoot>;
 }
 
-function FeedbackRoot({ children, includePageUrl, storageKey }: { children: ReactNode; includePageUrl: boolean; storageKey: string }) {
+function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: { children: ReactNode; includePageUrl: boolean; storageKey: string; providedQueue?: ReturnType<typeof createFeedbackQueue> }) {
   const [queue] = useState(() => {
+    if (providedQueue) return providedQueue;
     let initial = null;
     try { initial = sessionStorage.getItem(storageKey); } catch { /* Memory-only draft until storage is available. */ }
     return createFeedbackQueue(restoreFeedbackDraft(initial), value => sessionStorage.setItem(storageKey, value), { includePageUrl });

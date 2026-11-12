@@ -4,6 +4,7 @@ import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-rea
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import type { WorkspaceNavigation } from './workspace-navigation';
+import { writeReview } from './review-writes';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -80,7 +81,7 @@ export class Connections {
       const records = await this.store.all();
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in extension settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation'] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite'] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
@@ -109,6 +110,16 @@ export class Connections {
       if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
+      if (request.operation === 'reviewWrite') {
+        if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('The authenticated reviewer or installation changed. Reconnect before saving.');
+        const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
+        if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
+        try {
+          return await writeReview({ ...request, repository: repo.full_name }, `github:${record.user.id}`,
+            <T>(input: import('./git-reads').GitRead) => readGit(input, repo.full_name, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'none' : 'immutable')) as Promise<T>,
+            (path, method, body) => this.api(record, path, maxMetadataBytes, 'none', { method, body }));
+        } catch (error) { throw new ConnectionError(error instanceof Error ? error.message : 'Review save failed. Retry after reconnecting.'); }
+      }
       if (gitReadSchema.safeParse(request).success) {
         const gitRequest = gitReadSchema.parse(request);
         if (record.installation?.id !== gitRequest.installationId) throw new ConnectionError('The selected installation changed. Reconnect and rediscover workspaces; no fallback is allowed.');
@@ -145,7 +156,7 @@ export class Connections {
     });
   }
 
-  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'none'): Promise<unknown> {
+  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'none', mutation?: { method: 'POST' | 'PATCH'; body: unknown }): Promise<unknown> {
     const records = await this.store.all();
     const related = records.filter(other => other.id === record.id || record.user && other.user?.id === record.user.id || other.apiCooldown?.scope === 'global');
     const until = Math.max(0, ...related.map(other => other.apiCooldown?.until ?? 0));
@@ -155,7 +166,8 @@ export class Connections {
     const cached = cache === 'none' ? undefined : this.apiCache.get(key);
     if (cache === 'immutable' && cached) return structuredClone(cached.value);
     const response = await this.send(`https://api.github.com${path}`, {
-      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(cache === 'conditional' && cached?.etag ? { 'If-None-Match': cached.etag } : {}) },
+      ...(mutation ? { method: mutation.method, body: JSON.stringify(mutation.body) } : {}),
+      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(mutation ? { 'Content-Type': 'application/json' } : {}), ...(cache === 'conditional' && cached?.etag ? { 'If-None-Match': cached.etag } : {}) },
     });
     const cooldown = await responseCooldown(response, this.now(), Math.max(0, ...related.map(other => other.apiCooldown?.failures ?? 0)));
     // Keep the live record (possibly refreshed above) and persisted records in

@@ -3,6 +3,7 @@ import { WorkspaceReader, documents, documentText } from '../../../hosted/worksp
 import type { HostedConnection } from '../../../src/hosted-protocol';
 import type { AppHooksV1, DocumentSnapshotDTO, WorkspaceScope } from './contracts';
 import { workspaceNavigationSchema, type WorkspaceNavigation } from '../../../src/workspace-navigation';
+import { createHostedReviews } from './reviews';
 
 export function createHostedAppHooks(): AppHooksV1 {
   const snapshots = new Map<string, { reader: WorkspaceReader; entries: ReturnType<typeof documents> }>();
@@ -30,7 +31,7 @@ export function createHostedAppHooks(): AppHooksV1 {
   };
   return Object.freeze({
     contractVersion: 1,
-    modules: Object.freeze({ documents: Object.freeze({
+    modules: Object.freeze({ reviews: createHostedReviews(), documents: Object.freeze({
       version: 1,
       navigation,
       async connect() {
