@@ -33,6 +33,6 @@ export interface DocumentsModuleV1 {
 }
 export interface AppHooksV1 {
   readonly contractVersion: 1;
-  readonly modules: { readonly documents: DocumentsModuleV1 };
+  readonly modules: { readonly documents: DocumentsModuleV1; readonly reviews?: import('./reviews').ReviewsModuleV1 };
 }
 import type { WorkspaceNavigation } from '../../../src/workspace-navigation';

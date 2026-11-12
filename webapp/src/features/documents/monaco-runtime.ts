@@ -24,6 +24,19 @@ globalThis.MonacoEnvironment = {
   getWorker(_id, label) { return label === 'json' ? new JsonWorker() : new EditorWorker(); },
 };
 
+export function mountDocumentDiff(host: HTMLElement, path: string, before: string, after: string): () => void {
+  const original = monaco.editor.createModel(before, documentLanguage(path));
+  const modified = monaco.editor.createModel(after, documentLanguage(path));
+  const editor = monaco.editor.createDiffEditor(host, {
+    readOnly: true, domReadOnly: true, originalEditable: false, automaticLayout: true,
+    renderSideBySide: false, minimap: { enabled: false }, wordWrap: 'on',
+    accessibilitySupport: 'on', ariaLabel: 'Pinned document changes',
+    theme: matchMedia('(prefers-color-scheme: dark)').matches ? 'vs-dark' : 'vs',
+  });
+  editor.setModel({ original, modified });
+  return () => { editor.dispose(); original.dispose(); modified.dispose(); };
+}
+
 export function mountDocumentEditor(host: HTMLElement, path: string, content: string): () => void {
   const model = monaco.editor.createModel(content, documentLanguage(path));
   const dark = matchMedia('(prefers-color-scheme: dark)');

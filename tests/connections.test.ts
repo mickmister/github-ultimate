@@ -239,6 +239,18 @@ test('Git snapshot reads reject truncated trees, identity mismatches, oversized 
   expect(await broker.handleHosted(origin, { ...base, operation: 'gitBlob' })).toEqual({ sha: oid, size: 1, encoding: 'base64', content: 'YQ==' });
   expect(calls.filter(call => call.url.includes('api.github.com')).every(call => !call.init.method)).toBe(true);
 });
+test('review writes recheck exact origin/subpath, installation, repository and authenticated reviewer before mutation', async () => {
+  const connection = await login(), origin = 'https://mickmister.github.io';
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin, subpath: '/app/' });
+  const request = { operation: 'reviewWrite', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', workspace: 'workspace-a', text: JSON.stringify({ kind: 'review-response', schema_version: 1, transport: 'workspace-resources', id: 'response-1', reviewer: 'github:999', request: { id: 'request-1', version: 'a'.repeat(40), snapshot: 'b'.repeat(40) }, intent: 'feedback', forms: [], comments: [], progress: [] }), expected: null };
+  await expect(broker.handleHosted(origin + '/sibling/', request)).rejects.toThrow('no approved');
+  await expect(broker.handleHosted(origin + '/app/', { ...request, installationId: 2 })).rejects.toThrow('installation changed');
+  await expect(broker.handleHosted(origin + '/app/', { ...request, repository: 'another/private' })).rejects.toThrow('not available');
+  await expect(broker.handleHosted(origin + '/app/', request)).rejects.toThrow('another authenticated reviewer');
+  expect(calls.filter(call => ['POST', 'PATCH'].includes(call.init.method ?? '') && call.url.includes('/git/'))).toHaveLength(0);
+  expect(() => broker.handleHosted(origin + '/app/', { ...request, path: 'documents/workspace/manifest.json' })).toThrow();
+});
 
 test('primary exhaustion persists across broker restart and blocks another App for the same user', async () => {
   const first = await login(), second = await login({ name: 'Another app', appId: 999, clientId: 'OtherClient' });
