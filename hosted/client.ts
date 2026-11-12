@@ -1,8 +1,26 @@
 import { pageChannel, replyChannel, hostedRelayRevision } from '../src/bridge-channels';
 import type { HostedRequest } from '../src/hosted-protocol';
+import { MobileClient } from '../src/mobile-client';
+
+async function nativeRequest<T>(request: HostedRequest, timeoutMs: number): Promise<T> {
+  const started = Date.now();
+  if (!window.alohakNative) await new Promise<void>((resolve, reject) => {
+    const cleanup = () => { clearTimeout(timer); window.removeEventListener('alohak-native-ready', ready); };
+    const ready = () => { cleanup(); resolve(); };
+    const timer = setTimeout(() => { cleanup(); reject(new Error('Alohak bridge did not become ready. Reload from native settings.')); }, timeoutMs);
+    window.addEventListener('alohak-native-ready', ready);
+    if (window.alohakNative) ready();
+  });
+  const client = new MobileClient();
+  try { return await client.request('github.request', request, Math.max(1, timeoutMs - (Date.now() - started))) as T; }
+  finally { client.close(); }
+}
 
 export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000): Promise<T> {
   if (!window.isSecureContext) return Promise.reject(new Error('Open this page over HTTPS (or HTTP localhost for development).'));
+  // A UA marker selects transport only, never authority. Await the native
+  // bootstrap rather than accidentally trying the extension during page load.
+  if (window.alohakNative || /Alohak\/1/.test(navigator.userAgent)) return nativeRequest<T>(request, timeoutMs);
   const requestId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const cleanup = () => { clearTimeout(timeout); window.removeEventListener('message', receive); };

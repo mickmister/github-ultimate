@@ -1,4 +1,5 @@
 import { boundedJSON, maxMetadataBytes } from './git-reads';
+import { utf8Bytes } from './utf8';
 
 export type ApiCooldown = { until: number; failures: number; scope: 'user' | 'global' };
 
@@ -36,7 +37,7 @@ export class ApiReadCache {
   }
   put(key: string, value: unknown, etag?: string) {
     this.remove(key);
-    const bytes = new TextEncoder().encode(JSON.stringify(value)).byteLength;
+    const bytes = utf8Bytes(JSON.stringify(value));
     if (bytes > 32 * 1024 * 1024) return;
     this.entries.set(key, { value, etag, bytes }); this.bytes += bytes;
     while (this.bytes > 32 * 1024 * 1024 || this.entries.size > 256) this.remove(this.entries.keys().next().value!);

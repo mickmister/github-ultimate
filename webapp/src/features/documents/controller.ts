@@ -18,7 +18,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
   let state: DocumentBrowserModel = {
     connections: [], connectionId: '', repository: '', workspaces: [], workspaceId: '',
     snapshot: null, documentId: '', query: '', expandedFolders: [], treeAppearance, content: null, documentMode: 'source', documentFullscreen: false, busy: false, error: null,
-    status: 'Connect to your approved extension to browse workspace documents.', canDiscover: false, canBrowse: false,
+    status: 'Connect to your approved host to browse workspace documents.', canDiscover: false, canBrowse: false,
   };
   function patch(next: Partial<DocumentBrowserModel>) {
     if (disposed) return;
@@ -100,7 +100,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     connect() {
       if (state.busy || disposed) return;
       patch({ connections: [], connectionId: '', workspaces: [], workspaceId: '', ...emptyDocuments });
-      void run('Connecting to extension…', async isCurrent => {
+      void run('Connecting to host…', async isCurrent => {
         const connections = await api.connect();
         if (!isCurrent()) return {};
         patch({ connections });
@@ -122,7 +122,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
           }
           return { ...workspaceState, status: 'Last workspace restored and verified. Choose a document.' };
         }
-        return { connections, connectionId: connections.length === 1 ? connections[0].id : '', status: connections.length ? 'Connected. Choose a repository and discover workspaces.' : 'No approved signed-in connections. Open extension connection settings to sign in and approve this origin.' };
+        return { connections, connectionId: connections.length === 1 ? connections[0].id : '', status: connections.length ? 'Connected. Choose a repository and discover workspaces.' : 'No approved signed-in connections. Open extension connection settings or Alohak native settings to sign in and approve this deployment.' };
       });
     },
     forgetWorkspace() {

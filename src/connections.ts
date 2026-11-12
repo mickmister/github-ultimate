@@ -63,7 +63,7 @@ export type PublicConnection = ReturnType<typeof publicConnection>;
 export class Connections {
   private tail: Promise<unknown> = Promise.resolve();
   private apiCache = new ApiReadCache();
-  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now()) {}
+  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms)) {}
 
   handle(input: unknown): Promise<unknown> {
     const request = requestSchema.parse(input);
@@ -74,13 +74,15 @@ export class Connections {
     return result;
   }
 
-  handleHosted(documentURL: string, input: unknown): Promise<unknown> {
+  handleHosted(documentURL: string, input: unknown, isCurrent: () => boolean = () => true): Promise<unknown> {
     const source = loadedDocument(documentURL);
     const request = hostedRequestSchema.parse(input);
     const result = this.tail.catch(() => {}).then(async () => {
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const records = await this.store.all();
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
-      if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in extension settings and reload the page.');
+      if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
       if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite'] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
@@ -130,6 +132,9 @@ export class Connections {
       }
       if (request.operation !== 'repositories' && request.operation !== 'probe') throw new ConnectionError('Unsupported hosted operation.');
       return this.execute(request);
+    }).then(value => {
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
+      return value;
     });
     this.tail = result;
     return result;
@@ -137,7 +142,7 @@ export class Connections {
 
   private async send(url: string, init: RequestInit) {
     let response: Response;
-    try { response = await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(20000) }); }
+    try { response = await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: this.timeout(20000) }); }
     catch { throw new ConnectionError('GitHub request failed or timed out. Retry when online.'); }
     return response;
   }
@@ -248,7 +253,7 @@ export class Connections {
   private async execute(request: ConnectionRequest): Promise<unknown> {
     if (request.operation === 'list') return (await this.store.all()).map(publicConnection);
     if (request.operation === 'add') {
-      const record: ConnectionRecord = { id: crypto.randomUUID(), name: request.name, appId: request.appId, clientId: request.clientId };
+      const record: ConnectionRecord = { id: this.newId(), name: request.name, appId: request.appId, clientId: request.clientId };
       await this.store.put(record);
       return publicConnection(record);
     }

@@ -1,10 +1,7 @@
 /** Portable, string-valued page storage. Never a credential store. */
+import { utf8Bytes as pageKVBytes } from './utf8';
+export { pageKVBytes };
 export const pageKVLimit = 64 * 1024;
-export function pageKVBytes(value: string): number {
-  let bytes = 0;
-  for (const char of value) { const code = char.codePointAt(0)!; bytes += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4; }
-  return bytes;
-}
 export type PageKVSnapshot = { revision: number; entries: [string, string][] };
 export type PageKVRequest = { operation: 'kvSnapshot' | 'kvClear' } | { operation: 'kvRemove'; key: string } | { operation: 'kvSet'; key: string; value: string };
 export interface PageKVStore {
