@@ -80,13 +80,14 @@ test('live pinned review reads, remote draft reopen, response and intake acknowl
   if (process.env.REVIEW_LIVE_ACK === 'true') {
     await expect(page.getByLabel('Submission receipts')).toContainText('Task notification acknowledged');
   } else if (await page.getByLabel('Submission receipts').getByText('Response saved; task notification pending', { exact: true }).count() === 0) {
-    await page.getByLabel('I have reviewed this item').check();
+    await page.getByText('I have reviewed this item', { exact: true }).click();
     await page.getByRole('button', { name: 'Save draft remotely' }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Draft saved remotely' })).toBeVisible({ timeout: 90000 });
     await page.reload();
     await expect(page.getByLabel('I have reviewed this item')).toBeChecked({ timeout: 90000 });
     await page.getByRole('button', { name: 'Automated verification form', exact: true }).click();
     await page.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('Automated transport verification; not a human review decision.');
+    await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
     await page.getByRole('button', { name: 'Submit this form' }).click();
     await expect(page.getByLabel('Submission receipts')).toContainText('Response saved; task notification pending', { timeout: 90000 });
     expect(receipts.some(receipt => receipt.resource.includes('/drafts/'))).toBe(true);
