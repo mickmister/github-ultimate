@@ -1,13 +1,18 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
-import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit } from './git-reads';
+import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit, verifiedGitBlobBytes, type GitBlob } from './git-reads';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import type { WorkspaceNavigation } from './workspace-navigation';
 import { writeReview } from './review-writes';
+import { cacheSettingsSchema } from './cache-settings';
+import type { CacheScope, WorkspaceCache } from './workspace-cache';
+import { copyCacheValue } from './workspace-cache';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
+  z.object({ operation: z.literal('cacheSettings') }).strict(),
+  z.object({ operation: z.literal('saveCacheSettings'), settings: cacheSettingsSchema }).strict(),
   z.object({ operation: z.literal('list') }).strict(),
   z.object({ operation: z.literal('add'), name: z.string().trim().min(1).max(80), appId: z.number().int().positive(), clientId: identifier }).strict(),
   ...(['start', 'poll', 'refresh', 'installations', 'repositories', 'disconnect', 'remove'] as const).map(operation => z.object({ operation: z.literal(operation), id: z.string().uuid() }).strict()),
@@ -26,6 +31,7 @@ export type ConnectionRecord = {
   hostedGrants?: HostedGrant[];
   recentNavigation?: { source: string; updatedAt: number; navigation: WorkspaceNavigation }[];
   apiCooldown?: ApiCooldown;
+  cacheGeneration?: number;
 };
 export interface ConnectionStore {
   all(): Promise<ConnectionRecord[]>;
@@ -63,10 +69,12 @@ export type PublicConnection = ReturnType<typeof publicConnection>;
 export class Connections {
   private tail: Promise<unknown> = Promise.resolve();
   private apiCache = new ApiReadCache();
-  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms)) {}
+  private epoch = 0;
+  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache) {}
 
   handle(input: unknown): Promise<unknown> {
     const request = requestSchema.parse(input);
+    if (['disconnect', 'remove', 'revokeOrigin', 'selectInstallation'].includes(request.operation)) this.epoch++;
     // Serialize refresh rotation, disconnect and polling, including concurrent
     // requests from multiple settings tabs. Persist each transition before reply.
     const result = this.tail.catch(() => {}).then(() => this.execute(request));
@@ -75,6 +83,8 @@ export class Connections {
   }
 
   handleHosted(documentURL: string, input: unknown, isCurrent: () => boolean = () => true): Promise<unknown> {
+    const epoch = this.epoch, callerCurrent = isCurrent;
+    isCurrent = () => callerCurrent() && epoch === this.epoch;
     const source = loadedDocument(documentURL);
     const request = hostedRequestSchema.parse(input);
     const result = this.tail.catch(() => {}).then(async () => {
@@ -83,7 +93,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite'] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', ...(this.persistentCache ? ['persistedWorkspaceCache'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
@@ -124,10 +134,33 @@ export class Connections {
       }
       if (gitReadSchema.safeParse(request).success) {
         const gitRequest = gitReadSchema.parse(request);
+        if (!record.tokens || !record.user) throw new ConnectionError('Sign in before reading workspace data.');
         if (record.installation?.id !== gitRequest.installationId) throw new ConnectionError('The selected installation changed. Reconnect and rediscover workspaces; no fallback is allowed.');
+        const scope: CacheScope = { connection: record.id, account: record.user.id, installation: record.installation.id, generation: record.cacheGeneration,
+          repository: gitRequest.repository, workspace: 'workspace' in gitRequest ? gitRequest.workspace : '',
+          namespace: gitRequest.operation === 'gitRefs' ? 'metadata' : gitRequest.namespace ?? 'documents' };
+        const resource = gitRequest.operation === 'gitRefs' ? gitRequest.prefix : `${gitRequest.operation}:${gitRequest.oid}`;
+        let cached = await this.persistentCache?.get(scope, resource, gitRequest.cacheOnly || gitRequest.cacheVisit);
+        if (cached !== undefined) {
+          try { cached = await readGit(gitRequest, gitRequest.repository, async () => cached); if (gitRequest.operation === 'gitBlob') verifiedGitBlobBytes(cached as GitBlob); }
+          catch { await this.persistentCache?.remove(scope, resource).catch(() => {}); cached = undefined; }
+        }
+        if (gitRequest.cacheOnly) {
+          if (cached === undefined) throw new ConnectionError('No persisted workspace read is available.');
+          // The same response validators apply to disk and HTTP data. Blob bytes
+          // are additionally hashed by WorkspaceReader before being displayed.
+          return readGit(gitRequest, gitRequest.repository, async () => cached);
+        }
         const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === gitRequest.repository.toLowerCase());
-        if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
-        try { return await readGit(gitRequest, repo.full_name, (path, maxBytes) => this.api(record, path, maxBytes, gitRequest.operation === 'gitRefs' ? 'conditional' : 'immutable')); }
+        if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
+        try {
+          if (cached !== undefined && gitRequest.operation !== 'gitRefs') return await readGit(gitRequest, repo.full_name, async () => cached);
+          const result = await readGit(gitRequest, repo.full_name, (path, maxBytes) => this.api(record, path, maxBytes, gitRequest.operation === 'gitRefs' ? 'conditional' : 'immutable'));
+          if (this.persistentCache && gitRequest.operation === 'gitBlob') verifiedGitBlobBytes(result as GitBlob);
+          if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+          await this.persistentCache?.put(scope, resource, result);
+          return result;
+        }
         catch (error) { this.apiCache.clearConnection(record.id); throw error; }
       }
       if (request.operation !== 'repositories' && request.operation !== 'probe') throw new ConnectionError('Unsupported hosted operation.');
@@ -138,6 +171,14 @@ export class Connections {
     });
     this.tail = result;
     return result;
+  }
+
+  private async retireCache(record: ConnectionRecord) {
+    record.cacheGeneration = (record.cacheGeneration ?? 0) + 1;
+    await this.store.put(record);
+    this.apiCache.clearConnection(record.id);
+    // Generation changes prevent reuse even when physical cleanup fails.
+    await this.persistentCache?.clearConnection(record.id).catch(() => {});
   }
 
   private async send(url: string, init: RequestInit) {
@@ -161,15 +202,18 @@ export class Connections {
     });
   }
 
-  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'none', mutation?: { method: 'POST' | 'PATCH'; body: unknown }): Promise<unknown> {
+  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'conditional', mutation?: { method: 'POST' | 'PATCH'; body: unknown }): Promise<unknown> {
     const records = await this.store.all();
     const related = records.filter(other => other.id === record.id || record.user && other.user?.id === record.user.id || other.apiCooldown?.scope === 'global');
     const until = Math.max(0, ...related.map(other => other.apiCooldown?.until ?? 0));
     if (until > this.now()) throw new ConnectionError(`GitHub API rate limit: retry after ${new Date(until).toISOString()}. No request was sent.`);
     const token = await this.accessToken(record);
     const key = `${record.id}:${record.installation?.id ?? 0}:${path}`;
-    const cached = cache === 'none' ? undefined : this.apiCache.get(key);
-    if (cache === 'immutable' && cached) return structuredClone(cached.value);
+    const diskScope: CacheScope = { connection: record.id, account: record.user?.id ?? 0, installation: record.installation?.id ?? 0, generation: record.cacheGeneration, repository: 'github-api', workspace: '', namespace: 'metadata' };
+    const persisted = cache === 'conditional' && !mutation ? await this.persistentCache?.get(diskScope, path) : undefined;
+    const disk = z.object({ value: z.unknown(), etag: z.string().max(8192).optional() }).safeParse(persisted);
+    const cached = cache === 'none' ? undefined : this.apiCache.get(key) ?? (disk.success && disk.data.value !== undefined ? disk.data : undefined);
+    if (cache === 'immutable' && cached) return copyCacheValue(cached.value);
     const response = await this.send(`https://api.github.com${path}`, {
       ...(mutation ? { method: mutation.method, body: JSON.stringify(mutation.body) } : {}),
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(mutation ? { 'Content-Type': 'application/json' } : {}), ...(cache === 'conditional' && cached?.etag ? { 'If-None-Match': cached.etag } : {}) },
@@ -187,12 +231,18 @@ export class Connections {
       }
     }
     if (!response.ok && cooldown) throw new ConnectionError(`GitHub API rate limit: retry after ${new Date(cooldown.until).toISOString()}. Retry manually after the cooldown.`);
-    if (response.status === 304 && cached) return structuredClone(cached.value);
-    if (!response.ok) { this.apiCache.clearConnection(record.id); throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`); }
+    if (response.status === 304 && cached) return copyCacheValue(cached.value);
+    if (!response.ok) {
+      this.apiCache.clearConnection(record.id);
+      if ([401, 403, 404].includes(response.status)) await this.retireCache(record);
+      throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`);
+    }
     let value: unknown;
     try { value = await boundedJSON(response, maxBytes); }
     catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }
-    if (cache !== 'none') this.apiCache.put(key, value, response.headers.get('etag') ?? undefined);
+    const etag = response.headers.get('etag') ?? undefined;
+    if (cache !== 'none') this.apiCache.put(key, value, etag);
+    if (cache === 'conditional' && !mutation) await this.persistentCache?.put(diskScope, path, { value, etag });
     return value;
   }
 
@@ -251,6 +301,11 @@ export class Connections {
   }
 
   private async execute(request: ConnectionRequest): Promise<unknown> {
+    if (request.operation === 'cacheSettings' || request.operation === 'saveCacheSettings') {
+      if (!this.persistentCache) throw new ConnectionError('Persistent workspace caching is unavailable in this host.');
+      if (request.operation === 'saveCacheSettings') { await this.persistentCache.settings.save(request.settings); await this.persistentCache.trim(); }
+      return { settings: await this.persistentCache.settings.read(), status: await this.persistentCache.status() };
+    }
     if (request.operation === 'list') return (await this.store.all()).map(publicConnection);
     if (request.operation === 'add') {
       const record: ConnectionRecord = { id: this.newId(), name: request.name, appId: request.appId, clientId: request.clientId };
@@ -260,14 +315,14 @@ export class Connections {
     const record = await this.store.get(request.id);
     if (!record) throw new ConnectionError('Connection no longer exists.');
     switch (request.operation) {
-      case 'remove': this.apiCache.clearConnection(record.id); await this.store.remove(record.id); return null;
+      case 'remove': this.apiCache.clearConnection(record.id); await this.store.remove(record.id); await this.persistentCache?.clearConnection(record.id).catch(() => {}); return null;
       case 'disconnect':
         this.apiCache.clearConnection(record.id);
         delete record.tokens; delete record.pending; delete record.user; delete record.installation;
         delete record.origins;
         delete record.hostedGrants;
         delete record.recentNavigation;
-        await this.store.put(record); return publicConnection(record);
+        await this.retireCache(record); return publicConnection(record);
       case 'grantOrigin': {
         const origin = trustedOrigin(request.origin);
         const subpath = trustedSubpath(request.subpath);
@@ -281,7 +336,7 @@ export class Connections {
       case 'revokeOrigin':
         record.hostedGrants = hostedGrants(record).filter(grant => grant.origin !== trustedOrigin(request.origin) || grant.subpath !== trustedSubpath(request.subpath));
         delete record.origins;
-        await this.store.put(record); return publicConnection(record);
+        await this.retireCache(record); return publicConnection(record);
       case 'start': {
         if (record.tokens) throw new ConnectionError('Disconnect this connection before signing in again.');
         const data = z.object({ device_code: z.string().min(1), user_code: z.string().min(1), verification_uri: z.literal('https://github.com/login/device'), expires_in: z.number().positive(), interval: z.number().positive() })
@@ -332,7 +387,7 @@ export class Connections {
         }
         this.apiCache.clearConnection(record.id);
         record.installation = { id: installation.id, account: installation.account.login };
-        await this.store.put(record); return publicConnection(record);
+        await this.retireCache(record); return publicConnection(record);
       }
       case 'repositories': return this.repositories(record);
       case 'probe': {

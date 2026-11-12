@@ -6,6 +6,10 @@ import { fetch as expoFetch } from 'expo/fetch';
 import { Connections } from '../src/connections';
 import { MobileConnectionStore } from '../src/mobile-connection-store';
 import { MobileGitHub } from '../src/mobile-github';
+import { openDatabaseAsync } from 'expo-sqlite';
+import { SQLiteWorkspaceCacheStore } from '../src/sqlite-workspace-cache';
+import { CacheSettingsService } from '../src/cache-settings';
+import { WorkspaceCache } from '../src/workspace-cache';
 
 export const githubEnabled = Constants.expoConfig?.extra?.githubConnectionsEnabled === true;
 const options = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
@@ -21,4 +25,5 @@ const timeout = (ms: number) => {
   setTimeout(() => controller.abort(), ms);
   return controller.signal;
 };
-export const github = new MobileGitHub(new Connections(store, fetcher, Date.now, randomUUID, timeout), () => githubEnabled);
+export const workspaceCache = new WorkspaceCache(new SQLiteWorkspaceCacheStore(openDatabaseAsync('alohak-workspace-cache-v1.db')), new CacheSettingsService(AsyncStorage));
+export const github = new MobileGitHub(new Connections(store, fetcher, Date.now, randomUUID, timeout, workspaceCache), () => githubEnabled);

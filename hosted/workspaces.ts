@@ -7,10 +7,10 @@ export type Snapshot = { commit: string; tree: GitTree };
 const maxBlobBytes = 16 * 1024 * 1024;
 
 export class WorkspaceReader {
-  constructor(private send: GitTransport, private id: string, private repository: string, private installationId: number, private workspace?: string) {}
+  constructor(private send: GitTransport, private id: string, private repository: string, private installationId: number, private workspace?: string, private namespace: 'documents' | 'dolt' = 'documents') {}
   private read<T>(request: Omit<GitRead, 'id' | 'repository' | 'installationId' | 'workspace'> & { prefix?: 'documents/' | 'dolt/'; oid?: string }) {
     if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace first.');
-    return this.send<T>({ ...request, id: this.id, installationId: this.installationId, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
+    return this.send<T>({ ...(this.namespace === 'dolt' ? { namespace: this.namespace } : {}), ...request, id: this.id, installationId: this.installationId, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
   }
   async discover(progress?: (prefix: 'documents/' | 'dolt/') => void): Promise<Workspace[]> {
     const workspaces = new Map<string, Workspace>();
@@ -31,8 +31,8 @@ export class WorkspaceReader {
     }
     return [...workspaces.values()].sort((a,b) => a.name.localeCompare(b.name));
   }
-  async snapshot(oid: string): Promise<Snapshot> {
-    const commit = await this.read<GitCommit>({ operation: 'gitCommit', oid });
+  async snapshot(oid: string, visit = false): Promise<Snapshot> {
+    const commit = await this.read<GitCommit>({ operation: 'gitCommit', oid, ...(visit ? { cacheVisit: true } : {}) });
     if (commit.sha !== oid) throw new Error('Snapshot commit identity mismatch.');
     const tree = await this.read<GitTree>({ operation: 'gitTree', oid: commit.tree.sha });
     if (tree.truncated || tree.sha !== commit.tree.sha) throw new Error('Incomplete or mismatched snapshot tree.');

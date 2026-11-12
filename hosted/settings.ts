@@ -166,10 +166,12 @@ beadsButton.addEventListener('click', () => void action(async () => {
   const current = generation, activeReader = workspaceReader();
   const opened = await activeReader.open(workspace); if (current !== generation) return;
   snapshotInfo.textContent = `${opened.manifest.purpose ?? `${opened.manifest.repositories?.length ?? 0} repository attachment(s)`} · Manifest verified at Git ${opened.snapshot.commit}.`;
-  const loaded = await activeReader.snapshot(workspace.dolt!);
+  const connection = connections.find(connection => connection.id === select.value)!;
+  const doltReader = new WorkspaceReader(bridgeRequest, connection.id, repository.value.trim(), connection.installation!.id, workspace.name, 'dolt');
+  const loaded = await doltReader.snapshot(workspace.dolt!, true);
   const manifest = loaded.tree.tree.find(entry => entry.path === 'manifest');
   if (!manifest) throw new Error('Dolt snapshot has no manifest.');
-  const text = documentText(await activeReader.blob(manifest)); if (current !== generation) return;
+  const text = documentText(await doltReader.blob(manifest)); if (current !== generation) return;
   const fields = text.split(':');
   if (fields[0] !== '5' || fields[1] !== '__DOLT__' || !/^[0-9a-v]{32}$/.test(fields[3] ?? '')) throw new Error('Unsupported Dolt manifest format.');
   const files = loaded.tree.tree.filter(entry => entry.type === 'blob');

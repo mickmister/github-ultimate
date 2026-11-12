@@ -38,4 +38,8 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <form id="page-storage-add"><label>Page storage origin<input id="page-storage-origin" required type="url" placeholder="https://your-app.example"></label>
 <label>Page storage subpath<input id="page-storage-subpath" value="/" required></label><button>Grant page storage</button></form>
 <p id="page-storage-status" role="status"></p><div id="page-storage-grants"></div></section>
+<section aria-labelledby="workspace-cache-heading"><h2 id="workspace-cache-heading">Workspace cache</h2>
+<p>Device-local limits apply to persisted reads. Documents and Dolt have separate workspace counts and share the total capacity. Old workspace data is evicted first; authoritative remote data and authored drafts are retained.</p>
+<form id="workspace-cache-settings"><label><input name="cacheDolt" type="checkbox">Persist Dolt reads</label><button>Save cache settings</button></form>
+<p id="workspace-cache-status" role="status"></p></section>
 <script src="connections-page.js"></script></body></html>

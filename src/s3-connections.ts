@@ -5,6 +5,7 @@ import { ConnectionError } from './connections';
 import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import { trustedOrigin } from './hosted-protocol';
 import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
+import type { CacheScope, WorkspaceCache } from './workspace-cache';
 
 export type S3ConnectionRecord = S3Configuration & { id: string; revision: string; hostedGrants: HostedGrant[] };
 export interface S3ConnectionStore {
@@ -13,6 +14,8 @@ export interface S3ConnectionStore {
   put(record: S3ConnectionRecord): Promise<void>;
   remove(id: string): Promise<void>;
 }
+const cachedObjectSchema = z.object({ key: z.string().max(1024), size: z.number().int().min(0).max(maxS3ObjectBytes), contentType: z.string().max(1000), base64: z.string().max(Math.ceil(maxS3ObjectBytes / 3) * 4).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/), etag: z.string().optional(), versionId: z.string().optional() });
+const cachedListingSchema = z.object({ objects: z.array(z.object({ key: z.string().max(1024), size: z.number().int().nonnegative(), etag: z.string().optional() })).max(100), continuationToken: z.string().max(8192).optional() });
 function publicConnection(record: S3ConnectionRecord): PublicS3Connection {
   const { id, revision, name, endpoint, region, bucket, addressing, prefix, allowRead, allowUpload, allowOverwrite, hostedGrants } = record;
   return { id, revision, name, endpoint, region, bucket, addressing, prefix, allowRead, allowUpload, allowOverwrite, hostedGrants };
@@ -43,12 +46,14 @@ function base64(bytes: Uint8Array) {
 // never select endpoints/headers, and replies never contain credentials.
 export class S3Connections {
   private tail: Promise<unknown> = Promise.resolve();
-  constructor(private store: S3ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true) {}
+  private epoch = 0;
+  constructor(private store: S3ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private cache?: WorkspaceCache) {}
   private serialize<T>(work: () => Promise<T>) {
     const result = this.tail.catch(() => {}).then(work); this.tail = result; return result;
   }
   handle(input: unknown) {
     const request = s3SettingsSchema.parse(input);
+    if (request.operation !== 'list') this.epoch++;
     return this.serialize(async () => {
       if (request.operation === 'list') return (await this.store.all()).map(publicConnection);
       if (request.operation === 'add' || request.operation === 'update') {
@@ -58,22 +63,23 @@ export class S3Connections {
         const target = s3BucketURL(config);
         if (!await this.hasHostAccess(target.origin)) throw new ConnectionError('Browser host access to the S3 endpoint was not granted.');
         const record: S3ConnectionRecord = { ...config, endpoint: new URL(config.endpoint).href, prefix: s3Prefix(config.prefix), id: existing?.id ?? crypto.randomUUID(), revision: crypto.randomUUID(), hostedGrants: existing?.hostedGrants ?? [] };
-        await this.store.put(record); return publicConnection(record);
+        await this.store.put(record); if (existing) await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {}); return publicConnection(record);
       }
       const record = await this.store.get(request.id);
       if (!record) throw new ConnectionError('S3 connection no longer exists.');
-      if (request.operation === 'remove') { await this.store.remove(record.id); return null; }
+      if (request.operation === 'remove') { await this.store.remove(record.id); await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {}); return null; }
       const grant = { origin: trustedOrigin(request.origin), subpath: trustedSubpath(request.subpath) };
       if (request.operation === 'grantOrigin') {
         const replace = request.replace && { origin: trustedOrigin(request.replace.origin), subpath: trustedSubpath(request.replace.subpath) };
         record.hostedGrants = record.hostedGrants.filter(item => !replace || item.origin !== replace.origin || item.subpath !== replace.subpath);
         if (!record.hostedGrants.some(item => item.origin === grant.origin && item.subpath === grant.subpath)) record.hostedGrants.push(grant);
       } else record.hostedGrants = record.hostedGrants.filter(item => item.origin !== grant.origin || item.subpath !== grant.subpath);
-      await this.store.put(record); return publicConnection(record);
+      await this.store.put(record); if (request.operation === 'revokeOrigin') await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {}); return publicConnection(record);
     });
   }
   handleHosted(documentURL: string, input: unknown) {
     const document = loadedDocument(documentURL), request = s3HostedSchema.parse(input);
+    const epoch = this.epoch;
     return this.serialize(async () => {
       const approved = (await this.store.all()).filter(record => record.hostedGrants.some(grant => matchesGrant(grant, document)));
       if (request.operation === 's3Connections') return approved.map(publicConnection);
@@ -85,10 +91,26 @@ export class S3Connections {
       if (!await this.hasHostAccess(url.origin)) throw new ConnectionError('Browser host access to the S3 endpoint was revoked.');
       const path = s3Key(request.operation === 's3List' ? request.prefix ?? record.prefix : request.key);
       if (!path.startsWith(record.prefix)) throw new ConnectionError('The object key or listing prefix is outside this connection’s allowed prefix.');
+      const scope: CacheScope = { connection: `s3:${record.id}`, account: 0, installation: 0, generation: record.revision, repository: record.endpoint + record.bucket, workspace: record.prefix, namespace: 'metadata' };
+      const resource = JSON.stringify([request.operation, path, request.operation === 's3List' ? request.continuationToken ?? '' : '']);
+      const candidate = request.operation === 's3Upload' ? undefined : await this.cache?.get(scope, resource);
+      const parsed = z.object({ result: request.operation === 's3List' ? cachedListingSchema : cachedObjectSchema, etag: z.string().max(8192).optional() }).safeParse(candidate);
+      let cached = parsed.success ? parsed.data : undefined;
+      if (cached) {
+        const result = cached.result;
+        if ('objects' in result ? result.objects.some(object => !object.key.startsWith(path)) : result.key !== path || result.base64.length / 4 * 3 - (result.base64.endsWith('==') ? 2 : result.base64.endsWith('=') ? 1 : 0) !== result.size) cached = undefined;
+      }
+      if (candidate !== undefined && !cached) await this.cache?.remove(scope, resource).catch(() => {});
+      if (request.operation !== 's3Upload' && request.cacheOnly) {
+        if (!cached) throw new ConnectionError('No persisted S3 read is available.');
+        return cached.result;
+      }
       if (request.operation === 's3List') {
         url.searchParams.set('list-type', '2'); url.searchParams.set('max-keys', '100'); url.searchParams.set('prefix', path); url.searchParams.set('encoding-type', 'url');
         if (request.continuationToken) url.searchParams.set('continuation-token', request.continuationToken);
-        const xml = new TextDecoder('utf-8', { fatal: true }).decode(await boundedBytes(await this.send(record, url), 2 * 1024 * 1024));
+        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} });
+        if (response.status === 304 && cached) return cached.result;
+        const xml = new TextDecoder('utf-8', { fatal: true }).decode(await boundedBytes(response, 2 * 1024 * 1024));
         if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new ConnectionError('Unsupported S3 XML response.');
         let data: unknown;
         try { data = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: false, isArray: name => name === 'Contents' }).parse(xml); }
@@ -103,23 +125,29 @@ export class S3Connections {
           if (!key.startsWith(path) || !key.startsWith(record.prefix) || !Number.isSafeInteger(size) || size < 0) throw new ConnectionError('S3 returned an object outside the requested prefix or an invalid size.');
           return { key, size, etag: item.ETag };
         });
-        return { objects, ...(listing.IsTruncated === 'true' ? { continuationToken: listing.NextContinuationToken } : {}) } satisfies S3Listing;
+        const page = { objects, ...(listing.IsTruncated === 'true' ? { continuationToken: listing.NextContinuationToken } : {}) } satisfies S3Listing;
+        if (epoch === this.epoch) await this.cache?.put(scope, resource, { result: page, etag: response.headers.get('ETag') ?? undefined });
+        return page;
       }
       // Encode keys once, preserving literal % and slash structure. Dot segments
       // are rejected before URL construction so they cannot escape the bucket.
       url.pathname += path.split('/').map(encodeURIComponent).join('/');
       if (request.operation === 's3Read') {
-        const response = await this.send(record, url);
+        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} });
+        if (response.status === 304 && cached) return cached.result;
         const bytes = await boundedBytes(response, maxS3ObjectBytes);
-        return { key: path, size: bytes.length, contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', base64: base64(bytes), etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined } satisfies S3Object;
+        const result = { key: path, size: bytes.length, contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', base64: base64(bytes), etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined } satisfies S3Object;
+        if (epoch === this.epoch) await this.cache?.put(scope, resource, { result, etag: result.etag });
+        return result;
       }
       if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(request.base64)) throw new ConnectionError('Upload must contain canonical base64 bytes.');
       const bytes = Uint8Array.from(atob(request.base64), char => char.charCodeAt(0));
       if (bytes.length > maxS3ObjectBytes) throw new ConnectionError('Upload exceeds the 8 MiB object limit.');
       const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': request.contentType, ...(!record.allowOverwrite ? { 'If-None-Match': '*' } : {}) } });
       await response.body?.cancel();
+      await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});
       return { key: path, size: bytes.length, etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined };
-    });
+    }).then(value => { if (epoch !== this.epoch) throw new ConnectionError('S3 access changed during the request. Reconnect.'); return value; });
   }
   private async send(record: S3ConnectionRecord, url: URL, init: RequestInit = {}) {
     const client = new AwsClient({ accessKeyId: record.accessKeyId, secretAccessKey: record.secretAccessKey, sessionToken: record.sessionToken, service: 's3', region: record.region, retries: 0 });
@@ -127,9 +155,11 @@ export class S3Connections {
     let response: Response;
     try { response = await this.fetcher(signed, { credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30000) }); }
     catch { throw new ConnectionError('S3 request failed or timed out. Check endpoint, region, credentials and browser host access.'); }
-    if (!response.ok) {
+    const notModified = response.status === 304 && (!init.method || init.method === 'GET') && new Headers(init.headers).has('If-None-Match');
+    if (!response.ok && !notModified) {
       await response.body?.cancel();
       if (response.status === 412) throw new ConnectionError('That object already exists. This connection does not permit replacement; choose another key.');
+      if ([401, 403, 404].includes(response.status)) await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});
       throw new ConnectionError(`S3 returned HTTP ${response.status}. Check access and endpoint compatibility. No automatic retry or overwrite fallback was used.`);
     }
     return response;

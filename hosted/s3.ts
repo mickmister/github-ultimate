@@ -38,13 +38,22 @@ async function action(work: (current: () => boolean) => Promise<void>) {
   if (busy) return;
   const current = ++generation; busy = true; update(); report('Waiting for storage…');
   try { await work(() => current === generation); }
-  catch (error) { if (current === generation) { clearResult(); objects.replaceChildren(); continuationToken = undefined; report(error instanceof Error ? error.message : 'Object storage request failed.'); } }
+  catch (error) { if (current === generation) {
+    const message = error instanceof Error ? error.message : 'Object storage request failed.';
+    if (/not approved|not enabled|revoked|configuration changed|HTTP (401|403|404)/i.test(message)) { clearResult(); objects.replaceChildren(); continuationToken = undefined; }
+    report(message + ' Displayed cached data, if any, may be out of date.');
+  } }
   finally { if (current === generation) { busy = false; update(); } }
 }
 async function list(current: () => boolean, next = false) {
   const record = selected(); if (!record) return;
-  const listing = await bridgeRequest<S3Listing>({ operation: 's3List', id: record.id, revision: record.revision, prefix: prefix.value, ...(next && continuationToken ? { continuationToken } : {}) });
+  const request = { operation: 's3List' as const, id: record.id, revision: record.revision, prefix: prefix.value, ...(next && continuationToken ? { continuationToken } : {}) };
+  try { const cached = await bridgeRequest<S3Listing>({ ...request, cacheOnly: true }); if (current()) showListing(cached, true); } catch { /* Cache miss or older broker. */ }
+  const listing = await bridgeRequest<S3Listing>(request);
   if (!current()) return;
+  showListing(listing);
+}
+function showListing(listing: S3Listing, cached = false) {
   objects.replaceChildren(); continuationToken = listing.continuationToken;
   for (const object of listing.objects) {
     const row = document.createElement('p'), button = document.createElement('button');
@@ -52,7 +61,7 @@ async function list(current: () => boolean, next = false) {
     button.addEventListener('click', () => { key.value = object.key; clearResult(); remember(); update(); });
     row.append(button); objects.append(row);
   }
-  remember(); report(`${listing.objects.length} object(s) loaded.${continuationToken ? ' Another page is available.' : ''}`);
+  remember(); report(`${listing.objects.length} object(s) ${cached ? 'cached; refreshing…' : 'loaded.'}${continuationToken ? ' Another page is available.' : ''}`);
 }
 async function connect(current: () => boolean) {
   clearResult(); objects.replaceChildren(); continuationToken = undefined;
@@ -84,13 +93,19 @@ controls.list.addEventListener('click', () => void action(current => list(curren
 controls.next.addEventListener('click', () => void action(current => list(current, true)));
 controls.read.addEventListener('click', () => void action(async current => {
   clearResult();
-  const object = await bridgeRequest<S3Object>({ operation: 's3Read', id: selected()!.id, revision: selected()!.revision, key: key.value });
+  const request = { operation: 's3Read' as const, id: selected()!.id, revision: selected()!.revision, key: key.value };
+  try { const cached = await bridgeRequest<S3Object>({ ...request, cacheOnly: true }); if (current()) showObject(cached, true); } catch { /* Partial cache. */ }
+  const object = await bridgeRequest<S3Object>(request);
   if (!current()) return;
+  showObject(object);
+}));
+function showObject(object: S3Object, cached = false) {
+  clearResult();
   const bytes = Uint8Array.from(atob(object.base64), char => char.charCodeAt(0));
   try { result.textContent = new TextDecoder('utf-8', { fatal: true }).decode(bytes); } catch { result.textContent = `Binary object · ${object.size.toLocaleString()} bytes`; }
   downloadURL = URL.createObjectURL(new Blob([bytes])); download.href = downloadURL; download.download = object.key.split('/').pop() || 'object'; download.hidden = false;
-  remember(); report(`Read ${object.key} · ${object.size.toLocaleString()} bytes${object.versionId ? ' · version ' + object.versionId : ''}`);
-}));
+  remember(); report(`${cached ? 'Cached; refreshing' : 'Read'} ${object.key} · ${object.size.toLocaleString()} bytes${object.versionId ? ' · version ' + object.versionId : ''}`);
+}
 controls.upload.addEventListener('click', () => void action(async current => {
   clearResult(); const upload = file.files?.[0]; if (!upload) throw new Error('Choose a file.');
   if (upload.size > maxS3ObjectBytes) throw new Error('Choose a file no larger than 8 MiB.');

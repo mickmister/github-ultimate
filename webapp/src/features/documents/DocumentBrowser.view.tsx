@@ -54,7 +54,7 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
               <FeedbackAnnotations target={documentFeedbackTarget(model, selected, 'documents.markdown-renderer', 'rendered-markdown')} showRepresentation={representation => { if (representation === 'source') actions.setDocumentMode('source'); }}><MarkdownDocument content={model.content} /></FeedbackAnnotations>
             </AttachableContext>
             : <AttachableContext key={`source:${selected.id}`} target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')}>
-              <FeedbackAnnotations target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')} showRepresentation={representation => { if (representation === 'rendered-markdown' && isMarkdown(selected.path)) actions.setDocumentMode('markdown'); }}><MonacoDocument key={model.snapshot.id + ':' + selected.id} path={selected.path} content={model.content} /></FeedbackAnnotations>
+              <FeedbackAnnotations target={documentFeedbackTarget(model, selected, 'documents.source-editor', 'source')} showRepresentation={representation => { if (representation === 'rendered-markdown' && isMarkdown(selected.path)) actions.setDocumentMode('markdown'); }}><MonacoDocument key={selected.id} path={selected.path} content={model.content} /></FeedbackAnnotations>
             </AttachableContext>}
         </> : <><p className="document-placeholder" aria-label="Document content">{model.documentId && model.busy ? 'Reading…' : selected && model.error ? 'This document could not be loaded.' : 'Choose a document to read its verified contents.'}</p>
           {selected && model.error && <button onClick={() => actions.selectDocument(selected.id)}>Retry document</button>}</>}

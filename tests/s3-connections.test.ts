@@ -1,6 +1,10 @@
 import { beforeEach, expect, test } from 'vitest';
 import { S3Connections, type S3ConnectionRecord, type S3ConnectionStore } from '../src/s3-connections';
 import { s3BucketURL, type PublicS3Connection, type S3Object, type S3Listing } from '../src/s3-protocol';
+import { indexedDB } from 'fake-indexeddb';
+import { IndexedWorkspaceCacheStore } from '../src/indexed-workspace-cache';
+import { CacheSettingsService } from '../src/cache-settings';
+import { WorkspaceCache } from '../src/workspace-cache';
 
 class MemoryStore implements S3ConnectionStore {
   records = new Map<string, S3ConnectionRecord>();
@@ -114,4 +118,30 @@ test('supports custom endpoint paths and virtual buckets without credentials or 
   expect(s3BucketURL({ ...config, addressing: 'virtual' }).href).toBe('https://test-bucket.objects.example.test/gateway/');
   for (const endpoint of ['https://user:secret@objects.example.test', 'https://objects.example.test?token=secret', 'http://untrusted.test']) expect(() => s3BucketURL({ ...config, endpoint })).toThrow();
   expect(s3BucketURL({ ...config, endpoint: 'http://127.0.0.1:9000', addressing: 'path' }).origin).toBe('http://127.0.0.1:9000');
+});
+
+test('S3 cache survives broker replacement, revalidates ETags, enforces grants and invalidates after upload', async () => {
+  Object.assign(globalThis, { indexedDB });
+  const name = crypto.randomUUID(), settings = new CacheSettingsService({ async getItem() { return null; }, async setItem() {} });
+  const cache = () => new WorkspaceCache(new IndexedWorkspaceCacheStore(name), settings);
+  let hits = 0;
+  const provider: typeof fetch = async input => {
+    hits++;
+    const request = input as Request;
+    if (request.method === 'PUT') return new Response(null, { headers: { ETag: 'new' } });
+    if (request.headers.has('If-None-Match')) { expect(request.headers.get('If-None-Match')).toBe('"v1"'); return new Response(null, { status: 304 }); }
+    return new Response('body', { headers: { ETag: '"v1"', 'Content-Type': 'text/plain' } });
+  };
+  broker = new S3Connections(store, provider, async () => hostAllowed, cache());
+  const record = await connect(), read = { operation: 's3Read', ...scope(record), key: 'workspace-a/cache.txt' };
+  const first = await broker.handleHosted(documentURL, read);
+  broker = new S3Connections(store, provider, async () => hostAllowed, cache());
+  expect(await broker.handleHosted(documentURL, { ...read, cacheOnly: true })).toEqual(first); expect(hits).toBe(1);
+  expect(await broker.handleHosted(documentURL, read)).toEqual(first); expect(hits).toBe(2);
+  hostAllowed = false;
+  await expect(broker.handleHosted(documentURL, { ...read, cacheOnly: true })).rejects.toThrow('revoked');
+  hostAllowed = true;
+  await broker.handleHosted(documentURL, { operation: 's3Upload', ...scope(record), key: read.key, base64: btoa('new') });
+  await expect(broker.handleHosted(documentURL, { ...read, cacheOnly: true })).rejects.toThrow('No persisted');
+  expect(hits).toBe(3);
 });

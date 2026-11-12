@@ -7,12 +7,20 @@ import { S3Connections } from './s3-connections';
 import { IndexedPageKVStore } from './indexed-page-kv';
 import { PageKVService } from './page-kv';
 import { z } from 'zod';
+import { CacheSettingsService } from './cache-settings';
+import { WorkspaceCache } from './workspace-cache';
+import { IndexedWorkspaceCacheStore } from './indexed-workspace-cache';
 
 const api = (globalThis as typeof globalThis & { browser?: typeof chrome }).browser ?? chrome;
 const store = new IndexedConnectionStore();
-const connections = new Connections(store);
+const cacheSettings = new CacheSettingsService({
+  async getItem(key) { const values = await api.storage.local.get(key); return values[key] as string ?? null; },
+  async setItem(key, value) { await api.storage.local.set({ [key]: value }); },
+});
+const workspaceCache = new WorkspaceCache(new IndexedWorkspaceCacheStore(), cacheSettings);
+const connections = new Connections(store, undefined, undefined, undefined, undefined, workspaceCache);
 const s3Store = new IndexedS3ConnectionStore();
-const s3Connections = new S3Connections(s3Store, (...args) => fetch(...args), origin => api.permissions.contains({ origins: [originPattern(origin)] }));
+const s3Connections = new S3Connections(s3Store, (...args) => fetch(...args), origin => api.permissions.contains({ origins: [originPattern(origin)] }), workspaceCache);
 const pageKVStore = new IndexedPageKVStore();
 const pageKV = new PageKVService(pageKVStore, async documentURL => {
   const document = loadedDocument(documentURL);
