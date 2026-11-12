@@ -3,7 +3,7 @@ import { AppState, Button, Linking, Platform, ScrollView, StyleSheet, Switch, Te
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import AlohakWebView, { type AlohakWebViewHandle, type DocumentEvent } from './modules/alohak-webview';
+import AlohakWebView, { type AlohakWebViewHandle, type DocumentEvent } from './AlohakWebView';
 import { deploymentURL, grantForEntry, mobileBootstrap, MobileFixtureBroker, resolveAlohakLink } from '../src/mobile-protocol';
 import { AsyncPageKVStore } from '../src/page-kv';
 import GitHubConnections from './GitHubConnections';
@@ -21,6 +21,7 @@ export default function App() {
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(true);
   const [reload, setReload] = useState(0);
+  const [navigation, setNavigation] = useState({ key: '', back: false, forward: false });
   const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage), github)).current;
   const webView = useRef<AlohakWebViewHandle>(null);
   const viewKey = `${entry}:${reload}`;
@@ -68,7 +69,9 @@ export default function App() {
   const grant = entry ? grantForEntry(entry) : undefined;
   return <SafeAreaProvider><SafeAreaView style={styles.screen}>
     <View style={styles.toolbar}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
-      <Button title="Reload" disabled={!entry} onPress={() => { broker.invalidate(); setBootstrap(''); setReload(n => n + 1); }} /></View>
+      <Button title="Back" disabled={navigation.key !== viewKey || !navigation.back} onPress={() => webView.current?.goBack()} />
+      <Button title="Forward" disabled={navigation.key !== viewKey || !navigation.forward} onPress={() => webView.current?.goForward()} />
+      <Button title="Reload" disabled={!entry} onPress={() => { broker.invalidate(); setBootstrap(''); webView.current?.reload(); }} /></View>
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
       <Text accessibilityRole="header">Alohak</Text>
       <Text>Approve only a deployment whose scripts you trust. GitHub credentials stay in native secure storage; page storage and GitHub approvals are independent.</Text>
@@ -84,6 +87,7 @@ export default function App() {
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {entry && <AlohakWebView ref={webView} key={viewKey} style={styles.webview} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap}
+      onNavigation={(back, forward) => { if (currentViewKey.current === viewKey) setNavigation({ key: viewKey, back, forward }); }}
       onDocument={({ nativeEvent }) => { if (currentViewKey.current === viewKey) onDocument(nativeEvent); }}
       onMessage={({ nativeEvent }) => {
         if (currentViewKey.current !== viewKey) return;
@@ -100,7 +104,7 @@ export default function App() {
   </SafeAreaView></SafeAreaProvider>;
 }
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' }, toolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 8 },
+  screen: { flex: 1, backgroundColor: '#fff' }, toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: 8 },
   settings: { flexGrow: 0, maxHeight: 300, padding: 12 }, input: { borderWidth: 1, padding: 12, fontSize: 16, marginVertical: 12 },
   error: { color: '#a00', padding: 12 }, webview: { flex: 1 },
 });

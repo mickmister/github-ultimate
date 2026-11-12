@@ -2,7 +2,7 @@ name: Mobile local build
 on:
   push:
     branches: ['**', '!gh-pages']
-    paths: ['mobile/**', 'src/mobile-*.ts', 'src/*workspace-cache.ts', 'src/cache-settings.ts', 'src/connections.ts', 'src/git-reads.ts', 'src/github-rate-limit.ts', 'src/hosted-protocol.ts', 'src/utf8.ts', 'src/page-kv.ts', 'src/page-storage.ts', 'tests/mobile-*.test.ts', 'tests/workspace-cache.test.ts', 'tests/page-storage.test.ts', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.github/workflows/mobile-build-local.yml']
+    paths: ['mobile/**', 'patches/**', 'src/mobile-*.ts', 'src/*workspace-cache.ts', 'src/cache-settings.ts', 'src/connections.ts', 'src/git-reads.ts', 'src/github-rate-limit.ts', 'src/hosted-protocol.ts', 'src/utf8.ts', 'src/page-kv.ts', 'src/page-storage.ts', 'tests/mobile-*.test.ts', 'tests/workspace-cache.test.ts', 'tests/page-storage.test.ts', 'package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.github/workflows/mobile-build-local.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/page-storage.test.ts tests/connections.test.ts tests/workspace-cache.test.ts
+      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/mobile-webview.test.ts tests/mobile-eas.test.ts tests/page-storage.test.ts tests/connections.test.ts tests/workspace-cache.test.ts
       - name: Generate the native project
         run: pnpm --dir mobile exec expo prebuild --no-install --platform ${{ matrix.platform }}
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3

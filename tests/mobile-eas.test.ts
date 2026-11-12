@@ -45,8 +45,9 @@ describe('manual EAS release boundary', () => {
     const fingerprint = JSON.parse(execFileSync('pnpm', ['--dir', 'mobile', 'exec', 'expo-updates', 'fingerprint:generate', '--platform', platform, '--workflow', 'managed'], {
       cwd: new URL('..', import.meta.url), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
     }));
-    const adapter = fingerprint.sources.find((source: { filePath?: string }) => source.filePath === `modules/alohak-webview/${platform}`);
-    expect(adapter?.hash).toMatch(/^[a-f\d]{40}$/);
+    const patch = fingerprint.sources.find((source: { filePath?: string }) => source.filePath === '../patches/react-native-webview@13.15.0.patch');
+    expect(patch?.hash).toMatch(/^[a-f\d]{40}$/);
+    expect(fingerprint.sources.some((source: { filePath?: string }) => source.filePath?.includes('react-native-webview@13.15.0_patch_hash='))).toBe(true);
     expect(fingerprint.hash).toMatch(/^[a-f\d]{40}$/);
   }, 60000);
 });

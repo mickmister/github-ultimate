@@ -24,8 +24,8 @@ pnpm --dir mobile run ios -- --device
 pnpm --dir mobile run android -- --device
 ```
 
-`expo run:*` generates native projects and builds the local module. Expo Go
-cannot run this custom native view. iOS needs a Mac/Xcode and an appropriate
+`expo run:*` generates native projects and builds patched react-native-webview.
+Expo Go cannot run this patched native contract. iOS needs a Mac/Xcode and an appropriate
 signing team for a physical device. Android requires a current System WebView
 supporting `WEB_MESSAGE_LISTENER`; unsupported versions fail closed.
 
@@ -128,8 +128,9 @@ Reused the ideas of an Expo app, registered scheme, initial/warm link handling
 and JSON-serialized native-to-page messages. This implementation uses remote
 HTTPS rather than local HTML assets, and no Springboard engine. It does not
 carry over wildcard origins, file access, shared third-party cookies or
-debugging permissions. The native adapter is local Expo module source under
-`mobile/modules/alohak-webview/`, not a fork of Songdrive.
+debugging permissions. The native contract now lives in a pnpm patch on RNWV;
+see [mobile-webview.md](mobile-webview.md). Native back/forward buttons are
+provisional pilot controls alongside the external Reload button.
 
 ## Native trust boundary
 
@@ -219,7 +220,7 @@ hosting; no domains/association files are provisioned here.
 Manual cloud builds and installed-shell OTA updates are available through the
 [EAS dispatch workflows](mobile-eas.md). Updates require an EAS-enabled native
 build and a matching native fingerprint. SecureStore, Expo Crypto and the new
-native reply API require a new matching binary before testing these changes;
+native reply API and patched RNWV require a new matching binary before testing these changes;
 an OTA-only update cannot add them to an older shell.
 
 ```sh

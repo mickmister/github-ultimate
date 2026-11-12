@@ -2,13 +2,12 @@
 
 ## Goal
 
-**Decision update:** keep the custom WebView for the Alohak pilot. The RNWV
-assessment below is the historical migration recommendation, not an active
-migration task. The current implementation addresses the concrete reply issue
-with imperative request/frame-bound replies (WK reply promises and AndroidX
-reply proxies), correlates iOS navigation failures, and uses Android commit
-readiness with original-URL matching. These changes still require signed-device
-lifecycle/isolation acceptance; see [mobile-alohak.md](mobile-alohak.md).
+**Current decision:** the accepted `alohak_rnwv_pnpm_migration_v1` response on
+`task-3vt.39.6.9` supersedes the intermediate keep-custom-WebView pilot decision.
+Migrate both platforms to Expo-compatible RNWV using pnpm patches, preserving
+the native document/reply contract. See [mobile-webview.md](mobile-webview.md)
+for the current implementation/maintenance contract. The source assessment below
+is historical; signed-device lifecycle/isolation acceptance remains outstanding.
 
 Use `react-native-webview` (RNWV) for the companion's WebView implementation,
 retaining only the native integration needed for document-bound RPC. Recommend

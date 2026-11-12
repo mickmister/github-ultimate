@@ -12,6 +12,11 @@ on:
         type: choice
         default: preview
         options: [development, preview, production]
+      github_connections:
+        description: GitHub pilot (enable only after signed-device isolation acceptance)
+        type: choice
+        default: '0'
+        options: ['0', '1']
       message:
         description: Update message (defaults to source SHA)
         type: string
@@ -33,7 +38,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/mobile-eas.test.ts
+      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/mobile-webview.test.ts tests/mobile-eas.test.ts
       - name: Publish update to EAS
         env:
           EAS_OPERATION: update
@@ -44,7 +49,7 @@ jobs:
           EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
           EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
           EXPO_PUBLIC_ALOHAK_URL: ${{ secrets.EXPO_PUBLIC_ALOHAK_URL }}
-          EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: ${{ secrets.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS }}
+          EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: ${{ inputs.github_connections || '0' }}
           EAS_RESULT_PATH: ${{ runner.temp }}/eas-update.json
           EXPO_NO_TELEMETRY: '1'
         run: node scripts/eas-mobile.mjs

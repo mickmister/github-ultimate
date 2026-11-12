@@ -28,7 +28,11 @@ the same project. Configure these repository settings:
 | `EXPO_PROJECT_ID` | GitHub Actions secret | Expo project UUID |
 | `EXPO_OWNER` | GitHub Actions secret | Expo account/organization owning the project |
 | `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions secret | Public HTTPS entry URL to prefill native settings; does not grant access |
-| `EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` | Optional GitHub Actions secret | Public feature flag: unset/`0` disables GitHub sign-in/reads; `1` enables only after signed-device isolation acceptance |
+
+Dispatch input `github_connections` defaults to `0` and supplies the public
+`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` build/update flag. Choose `1` only after
+signed-device isolation acceptance. This replaces the former optional repository
+secret for that public flag and makes each release's setting explicit.
 
 The runtime connection credentials remain device-local. `EXPO_TOKEN` is release
 authentication, not GitHub OAuth/S3 credentials or a managed runtime auth backend.
@@ -107,6 +111,12 @@ Native GitHub connections add `expo-secure-store`, `expo-crypto`, and imperative
 request/frame-bound reply methods in both native adapters. Install a fresh
 matching binary before testing them. The default-off feature flag does not
 replace the outstanding signed-device checks in [mobile-alohak.md](mobile-alohak.md).
+
+The RNWV migration uses a workspace-root pnpm dependency patch and an explicit
+fingerprint source for its bytes. Fresh installs on EAS apply that patch before
+prebuild. RNWV patch changes require another matching native build; see
+[mobile-webview.md](mobile-webview.md). For this migration, dispatch internal
+preview builds only after browser and both-platform native CI pass.
 
 The installed React Native JavaScript, including native-screen/policy logic,
 can now be changed by an authorized EAS update. This supersedes M1's original
