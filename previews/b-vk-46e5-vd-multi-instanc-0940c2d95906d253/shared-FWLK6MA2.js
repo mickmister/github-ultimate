@@ -1,1 +1,0 @@
-var e={branch:"vk/46e5-vd-multi-instanc",sha:"7779ba6c192d8e2f8598d626e0e8dabed54b333c"};export{e as a};
