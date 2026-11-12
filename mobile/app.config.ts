@@ -1,7 +1,6 @@
 import type { ExpoConfig } from 'expo/config';
 
-const projectId = process.env.EXPO_PROJECT_ID;
-if (projectId && !/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(projectId)) throw new Error('EXPO_PROJECT_ID must be an Expo project UUID.');
+const projectId = process.env.EXPO_PROJECT_ID || 'c198f19d-590b-4362-85f8-9e48c34db45a';
 const config: ExpoConfig = {
   name: 'Alohak', slug: 'alohak', version: '0.1.0',
   scheme: 'alohak',
