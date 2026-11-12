@@ -1,22 +1,25 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { AppState, Button, Linking, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
 import Constants from 'expo-constants';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import CompanionWebView, { type DocumentEvent } from './modules/companion-webview';
 import { deploymentURL, grantForEntry, mobileBootstrap, mobileReplyScript, MobileFixtureBroker, resolveCompanionLink } from '../src/mobile-protocol';
+import { AsyncPageKVStore } from '../src/page-kv';
 
 export default function App() {
   const [input, setInput] = useState(String(Constants.expoConfig?.extra?.entryURL ?? ''));
   const [entry, setEntry] = useState('');
   const [route, setRoute] = useState('');
   const [approved, setApproved] = useState(false);
+  const [storageApproved, setStorageApproved] = useState(false);
   const [document, setDocument] = useState<DocumentEvent>();
   const [bootstrap, setBootstrap] = useState('');
   const [reply, setReply] = useState('');
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(true);
   const [reload, setReload] = useState(0);
-  const broker = useRef(new MobileFixtureBroker()).current;
+  const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage))).current;
   const foreground = useRef(AppState.currentState === 'active');
   const entryRef = useRef(entry); entryRef.current = entry;
   const pendingLink = useRef<string | undefined>(undefined);
@@ -44,7 +47,7 @@ export default function App() {
   function configure() {
     try {
       const url = deploymentURL(input).href;
-      broker.invalidate(); broker.approve(); setApproved(false); setEntry(url); entryRef.current = url;
+      broker.invalidate(); broker.approve(); broker.approveStorage(); setApproved(false); setStorageApproved(false); setEntry(url); entryRef.current = url;
       setRoute(url); setBootstrap(''); setReply(''); setDocument(undefined); setError(''); setReload(n => n + 1);
       if (pendingLink.current) { const link = pendingLink.current; pendingLink.current = undefined; openLink.current(link); }
     } catch (cause) { setError(String(cause)); }
@@ -62,20 +65,23 @@ export default function App() {
     <View style={styles.toolbar}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
       <Button title="Reload" disabled={!entry} onPress={() => { broker.invalidate(); setBootstrap(''); setReply(''); setReload(n => n + 1); }} /></View>
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
-      <Text accessibilityRole="header">Companion M1 — fixture only</Text>
+      <Text accessibilityRole="header">Companion — fixtures and page data</Text>
       <Text>No GitHub or S3 credentials are stored. Approve only a deployment whose scripts you trust.</Text>
       <TextInput accessibilityLabel="HTTPS entry URL" autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/mobile-proof.html" style={styles.input} />
       <Button title="Set deployment" onPress={configure} />
       {grant && <><Text>Fixture grant: {grant.origin}{grant.subpath}</Text>
-        <View style={styles.toolbar}><Switch accessibilityLabel="Approve fixture bridge" value={approved} onValueChange={value => { broker.approve(value ? grant : undefined); setApproved(value); setReply(''); }} /><Text>Approve fixture bridge</Text></View></>}
+        <View style={styles.toolbar}><Switch accessibilityLabel="Approve fixture bridge" value={approved} onValueChange={value => { broker.approve(value ? grant : undefined); setApproved(value); setReply(''); }} /><Text>Approve fixture bridge</Text></View>
+        <Text>Page data namespace: {grant.origin}. All approved paths on this origin share data; no GitHub/S3 credentials belong here.</Text>
+        <View style={styles.toolbar}><Switch accessibilityLabel="Approve page storage" value={storageApproved} onValueChange={value => { broker.approveStorage(value ? grant : undefined); setStorageApproved(value); setReply(''); }} /><Text>Approve page storage</Text></View></>}
       <Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text>
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {entry && <CompanionWebView key={`${entry}:${reload}`} style={styles.webview} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap} reply={reply}
       onDocument={({ nativeEvent }) => onDocument(nativeEvent)}
       onMessage={({ nativeEvent }) => {
-        const result = broker.handle(nativeEvent, nativeEvent.data);
-        setReply(JSON.stringify({ documentId: nativeEvent.documentId, script: mobileReplyScript(nativeEvent.documentId, JSON.stringify(result)) }));
+        void broker.handleAsync(nativeEvent, nativeEvent.data).then(result => {
+          setReply(JSON.stringify({ documentId: nativeEvent.documentId, script: mobileReplyScript(nativeEvent.documentId, JSON.stringify(result)) }));
+        });
       }} />}
   </SafeAreaView></SafeAreaProvider>;
 }

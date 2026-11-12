@@ -1,12 +1,13 @@
-# Mobile companion: M1 fixture shell
+# Mobile companion: fixture shell and page storage
 
 The mobile companion is an Expo/React Native app for **iOS and Android**. Its
 WebView loads an explicitly configured remote HTTPS deployment. The installed
 app exposes JSON-RPC through a native, document-bound transport. The desktop
 extension retains its existing protocol and behavior.
 
-This milestone implements only `companion.discover` and `fixture.echo`. No
-GitHub/S3 credentials, OAuth, private reads or write methods are present. Device
+The shell implements `companion.discover`, `fixture.echo` and independently
+approved `kv.snapshot/set/remove/clear` page-data operations. No
+GitHub/S3 credentials, OAuth, private reads or remote write methods are present. Device
 flow, GitHub reads, then S3 are the selected subsequent direction; an optional
 managed backend is not required by this shell. Eventual store distribution is
 intended, with a personal device pilot first.
@@ -45,6 +46,14 @@ a controlled HTTPS host. On the device:
 4. Revoke the grant in native settings and repeat; expect denial. Re-enable
    explicitly. Grants and the selected deployment are intentionally in-memory
    for M1 and require setup after a cold launch. There is no credential import.
+
+To test page data, enable **Approve page storage** independently, choose
+**Mobile companion** in the proof page's storage backend selector, and tap
+**Open page storage**. Save an empty/dotted-key value, refresh, reload the
+WebView, and cold-launch/reconfigure/reapprove to verify persistence. Revoke
+storage while the page stays open and refresh again; expect denial while the
+fixture proof still works. See [page-storage.md](page-storage.md) for the shared
+API, startup hydration, origin scope, asynchronous durability and quotas.
 
 The granted directory is the entry URL's containing directory, including its
 descendants, not all paths on the Pages origin. Configure a dedicated proof
@@ -85,8 +94,11 @@ identity. This view uses native checks:
   **before** evaluating the app-bundled script; the injected receiver checks
   it again. Serialized response bytes cannot become executable source.
 - The bundled TypeScript broker rechecks the native context and current grant
-  for every call, including discovery. Calls are synchronous fixture methods;
-  there is no asynchronous broker operation or replayable mutation. Requests
+  for every call, including discovery. Fixture methods are synchronous. Page
+  storage is asynchronous, serialized, and rechecks the storage grant and
+  document generation before and after persistence. An in-flight write may
+  already commit when revocation occurs; its result is suppressed and the
+  client must explicitly reopen rather than replay it. Requests
   must be JSON-RPC 2.0 with a bounded string ID/named params, <=16 KiB UTF-8;
   echo is <=1024 characters. Batches, notifications, unknown methods/fields and
   incompatible protocol versions are rejected. The page adapter bounds pending
@@ -147,7 +159,7 @@ project keep EAS Updates disabled and continue to work as the local M1 shell.
 ```sh
 pnpm run check
 pnpm --dir mobile run check
-pnpm exec vitest run tests/mobile-companion.test.ts
+pnpm exec vitest run tests/mobile-companion.test.ts tests/page-storage.test.ts
 pnpm --dir mobile exec expo install --check
 pnpm --dir mobile exec expo-modules-autolinking resolve --platform apple
 pnpm --dir mobile exec expo-modules-autolinking resolve --platform android
@@ -174,6 +186,8 @@ build, OS/System WebView versions, URLs, expected/actual results for:
 | Cross/same-origin iframe, srcdoc, nested frames, popup | No accepted frame-originated broker calls |
 | Redirect to denied URL, back/forward restore, reload during request | Old generation invalidated; no stale reply injected |
 | Grant revocation, background/foreground, process kill | Denial/reconnect without implicit fallback |
+| Storage-only approval and fixture-only approval | Each permits only its own methods |
+| Storage reload/cold launch/reapproval; revoke during pending writes | Origin values persist; no stale result or implicit replay |
 | Cold/warm/duplicate links and malicious route parameters | Only the configured deployment opens; no authority granted |
 | Offline/TLS/load failure | Native settings/retry available; no certificate bypass |
 | Page/app protocol mismatch | Explicit incompatibility error |

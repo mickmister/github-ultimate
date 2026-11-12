@@ -2,6 +2,7 @@ import { test, expect, chromium, type BrowserContext, type Worker, type Page } f
 import { resolve } from 'node:path';
 import { mkdtemp, rm, cp, readFile, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
+import { hostedRelayRevision } from '../../src/bridge-channels';
 
 let context: BrowserContext, profile: string;
 async function fillApp(page: Page, name = 'GitHub Ultimate client') {
@@ -107,10 +108,10 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await expect(first.getByLabel('Read results')).toContainText('"private": true');
   await expect(first.getByLabel('Read results')).toContainText('b'.repeat(40));
   await first.getByRole('button', { name: 'Refresh credentials' }).click();
-  await expect(page.getByRole('status')).toContainText('Credentials refreshed');
+  await expect(page.locator('#status')).toContainText('Credentials refreshed');
   await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Repository read succeeded');
+  await expect(page.locator('#status')).toContainText('Repository read succeeded');
   await expect(page.locator('body')).not.toContainText('ghu_browser_secret');
   await expect(page.locator('body')).not.toContainText('ghr_browser_secret');
   await expect(page.locator('body')).not.toContainText('private-device-secret');
@@ -124,7 +125,7 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await expect(first).toContainText('Signed in as mickmister');
   await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Repository read succeeded');
+  await expect(page.locator('#status')).toContainText('Repository read succeeded');
 
   await fillApp(page, 'Second connection');
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
@@ -173,7 +174,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
   await card.getByLabel('Hosted origin to approve').fill('https://mickmister.github.io');
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
-  await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
+  await expect(settings.locator('#status')).toContainText('Hosted read access granted');
   await expect(card.getByRole('button', { name: 'Bind workspace', exact: true })).toHaveCount(0);
   await page.reload();
   await expect(page.getByRole('status')).toContainText('1 approved connection');
@@ -341,7 +342,7 @@ test('load-time document scope cannot be changed by earliest inline history rewr
   await card.getByLabel('Hosted origin to approve').fill('https://mickmister.github.io');
   await card.getByLabel('Hosted subpath').fill('/allowed/');
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
-  await expect(settings.getByRole('status')).toContainText('Hosted read access granted');
+  await expect(settings.locator('#status')).toContainText('Hosted read access granted');
   await context.route('https://mickmister.github.io/**', route => route.fulfill({ contentType: 'text/html', body: '<!doctype html><script>if(location.pathname.startsWith("/blocked/"))history.replaceState({},"","/allowed/")</script><h1>Path fixture</h1>' }));
   const call = (page: Page, request: object = { operation: 'discover' }) => page.evaluate(request => new Promise<{ ok: boolean; error?: string; result?: unknown }>(resolve => {
     const requestId = crypto.randomUUID();
@@ -386,15 +387,15 @@ test('an older injected relay fails visibly during automatic connection before a
 test('automatic restore does not replace an unavailable saved connection with another App', async () => {
   await launch(true); await serveHosted();
   const page = await context.newPage();
-  await page.addInitScript(() => {
+  await page.addInitScript(relayRevision => {
     const saved = { connectionId: '11111111-1111-4111-8111-111111111111', installationId: 123, repository: 'owner/storage', workspace: 'planning', discovered: true };
     localStorage.setItem(`github-ultimate-navigation-v1:${location.pathname.replace(/settings\.html$/, '')}`, JSON.stringify(saved));
     window.addEventListener('message', event => {
       if (event.data?.channel !== 'github-ultimate-page-v1') return;
       const result = event.data.request.operation === 'connections' ? [{ id: '22222222-2222-4222-8222-222222222222', name: 'Other App', appId: 999, installation: { id: 456, account: 'other' } }] : { protocolVersion: 1, capabilities: [] };
-      window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision: 4, requestId: event.data.requestId, ok: true, result }, location.origin);
+      window.postMessage({ channel: 'github-ultimate-extension-v1', version: 1, relayRevision, requestId: event.data.requestId, ok: true, result }, location.origin);
     });
-  });
+  }, hostedRelayRevision);
   await page.goto('https://mickmister.github.io/github-ultimate/previews/saved-connection/settings.html');
   await expect(page.locator('#workspace-status')).toContainText('saved connection is unavailable');
   await expect(page.getByLabel('Approved connection')).toHaveValue('');

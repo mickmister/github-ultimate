@@ -2,7 +2,7 @@ name: Mobile companion native compilation
 on:
   push:
     branches: ['**', '!gh-pages']
-    paths: ['mobile/**', 'src/mobile-*.ts', 'tests/mobile-companion.test.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.github/workflows/mobile-companion.yml']
+    paths: ['mobile/**', 'src/mobile-*.ts', 'src/page-kv.ts', 'src/page-storage.ts', 'tests/mobile-companion.test.ts', 'tests/page-storage.test.ts', 'pnpm-lock.yaml', 'pnpm-workspace.yaml', '.github/workflows/mobile-companion.yml']
   workflow_dispatch:
 permissions:
   contents: read
@@ -29,7 +29,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-companion.test.ts
+      - run: pnpm exec vitest run tests/mobile-companion.test.ts tests/page-storage.test.ts
       - name: Generate the native project
         run: pnpm --dir mobile exec expo prebuild --no-install --platform ${{ matrix.platform }}
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3

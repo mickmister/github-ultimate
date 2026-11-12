@@ -1,6 +1,7 @@
 import { MobileClient } from '../src/mobile-client';
 import { companionLink } from '../src/mobile-protocol';
 import './mobile-proof.css';
+import { openPageStorage } from './page-storage';
 
 const handoff = document.getElementById('handoff')!;
 const result = document.getElementById('proof-result')!;
@@ -42,3 +43,26 @@ document.getElementById('run-proof')!.addEventListener('click', async () => {
   } catch (error) { result.textContent = error instanceof Error ? error.message : 'Native proof failed.'; }
   finally { client.close(); }
 });
+
+const storageResult = document.getElementById('storage-result')!;
+let pageStorage: Awaited<ReturnType<typeof openPageStorage>> | undefined;
+function showStorage() {
+  const storage = pageStorage!.storage;
+  storageResult.textContent = JSON.stringify(Array.from({ length: storage.length }, (_, index) => { const key = storage.key(index)!; return [key, storage.getItem(key)]; }));
+}
+function storageAction(id: string, action: () => Promise<void>) {
+  document.getElementById(id)!.addEventListener('click', () => { void action().catch(error => { storageResult.textContent = String(error); }); });
+}
+storageAction('connect-storage', async () => {
+  pageStorage?.close(); pageStorage = undefined;
+  const mode = (document.getElementById('storage-backend') as HTMLSelectElement).value as 'browser' | 'extension' | 'mobile';
+  pageStorage = await openPageStorage(mode, (document.getElementById('storage-override') as HTMLInputElement).checked);
+  showStorage();
+});
+storageAction('save-storage', async () => {
+  if (!pageStorage) throw new Error('Open page storage first.');
+  pageStorage.storage.setItem((document.getElementById('storage-key') as HTMLInputElement).value, (document.getElementById('storage-value') as HTMLInputElement).value);
+  await pageStorage.storage.flush(); showStorage();
+});
+storageAction('refresh-storage', async () => { if (!pageStorage) throw new Error('Open page storage first.'); await pageStorage.storage.refresh(); showStorage(); });
+storageAction('clear-storage', async () => { if (!pageStorage) throw new Error('Open page storage first.'); pageStorage.storage.clear(); await pageStorage.storage.flush(); showStorage(); });

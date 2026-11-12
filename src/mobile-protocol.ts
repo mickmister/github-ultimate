@@ -1,5 +1,6 @@
 // Portable protocol/policy shared by the installed shell and remote proof page.
 // M1 deliberately has no credential store, general fetch or GitHub/S3 methods.
+import { pageKVBytes, PageKVService, type PageKVStore } from './page-kv';
 export const mobileProtocol = 1;
 export const companionScheme = 'githubultimate';
 export const maxMobileMessageBytes = 16 * 1024;
@@ -60,6 +61,32 @@ const only = (value: Record<string, unknown>, keys: string[]) => Object.keys(val
 export class MobileFixtureBroker {
   private active?: MobileDocument;
   private grant?: MobileGrant;
+  private storageGrant?: MobileGrant;
+  private storage?: PageKVService;
+  constructor(store?: PageKVStore) {
+    if (store) this.storage = new PageKVService(store, url => Boolean(this.storageGrant && matchesMobileGrant(this.storageGrant, url)));
+  }
+  approveStorage(grant?: MobileGrant) { this.storageGrant = grant && { ...grant }; }
+  private isCurrent(context: MobileDocument & { isMainFrame: boolean }) {
+    return Boolean(context.isMainFrame && this.active?.documentId === context.documentId && this.active?.documentURL === context.documentURL);
+  }
+  async handleAsync(context: MobileDocument & { isMainFrame: boolean }, raw: string): Promise<MobileReply> {
+    if (pageKVBytes(raw) > maxMobileMessageBytes) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Message exceeds 16 KiB.' } };
+    let input: Record<string, unknown>;
+    try { input = JSON.parse(raw); } catch { return this.handle(context, raw); }
+    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.')) return this.handle(context, raw);
+    const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
+    const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
+    if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive storage RPC.');
+    const operation = ({ 'kv.snapshot': 'kvSnapshot', 'kv.set': 'kvSet', 'kv.remove': 'kvRemove', 'kv.clear': 'kvClear' } as Record<string, string>)[input.method];
+    if (!operation || !this.storage || !this.isCurrent(context)) return error('Storage method or native document unavailable.');
+    // Do not allow params to overwrite the broker-selected operation.
+    if ('operation' in input.params) return error('Unexpected storage parameters.');
+    try {
+      const result = await this.storage.request(context.documentURL, { ...input.params, operation }, () => this.isCurrent(context));
+      return { jsonrpc: '2.0', id, result };
+    } catch (cause) { return error(cause instanceof Error ? cause.message : 'Page storage failed.'); }
+  }
   // Native callbacks supply document identity; payload fields never do.
   activate(document: MobileDocument) { this.active = { ...document }; }
   invalidate() { this.active = undefined; }
@@ -70,9 +97,7 @@ export class MobileFixtureBroker {
     if (!this.active || !context.isMainFrame || this.active.documentId !== context.documentId || this.active.documentURL !== context.documentURL ||
         !this.grant || !matchesMobileGrant(this.grant, context.documentURL)) return fail(-32001, 'Document has no native fixture grant.');
     // UTF-8 bound without depending on TextEncoder in the React Native runtime.
-    let byteLength = 0;
-    for (const char of raw) { const code = char.codePointAt(0)!; byteLength += code <= 0x7f ? 1 : code <= 0x7ff ? 2 : code <= 0xffff ? 3 : 4; }
-    if (byteLength > maxMobileMessageBytes) return fail(-32600, 'Message exceeds 16 KiB.');
+    if (pageKVBytes(raw) > maxMobileMessageBytes) return fail(-32600, 'Message exceeds 16 KiB.');
     let input: unknown;
     try { input = JSON.parse(raw); } catch { return fail(-32700, 'Invalid JSON.'); }
     if (plain(input) && typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id)) id = input.id;

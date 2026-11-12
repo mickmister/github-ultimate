@@ -33,4 +33,9 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <button type="submit">Save S3 connection</button><button type="reset">Cancel S3 edit</button></form>
 <p id="s3-status" aria-live="polite"></p><div id="s3-connections"></div></section>
 <p>Disconnect removes local credentials only. To revoke the GitHub authorization, visit <a href="https://github.com/settings/apps/authorizations" target="_blank" rel="noopener noreferrer">GitHub authorized Apps</a>. Multiple local connections to the same App can share its upstream authorization; revoking it can affect all of them.</p>
+<section aria-labelledby="page-storage-heading"><h2 id="page-storage-heading">Page data storage</h2>
+<p>Approve page-data reads/writes independently of GitHub/S3 connections. Data is shared by exact origin (scheme, host, port); approved subpaths control access, not separate data namespaces. Do not store credentials here. Revoking access retains data; clear it from an approved page when needed.</p>
+<form id="page-storage-add"><label>Page storage origin<input id="page-storage-origin" required type="url" placeholder="https://your-app.example"></label>
+<label>Page storage subpath<input id="page-storage-subpath" value="/" required></label><button>Grant page storage</button></form>
+<p id="page-storage-status" role="status"></p><div id="page-storage-grants"></div></section>
 <script src="connections-page.js"></script></body></html>

@@ -97,6 +97,10 @@ update cannot add Swift/Kotlin methods to an installed app. A new dependency or
 fingerprint means an update may publish successfully yet reach no old clients.
 Build first when native compatibility changes.
 
+Origin-scoped page storage adds the native AsyncStorage dependency. Install a
+new matching build before testing that feature; an OTA-only update of an older
+fixture binary cannot supply it. See [page-storage.md](page-storage.md).
+
 The installed React Native JavaScript, including native-screen/policy logic,
 can now be changed by an authorized EAS update. This supersedes M1's original
 OTA-disabled setting. EAS release access is therefore part of the trusted app

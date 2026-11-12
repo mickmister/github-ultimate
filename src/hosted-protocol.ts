@@ -15,6 +15,10 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
   ...s3HostedSchemas,
+  z.object({ operation: z.literal('kvSnapshot') }).strict(),
+  z.object({ operation: z.literal('kvClear') }).strict(),
+  z.object({ operation: z.literal('kvSet'), key: z.string().max(256), value: z.string().max(4096) }).strict(),
+  z.object({ operation: z.literal('kvRemove'), key: z.string().max(256) }).strict(),
 ]);
 export type HostedRequest = z.infer<typeof hostedRequestSchema>;
 export const pageEnvelopeSchema = z.object({ channel: z.literal(pageChannel), version: z.literal(1), requestId: z.string().uuid(), request: z.unknown() }).strict();
