@@ -9,6 +9,7 @@ import { ReviewMemberContentView } from './ReviewMemberContent.view';
 export interface ReviewMemberContentProps {
   scope: WorkspaceScope; review: OpenReview; member: ReviewMember; service: ReviewsModuleV1;
   answer?: ReviewArtifact['forms'][number]; submitted: boolean; busy: boolean;
+  reviewed: boolean; onReviewed(checked: boolean): void;
   onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void;
 }
 export function ReviewMemberContent(props: ReviewMemberContentProps) {
