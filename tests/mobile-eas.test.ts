@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 // @ts-expect-error Release helper is a directly executable Node module.
 import { configuredBuildProfiles, releasePlan } from '../scripts/eas-mobile.mjs';
 
-const env = { EAS_OPERATION: 'build', EAS_PLATFORM: 'all', EAS_PROFILE: 'preview', EXPO_TOKEN: 'fixture-not-a-token', EXPO_PROJECT_ID: '11111111-2222-3333-4444-555555555555', EXPO_OWNER: 'example', EXPO_PUBLIC_COMPANION_URL: 'https://pages.example/app/', GITHUB_SHA: 'fixture-sha' };
+const env = { EAS_OPERATION: 'build', EAS_PLATFORM: 'all', EAS_PROFILE: 'preview', EXPO_TOKEN: 'fixture-not-a-token', EXPO_PROJECT_ID: '11111111-2222-3333-4444-555555555555', EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: 'https://pages.example/app/', GITHUB_SHA: 'fixture-sha' };
 describe('manual EAS release boundary', () => {
   it('builds with explicit profile/platform and waits without submitting', () => {
     expect(releasePlan(env).args).toEqual(['build', '--platform', 'all', '--profile', 'preview', '--non-interactive', '--wait', '--json']);
@@ -18,12 +18,12 @@ describe('manual EAS release boundary', () => {
     expect(() => releasePlan({ ...env, [key]: '' })).toThrow();
   });
   it('rejects arbitrary operations, profiles, platforms and credential-bearing URLs', () => {
-    for (const override of [{ EAS_OPERATION: 'submit' }, { EAS_PROFILE: '--auto-submit' }, { EAS_PLATFORM: 'ios; nope' }, { EXPO_PUBLIC_COMPANION_URL: 'https://u:secret@pages.example/' }]) expect(() => releasePlan({ ...env, ...override })).toThrow();
+    for (const override of [{ EAS_OPERATION: 'submit' }, { EAS_PROFILE: '--auto-submit' }, { EAS_PLATFORM: 'ios; nope' }, { EXPO_PUBLIC_ALOHAK_URL: 'https://u:secret@pages.example/' }]) expect(() => releasePlan({ ...env, ...override })).toThrow();
   });
   it('carries only public identity/entry into uploaded build profiles', () => {
     const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
     const prepared = configuredBuildProfiles(original, releasePlan(env));
-    expect(prepared.build.base.env).toEqual({ EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: 'example', EXPO_PUBLIC_COMPANION_URL: env.EXPO_PUBLIC_COMPANION_URL });
+    expect(prepared.build.base.env).toEqual({ EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: env.EXPO_PUBLIC_ALOHAK_URL });
     expect(JSON.stringify(prepared)).not.toContain(env.EXPO_TOKEN);
     expect(original.build.base.env).toBeUndefined();
     for (const profile of ['development', 'preview', 'production']) {
@@ -31,11 +31,16 @@ describe('manual EAS release boundary', () => {
       expect(prepared.build[profile].environment).toBe(profile);
     }
   });
+  it.each([undefined, ''])('omits an unset optional deployment URL (%s) from uploaded build profiles', entry => {
+    const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
+    const prepared = configuredBuildProfiles(original, releasePlan({ ...env, EXPO_PUBLIC_ALOHAK_URL: entry }));
+    expect(prepared.build.base.env).toEqual({ EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER });
+  });
   it.each(['android', 'ios'])('fingerprints the actual %s native adapter without an Expo account', platform => {
     const fingerprint = JSON.parse(execFileSync('pnpm', ['--dir', 'mobile', 'exec', 'expo-updates', 'fingerprint:generate', '--platform', platform, '--workflow', 'managed'], {
       cwd: new URL('..', import.meta.url), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
     }));
-    const adapter = fingerprint.sources.find((source: { filePath?: string }) => source.filePath === `modules/companion-webview/${platform}`);
+    const adapter = fingerprint.sources.find((source: { filePath?: string }) => source.filePath === `modules/alohak-webview/${platform}`);
     expect(adapter?.hash).toMatch(/^[a-f\d]{40}$/);
     expect(fingerprint.hash).toMatch(/^[a-f\d]{40}$/);
   }, 60000);

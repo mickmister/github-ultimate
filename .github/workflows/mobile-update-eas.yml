@@ -1,4 +1,4 @@
-name: Update mobile companion with EAS
+name: Mobile update with EAS
 on:
   workflow_dispatch:
     inputs:
@@ -33,7 +33,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-companion.test.ts tests/mobile-eas.test.ts
+      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-eas.test.ts
       - name: Publish update to EAS
         env:
           EAS_OPERATION: update
@@ -41,9 +41,9 @@ jobs:
           EAS_PROFILE: ${{ inputs.profile }}
           EAS_MESSAGE: ${{ inputs.message }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
-          EXPO_PROJECT_ID: ${{ vars.EXPO_PROJECT_ID }}
-          EXPO_OWNER: ${{ vars.EXPO_OWNER }}
-          EXPO_PUBLIC_COMPANION_URL: ${{ vars.EXPO_PUBLIC_COMPANION_URL }}
+          EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
+          EXPO_PUBLIC_ALOHAK_URL: ${{ secrets.EXPO_PUBLIC_ALOHAK_URL }}
           EAS_RESULT_PATH: ${{ runner.temp }}/eas-update.json
           EXPO_NO_TELEMETRY: '1'
         run: node scripts/eas-mobile.mjs

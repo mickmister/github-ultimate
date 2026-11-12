@@ -1,7 +1,7 @@
 # Origin-scoped page storage
 
 `hosted/page-storage.ts` exposes the same hydrated, string-valued storage API
-for plain browsers, the extension, and the installed iOS/Android companion.
+for plain browsers, the extension, and the installed iOS/Android Alohak app.
 The proof UI is `mobile-proof.html` in each hosted build.
 
 ## Scope and approval
@@ -102,5 +102,5 @@ the packaged extension, window.localStorage replacement in Chromium, persistence
 across a browser restart, spoofed initial paths, revocation and a plain browser.
 
 Physical iOS/Android persistence and frame/lifecycle isolation still require
-the device probes in [mobile-companion.md](mobile-companion.md), including cold
+the device probes in [mobile-alohak.md](mobile-alohak.md), including cold
 launch/reapproval, in-flight revocation/navigation, and background/process loss.

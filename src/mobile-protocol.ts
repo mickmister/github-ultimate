@@ -2,7 +2,7 @@
 // M1 deliberately has no credential store, general fetch or GitHub/S3 methods.
 import { pageKVBytes, PageKVService, type PageKVStore } from './page-kv';
 export const mobileProtocol = 1;
-export const companionScheme = 'githubultimate';
+export const alohakScheme = 'alohak';
 export const maxMobileMessageBytes = 16 * 1024;
 export type MobileDocument = { documentId: string; documentURL: string };
 export type MobileGrant = { origin: string; subpath: string };
@@ -31,20 +31,20 @@ export function matchesMobileGrant(grant: MobileGrant, input: string): boolean {
 
 // Custom schemes carry navigation only. The installed deployment is the trust
 // anchor; links cannot choose an origin, connection, grant or broker operation.
-export function companionLink(entry: string, target: string): string {
+export function alohakLink(entry: string, target: string): string {
   const url = deploymentURL(target);
   if (!matchesMobileGrant(grantForEntry(entry), url.href)) throw new Error('Route is outside the configured deployment.');
-  const link = new URL(`${companionScheme}://open`);
+  const link = new URL(`${alohakScheme}://open`);
   link.searchParams.set('route', url.pathname + url.search + url.hash);
   return link.href;
 }
 
-export function resolveCompanionLink(input: string, entry: string): string {
+export function resolveAlohakLink(input: string, entry: string): string {
   if (input.length > 8192) throw new Error('Link is too long.');
   const link = new URL(input);
-  if (link.protocol !== `${companionScheme}:` || link.hostname !== 'open' || link.port || link.username || link.password ||
+  if (link.protocol !== `${alohakScheme}:` || link.hostname !== 'open' || link.port || link.username || link.password ||
       link.pathname && link.pathname !== '/' || link.hash || [...link.searchParams.keys()].some(key => key !== 'route') || link.searchParams.getAll('route').length !== 1) {
-    throw new Error('Unsupported companion link.');
+    throw new Error('Unsupported Alohak link.');
   }
   const route = link.searchParams.get('route')!;
   if (!route.startsWith('/') || route.startsWith('//') || /[\s\\]/.test(route)) throw new Error('Invalid route.');
@@ -103,15 +103,15 @@ export class MobileFixtureBroker {
     if (plain(input) && typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id)) id = input.id;
     if (!plain(input) || !only(input, ['jsonrpc', 'id', 'method', 'params']) || input.jsonrpc !== '2.0' || !id || typeof input.method !== 'string') return fail(-32600, 'Expected one JSON-RPC 2.0 request with a bounded string id.');
     if (!plain(input.params)) return fail(-32602, 'Expected named parameters.');
-    if (input.method === 'companion.discover') {
+    if (input.method === 'alohak.discover') {
       if (!only(input.params, ['protocolVersion']) || input.params.protocolVersion !== mobileProtocol) return fail(-32602, 'Unsupported protocol. Update the app/page.');
-      return { jsonrpc: '2.0', id, result: { protocolVersion: mobileProtocol, fixtureOnly: true, capabilities: ['companion.discover', 'fixture.echo'] } };
+      return { jsonrpc: '2.0', id, result: { protocolVersion: mobileProtocol, fixtureOnly: true, capabilities: ['alohak.discover', 'fixture.echo'] } };
     }
     if (input.method === 'fixture.echo') {
       if (!only(input.params, ['text']) || typeof input.params.text !== 'string' || input.params.text.length > 1024) return fail(-32602, 'Echo text must be at most 1024 characters.');
       return { jsonrpc: '2.0', id, result: { text: input.params.text } };
     }
-    return fail(-32601, 'Method is not available in the fixture-only companion.');
+    return fail(-32601, 'Method is not available in the fixture-only Alohak app.');
   }
 }
 
@@ -121,13 +121,13 @@ export function mobileBootstrap(documentId: string, platform: 'ios' | 'android')
   return `(() => {
     if (window.top !== window) return;
     const generation = ${JSON.stringify(documentId)};
-    const post = ${platform === 'ios' ? '(data) => window.webkit.messageHandlers.companion.postMessage(data)' : '(data) => window.companion.postMessage(data)'};
-    window.githubUltimateNative = Object.freeze({ protocolVersion: 1, documentId: generation, postMessage: (data) => { if (typeof data === 'string') post(data); } });
-    window.githubUltimateReceive = (expected, data) => { if (expected === generation) window.dispatchEvent(new CustomEvent('github-ultimate-native-message', { detail: data })); };
-    window.dispatchEvent(new Event('github-ultimate-native-ready'));
+    const post = ${platform === 'ios' ? '(data) => window.webkit.messageHandlers.alohak.postMessage(data)' : '(data) => window.alohak.postMessage(data)'};
+    window.alohakNative = Object.freeze({ protocolVersion: 1, documentId: generation, postMessage: (data) => { if (typeof data === 'string') post(data); } });
+    window.alohakReceive = (expected, data) => { if (expected === generation) window.dispatchEvent(new CustomEvent('alohak-native-message', { detail: data })); };
+    window.dispatchEvent(new Event('alohak-native-ready'));
   })(); true;`;
 }
 
 export function mobileReplyScript(documentId: string, data: string): string {
-  return `window.githubUltimateReceive?.(${JSON.stringify(documentId)}, ${JSON.stringify(data)}); true;`;
+  return `window.alohakReceive?.(${JSON.stringify(documentId)}, ${JSON.stringify(data)}); true;`;
 }

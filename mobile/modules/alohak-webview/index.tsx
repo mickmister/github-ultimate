@@ -10,4 +10,4 @@ type Props = ViewProps & {
   onDocument(event: { nativeEvent: DocumentEvent }): void;
   onMessage(event: { nativeEvent: MessageEvent }): void;
 };
-export default requireNativeViewManager<Props>('CompanionWebView');
+export default requireNativeViewManager<Props>('AlohakWebView');

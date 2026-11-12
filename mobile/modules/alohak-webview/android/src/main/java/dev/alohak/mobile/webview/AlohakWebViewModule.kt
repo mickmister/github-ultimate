@@ -1,4 +1,4 @@
-package dev.githubultimate.companion.webview
+package dev.alohak.mobile.webview
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -16,23 +16,23 @@ import expo.modules.kotlin.viewevent.EventDispatcher
 import org.json.JSONObject
 import java.util.UUID
 
-class CompanionWebViewModule : Module() {
+class AlohakWebViewModule : Module() {
   override fun definition() = ModuleDefinition {
-    Name("CompanionWebView")
-    View(CompanionWebView::class) {
+    Name("AlohakWebView")
+    View(AlohakWebView::class) {
       Events("onDocument", "onMessage")
-      Prop("entryURL") { view: CompanionWebView, value: String -> view.entry = value }
-      Prop("scopeURL") { view: CompanionWebView, value: String -> view.scope = value }
-      Prop("bootstrap") { view: CompanionWebView, value: String -> view.runBound(value) }
-      Prop("reply") { view: CompanionWebView, value: String -> view.runBound(value) }
-      OnViewDidUpdateProps { view: CompanionWebView -> view.loadEntry() }
-      OnViewDestroys { view: CompanionWebView -> view.dispose() }
+      Prop("entryURL") { view: AlohakWebView, value: String -> view.entry = value }
+      Prop("scopeURL") { view: AlohakWebView, value: String -> view.scope = value }
+      Prop("bootstrap") { view: AlohakWebView, value: String -> view.runBound(value) }
+      Prop("reply") { view: AlohakWebView, value: String -> view.runBound(value) }
+      OnViewDidUpdateProps { view: AlohakWebView -> view.loadEntry() }
+      OnViewDestroys { view: AlohakWebView -> view.dispose() }
     }
   }
 }
 
 @SuppressLint("SetJavaScriptEnabled")
-class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
+class AlohakWebView(context: Context, appContext: AppContext) : ExpoView(context, appContext) {
   private val onDocument by EventDispatcher()
   private val onMessage by EventDispatcher()
   var entry = ""
@@ -48,7 +48,7 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
     addView(web, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
     web.settings.apply {
       javaScriptEnabled = true; domStorageEnabled = true
-      userAgentString = "$userAgentString GitHubUltimateCompanion/1"
+      userAgentString = "$userAgentString Alohak/1"
       allowFileAccess = false; allowContentAccess = false
       mixedContentMode = WebSettings.MIXED_CONTENT_NEVER_ALLOW
       javaScriptCanOpenWindowsAutomatically = false; setSupportMultipleWindows(true)
@@ -102,7 +102,7 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
       val origin = "https://${base.host}" + if (base.port >= 0) ":${base.port}" else ""
       // Unlike addJavascriptInterface, AndroidX reports native source origin and
       // main-frame identity. There is deliberately no insecure fallback.
-      WebViewCompat.addWebMessageListener(web, "companion", setOf(origin)) { _, message, sourceOrigin, isMainFrame, _ ->
+      WebViewCompat.addWebMessageListener(web, "alohak", setOf(origin)) { _, message, sourceOrigin, isMainFrame, _ ->
         val data = message.data
         val expected = Uri.parse(documentURL)
         if (ready && isMainFrame && allowed(documentURL) && sourceOrigin.scheme == "https" && sourceOrigin.host == expected.host && sourceOrigin.port == expected.port && data != null && data.toByteArray(Charsets.UTF_8).size <= 16384) {
@@ -131,7 +131,7 @@ class CompanionWebView(context: Context, appContext: AppContext) : ExpoView(cont
   }
   fun dispose() {
     ready = false
-    if (listenerInstalled) WebViewCompat.removeWebMessageListener(web, "companion")
+    if (listenerInstalled) WebViewCompat.removeWebMessageListener(web, "alohak")
     web.stopLoading(); web.destroy()
   }
 }

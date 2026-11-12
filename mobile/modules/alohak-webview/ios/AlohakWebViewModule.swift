@@ -9,21 +9,21 @@ private final class WeakMessageHandler: NSObject, WKScriptMessageHandler {
   }
 }
 
-public class CompanionWebViewModule: Module {
+public class AlohakWebViewModule: Module {
   public func definition() -> ModuleDefinition {
-    Name("CompanionWebView")
-    View(CompanionWebView.self) {
+    Name("AlohakWebView")
+    View(AlohakWebView.self) {
       Events("onDocument", "onMessage")
-      Prop("entryURL") { (view: CompanionWebView, value: String) in view.entry = value }
-      Prop("scopeURL") { (view: CompanionWebView, value: String) in view.scope = value }
-      Prop("bootstrap") { (view: CompanionWebView, value: String) in view.runBound(value) }
-      Prop("reply") { (view: CompanionWebView, value: String) in view.runBound(value) }
-      OnViewDidUpdateProps { (view: CompanionWebView) in view.loadEntry() }
+      Prop("entryURL") { (view: AlohakWebView, value: String) in view.entry = value }
+      Prop("scopeURL") { (view: AlohakWebView, value: String) in view.scope = value }
+      Prop("bootstrap") { (view: AlohakWebView, value: String) in view.runBound(value) }
+      Prop("reply") { (view: AlohakWebView, value: String) in view.runBound(value) }
+      OnViewDidUpdateProps { (view: AlohakWebView) in view.loadEntry() }
     }
   }
 }
 
-final class CompanionWebView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+final class AlohakWebView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
   let onDocument = EventDispatcher()
   let onMessage = EventDispatcher()
   var entry = ""
@@ -39,10 +39,10 @@ final class CompanionWebView: ExpoView, WKNavigationDelegate, WKUIDelegate, WKSc
   required init(appContext: AppContext? = nil) {
     super.init(appContext: appContext)
     let configuration = WKWebViewConfiguration()
-    configuration.applicationNameForUserAgent = "GitHubUltimateCompanion/1"
+    configuration.applicationNameForUserAgent = "Alohak/1"
     configuration.preferences.javaScriptCanOpenWindowsAutomatically = false
     // The handler checks WKScriptMessage.frameInfo, not a URL sent by JS.
-    configuration.userContentController.add(WeakMessageHandler(self), name: "companion")
+    configuration.userContentController.add(WeakMessageHandler(self), name: "alohak")
     webView = WKWebView(frame: .zero, configuration: configuration)
     webView.navigationDelegate = self
     webView.uiDelegate = self
