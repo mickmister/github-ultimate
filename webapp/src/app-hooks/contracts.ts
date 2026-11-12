@@ -24,6 +24,8 @@ export interface DocumentsModuleV1 {
   readonly discover: (scope: Omit<WorkspaceScope, 'workspace'>) => Promise<readonly WorkspaceDTO[]>;
   readonly open: (scope: WorkspaceScope) => Promise<DocumentSnapshotDTO>;
   readonly read: (snapshotId: string, documentId: string) => Promise<string>;
+  readonly restore?: (scope: WorkspaceScope) => Promise<DocumentSnapshotDTO>;
+  readonly readCached?: (snapshotId: string, documentId: string) => Promise<string>;
   readonly dispose: () => void;
   readonly navigation?: {
     load(): Promise<WorkspaceNavigation | null>;

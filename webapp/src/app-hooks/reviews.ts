@@ -1,5 +1,5 @@
 import { bridgeRequest } from '../../../hosted/client';
-import { WorkspaceReader, documents, documentText } from '../../../hosted/workspaces';
+import { WorkspaceReader, documents, documentText, type GitTransport } from '../../../hosted/workspaces';
 import { ReviewReader, type OpenReview } from '../../../hosted/reviews';
 import { artifactResource, parseReviewArtifact, type ReviewArtifact, type ReviewPin, type ReviewReceipt } from '../../../src/review-protocol';
 import type { HostedConnection } from '../../../src/hosted-protocol';
@@ -9,20 +9,20 @@ export interface StoredReviewArtifact { value: ReviewArtifact; pin: ReviewPin }
 export interface ReviewListing { requests: OpenReview[]; artifacts: StoredReviewArtifact[]; reviewer: string; acknowledgements: string[] }
 export interface ReviewsModuleV1 {
   list(scope: WorkspaceScope): Promise<ReviewListing>;
+  listCached?(scope: WorkspaceScope): Promise<ReviewListing>;
   open(scope: WorkspaceScope, pin: ReviewPin): Promise<OpenReview>;
   read(scope: WorkspaceScope, pin: ReviewPin): Promise<string>;
   save(scope: WorkspaceScope, value: ReviewArtifact, expected: string | null): Promise<ReviewReceipt>;
 }
-export function createHostedReviews(): ReviewsModuleV1 {
-  const reader = (scope: WorkspaceScope) => new WorkspaceReader(bridgeRequest, scope.connectionId, scope.repository, scope.installationId, scope.workspace);
+export function createHostedReviews(send: GitTransport = bridgeRequest): ReviewsModuleV1 {
+  const reader = (scope: WorkspaceScope, cached = false) => new WorkspaceReader(cached ? request => send({ ...request, cacheOnly: true }) : send, scope.connectionId, scope.repository, scope.installationId, scope.workspace);
   const reviews = (scope: WorkspaceScope) => new ReviewReader(reader(scope), scope.workspace);
-  return {
-    async list(scope) {
+  async function list(scope: WorkspaceScope, cached = false) {
       const connections = await bridgeRequest<HostedConnection[]>({ operation: 'connections' });
       const connection = connections.find(item => item.id === scope.connectionId && item.installation?.id === scope.installationId);
       if (!connection?.user) throw new Error('An authenticated GitHub reviewer is required.');
       const reviewer = `github:${connection.user.id}`;
-      const active = reader(scope);
+      const active = reader(scope, cached);
       const workspace = (await active.discover()).find(item => item.name === scope.workspace);
       if (!workspace) throw new Error('Workspace is unavailable.');
       const opened = await active.open(workspace);
@@ -41,7 +41,10 @@ export function createHostedReviews(): ReviewsModuleV1 {
         }
       }
       return { requests, artifacts, reviewer, acknowledgements };
-    },
+  }
+  return {
+    list: scope => list(scope),
+    listCached: scope => list(scope, true),
     open: (scope, pin) => reviews(scope).open(pin),
     read: (scope, pin) => reviews(scope).read(pin),
     async save(scope, value, expected) {

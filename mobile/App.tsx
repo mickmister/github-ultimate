@@ -8,6 +8,7 @@ import { deploymentURL, grantForEntry, mobileBootstrap, MobileFixtureBroker, res
 import { AsyncPageKVStore } from '../src/page-kv';
 import GitHubConnections from './GitHubConnections';
 import { github } from './github';
+import CacheSettings from './CacheSettings';
 
 export default function App() {
   const [input, setInput] = useState(String(Constants.expoConfig?.extra?.entryURL ?? ''));
@@ -79,6 +80,7 @@ export default function App() {
         <View style={styles.toolbar}><Switch accessibilityLabel="Approve page storage" value={storageApproved} onValueChange={value => { broker.approveStorage(value ? grant : undefined); setStorageApproved(value); }} /><Text>Approve page storage</Text></View></>}
       <Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text>
       <GitHubConnections grant={grant} />
+      <CacheSettings />
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
     {entry && <AlohakWebView ref={webView} key={viewKey} style={styles.webview} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap}

@@ -18,6 +18,7 @@
     "expo-dev-client": "~6.0.21",
     "expo-modules-core": "~3.0.29",
     "expo-secure-store": "~15.0.8",
+    "expo-sqlite": "~16.0.10",
     "expo-updates": "~29.0.20",
     "react": "19.1.0",
     "react-native": "0.81.5",

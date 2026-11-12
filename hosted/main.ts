@@ -98,11 +98,11 @@ async function chooser(available: HostedConnection[], signal: AbortSignal) {
   await load();
 }
 
-async function resolveWorkspace(route: WorkspaceRoute, available: HostedConnection[], signal: AbortSignal) {
+async function resolveWorkspace(route: WorkspaceRoute, available: HostedConnection[], signal: AbortSignal, cachedOnly = false) {
   const connection = resolveWorkspaceConnection(route, available);
-  const cached = catalog?.workspaces.get(workspaceKey(route.repository, route.workspace))?.find(access => access.connection.id === connection.id && access.connection.installation?.id === route.installationId);
+  const cached = cachedOnly && catalog?.workspaces.get(workspaceKey(route.repository, route.workspace))?.find(access => access.connection.id === connection.id && access.connection.installation?.id === route.installationId);
   if (cached) return cached;
-  const reader = new WorkspaceReader(bridgeRequest, connection.id, route.repository, route.installationId, route.workspace);
+  const reader = new WorkspaceReader(cachedOnly ? request => bridgeRequest({ ...request, cacheOnly: true }) : bridgeRequest, connection.id, route.repository, route.installationId, route.workspace);
   const found = await reader.discover();
   if (signal.aborted) throw new Error('Navigation changed.');
   const workspace = found.find(workspace => workspace.name === route.workspace);
@@ -111,9 +111,9 @@ async function resolveWorkspace(route: WorkspaceRoute, available: HostedConnecti
   return { connection, repository: route.repository, workspace, opened } satisfies WorkspaceAccess;
 }
 
-async function detail(route: WorkspaceRoute, available: HostedConnection[], signal: AbortSignal) {
+async function detail(route: WorkspaceRoute, available: HostedConnection[], signal: AbortSignal, provided?: WorkspaceAccess) {
   report('Opening workspace and verifying its manifest…');
-  const access = await resolveWorkspace(route, available, signal);
+  const access = provided ?? await resolveWorkspace(route, available, signal);
   if (signal.aborted) return;
   remember(access);
   const header = element('header', undefined, 'workspace-header'), back = element('a', '← Workspaces'); back.href = '#/';
@@ -142,9 +142,18 @@ async function render() {
     const route = parseRoute(location.hash);
     const available = await connections();
     if (signal.aborted) return;
-    if (route.page === 'chooser') await chooser(available, signal); else await detail(route, available, signal);
+    if (route.page === 'chooser') await chooser(available, signal); else {
+      try {
+        const cached = await resolveWorkspace(route, available, signal, true);
+        await detail(route, available, signal, cached);
+        if (!signal.aborted) report('Showing persisted workspace; checking for updates…');
+      } catch { /* Partial cache; open normally. */ }
+      const fresh = await resolveWorkspace(route, available, signal);
+      if (!signal.aborted) { root.replaceChildren(); await detail(route, available, signal, fresh); }
+    }
   } catch (error) {
     if (signal.aborted) return;
+    if (error instanceof Error && /access denied|HTTP (401|403|404)|not approved|no approved|access changed/i.test(error.message)) root.replaceChildren();
     report(error instanceof Error ? error.message : 'Dashboard request failed.');
     if (!root.childElementCount) root.append(element('h1', 'Workspaces'), element('p', 'Open Settings to check extension access, or reload this page after updating the extension.', 'empty'));
   }

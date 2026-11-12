@@ -34,6 +34,12 @@ function SubscribedBrowser({ controller, presentation: Presentation, navigation 
   navigation?: DocumentNavigation;
 }) {
   const model = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
+  useEffect(() => {
+    const refresh = () => { if (document.visibilityState !== 'hidden') controller.actions.refresh?.(); };
+    window.addEventListener('focus', refresh); window.addEventListener('online', refresh);
+    const timer = setInterval(refresh, 60000);
+    return () => { window.removeEventListener('focus', refresh); window.removeEventListener('online', refresh); clearInterval(timer); };
+  }, [controller]);
   useEffect(() => { if (navigation) controller.actions.openLocation(navigation.location); }, [controller, navigation?.location]);
   const scope = { connection: model.connections.length === 1 ? undefined : model.connectionId, repository: model.repository.trim(), workspace: model.workspaceId };
   const actions = navigation ? {

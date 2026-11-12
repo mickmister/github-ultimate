@@ -30,8 +30,13 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
   async function load(next: WorkspaceScope, initial = false) {
     const token = ++generation.current;
     setBusy(true); setError('');
+    if (!scope || JSON.stringify(next) !== JSON.stringify(scope)) { setListing(null); setOpened(null); }
     try {
       if (!hooks.modules.reviews) throw new Error('This host does not provide review requests.');
+      try {
+        const cached = await hooks.modules.reviews.listCached?.(next);
+        if (cached && generation.current === token) { setScope(next); setListing(cached); }
+      } catch { /* Partial cache or a host without persistence; use fresh reads. */ }
       const found = await hooks.modules.reviews.list(next);
       let review: OpenReview | null = null;
       if (initial && location.requestId) {
@@ -44,7 +49,13 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
       if (generation.current !== token) return;
       setScope(next); setListing(found);
       if (initial) setOpened(review);
-    } catch (cause) { if (generation.current === token) setError(cause instanceof Error ? cause.message : String(cause)); }
+    } catch (cause) {
+      if (generation.current === token) {
+        const message = cause instanceof Error ? cause.message : String(cause);
+        if (/access denied|HTTP (401|403|404)|no approved|not approved|sign in|access changed/i.test(message)) { setListing(null); setOpened(null); }
+        setError(message);
+      }
+    }
     finally { if (generation.current === token) setBusy(false); }
   }
   useEffect(() => {

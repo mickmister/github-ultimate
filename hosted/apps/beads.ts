@@ -1,6 +1,8 @@
 import type { WorkspaceAppContext } from '../workspace-apps';
 import { element } from '../components';
 import { documentText } from '../workspaces';
+import { WorkspaceReader } from '../workspaces';
+import { bridgeRequest } from '../client';
 
 export async function mount(root: HTMLElement, context: WorkspaceAppContext) {
   root.append(element('h2', 'Beads'), element('p', 'The task graph belongs to this workspace’s native Beads/Dolt collection.', 'muted'));
@@ -10,10 +12,11 @@ export async function mount(root: HTMLElement, context: WorkspaceAppContext) {
   const status = element('p', 'Reading Beads storage metadata…'), result = element('dl', undefined, 'metadata');
   root.append(boundary, status, result);
   try {
-    const snapshot = await context.reader.snapshot(context.workspace.dolt);
+    const reader = new WorkspaceReader(bridgeRequest, context.connection.id, context.repository, context.connection.installation!.id, context.workspace.name, 'dolt');
+    const snapshot = await reader.snapshot(context.workspace.dolt, true);
     const manifest = snapshot.tree.tree.find(entry => entry.path === 'manifest');
     if (!manifest) throw new Error('Dolt snapshot has no manifest.');
-    const fields = documentText(await context.reader.blob(manifest)).split(':');
+    const fields = documentText(await reader.blob(manifest)).split(':');
     if (context.signal.aborted) return;
     if (fields[0] !== '5' || fields[1] !== '__DOLT__' || !/^[0-9a-v]{32}$/.test(fields[3] ?? '')) throw new Error('Unsupported Dolt storage manifest.');
     const files = snapshot.tree.tree.filter(entry => entry.type === 'blob');

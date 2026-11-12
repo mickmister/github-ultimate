@@ -1,4 +1,4 @@
-import type { AppHooksV1 } from '../../app-hooks/contracts';
+import type { AppHooksV1, WorkspaceScope } from '../../app-hooks/contracts';
 import type { DocumentBrowserActions, DocumentBrowserModel } from './contracts';
 import { isMarkdown } from './document-format';
 import { ancestorFolders } from './document-tree';
@@ -52,8 +52,26 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       const result = await work(() => !disposed && current === generation);
       if (current === generation) patch({ ...result, busy: false });
     } catch (error) {
-      if (current === generation) patch({ busy: false, content: null, error: error instanceof Error ? error.message : 'Document request failed.', status: 'Request failed. Retry or choose another connection.' });
+      if (current === generation) {
+        const message = error instanceof Error ? error.message : 'Document request failed.';
+        const denied = /access denied|HTTP (401|403|404)|no approved|not approved|sign in|installation changed|access changed|workspace is no longer available|linked workspace is unavailable/i.test(message);
+        const missingDocument = /not in this workspace snapshot|saved document is no longer available/i.test(message);
+        patch({ busy: false, ...(denied ? emptyDocuments : missingDocument ? { content: null } : {}), error: message, status: missingDocument ? 'Document unavailable; choose another document from this snapshot.' : !denied && state.snapshot ? 'Cached snapshot retained; refresh failed. It may be out of date.' : 'Request failed. Retry or choose another connection.' });
+      }
     }
+  }
+  async function preview(selected: WorkspaceScope, isCurrent: () => boolean, documentId?: string, documentPath?: string) {
+    if (!api.restore) return;
+    try {
+      const snapshot = await api.restore(selected);
+      if (!isCurrent()) return;
+      const document = documentPath ? snapshot.documents.find(item => item.path === documentPath) : snapshot.documents.find(item => item.id === documentId);
+      patch({ snapshot, workspaceId: selected.workspace, workspaces: [{ id: selected.workspace, hasDocuments: true }], status: 'Showing persisted snapshot while checking for updates…' });
+      if (document) {
+        const content = await (api.readCached ?? api.read)(snapshot.id, document.id);
+        if (isCurrent()) patch({ content, documentId: document.id, expandedFolders: ancestorFolders(document.path), documentMode: isMarkdown(document.path) ? 'markdown' : 'source', documentFullscreen: true });
+      }
+    } catch { /* A partial/evicted cache is a miss; the foreground network read follows. */ }
   }
   function scope() {
     const connection = state.connections.find(item => item.id === state.connectionId);
@@ -61,6 +79,21 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     return { connectionId: connection.id, installationId: connection.installationId, repository: state.repository.trim(), workspace: state.workspaceId };
   }
   const actions = Object.freeze<DocumentBrowserActions & { openLocation(location: DocumentLocation): void }>({
+    refresh() {
+      if (disposed || state.busy || !state.snapshot) return;
+      const selected = scope(), previous = state.snapshot;
+      const path = previous.documents.find(document => document.id === state.documentId)?.path;
+      void run('Checking workspace for updates…', async isCurrent => {
+        const snapshot = await api.open(selected);
+        if (!isCurrent()) return {};
+        const document = path ? snapshot.documents.find(document => document.path === path) : undefined;
+        if (!document) return { snapshot, documentId: '', content: null, status: 'Workspace refreshed. Choose a document.' };
+        // Do not associate bytes from an older OID with the refreshed tree.
+        if (document.id !== state.documentId) patch({ snapshot, documentId: document.id, content: null });
+        const content = await api.read(snapshot.id, document.id);
+        return { snapshot, documentId: document.id, content, status: 'Workspace checked; document bytes verified.' };
+      });
+    },
     openLocation(location) {
       if (disposed) return;
       const { connection, repository, workspace, documentId } = location;
@@ -82,6 +115,8 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
         const approved = resolveLinkConnection(connection, connections);
         const selected = { connectionId: approved.id, installationId: approved.installationId, repository, workspace };
         patch({ connectionId: approved.id });
+        await preview(selected, isCurrent, documentId);
+        if (!isCurrent()) return {};
         const workspaces = await api.discover(selected);
         if (!isCurrent()) return {};
         if (!workspaces.some(item => item.id === workspace && item.hasDocuments)) throw new Error('The linked workspace is unavailable or has no documents.');
@@ -110,6 +145,8 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
           patch({ connectionId: saved.connectionId, repository: saved.repository, status: 'Restoring your last workspace…' });
           const approved = connections.find(item => item.id === saved.connectionId && item.installationId === saved.installationId);
           if (!approved) throw new Error('Your saved connection or installation is unavailable. Choose a connection explicitly; no fallback was used.');
+          await preview(saved, isCurrent, saved.documentId, saved.documentPath);
+          if (!isCurrent()) return {};
           const snapshot = await api.open(saved);
           if (!isCurrent()) return {};
           const workspaceState = { connectionId: saved.connectionId, repository: saved.repository, workspaceId: saved.workspace, workspaces: [{ id: saved.workspace, hasDocuments: true }], snapshot };
@@ -160,7 +197,9 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       if (!state.canBrowse || disposed) return;
       const selected = scope();
       patch(emptyDocuments);
-      void run('Verifying workspace manifest and document snapshot…', async () => {
+      void run('Verifying workspace manifest and document snapshot…', async isCurrent => {
+        await preview(selected, isCurrent);
+        if (!isCurrent()) return {};
         const snapshot = await api.open(selected);
         return { snapshot, status: `${snapshot.documents.length} document(s) in the verified snapshot.` };
       });
@@ -180,7 +219,10 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       if (disposed || !state.snapshot || !document) return;
       const snapshot = state.snapshot;
       patch({ documentId: id, expandedFolders: [...new Set([...state.expandedFolders, ...ancestorFolders(document.path)])], content: null, documentMode: isMarkdown(document.path) ? 'markdown' : 'source', documentFullscreen: true });
-      void run('Reading and verifying document…', async () => ({ content: await api.read(snapshot.id, id), status: 'Document bytes verified against the Git blob.' }));
+      void run('Reading and verifying document…', async isCurrent => {
+        try { const content = await api.readCached?.(snapshot.id, id); if (content !== undefined && isCurrent()) patch({ content, status: 'Showing persisted document while checking access…' }); } catch { /* Cache miss. */ }
+        return { content: await api.read(snapshot.id, id), status: 'Document bytes verified against the Git blob.' };
+      });
     },
     setDocumentMode(documentMode) {
       if (disposed || state.content === null) return;

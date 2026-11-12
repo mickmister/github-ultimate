@@ -6,8 +6,8 @@ const revision = z.string().uuid();
 const key = z.string().min(1).max(1024);
 export const s3HostedSchemas = [
   z.object({ operation: z.literal('s3Connections') }).strict(),
-  z.object({ operation: z.literal('s3List'), id, revision, prefix: z.string().max(1024).optional(), continuationToken: z.string().max(8192).optional() }).strict(),
-  z.object({ operation: z.literal('s3Read'), id, revision, key }).strict(),
+  z.object({ operation: z.literal('s3List'), id, revision, prefix: z.string().max(1024).optional(), continuationToken: z.string().max(8192).optional(), cacheOnly: z.boolean().optional() }).strict(),
+  z.object({ operation: z.literal('s3Read'), id, revision, key, cacheOnly: z.boolean().optional() }).strict(),
   z.object({ operation: z.literal('s3Upload'), id, revision, key, base64: z.string().max(Math.ceil(maxS3ObjectBytes / 3) * 4), contentType: z.string().min(1).max(200).regex(/^[\x20-\x7e]+$/).default('application/octet-stream') }).strict(),
 ] as const;
 export const s3HostedSchema = z.discriminatedUnion('operation', s3HostedSchemas);
