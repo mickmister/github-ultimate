@@ -1,11 +1,11 @@
 apply plugin: 'com.android.library'
 apply plugin: 'expo-module-gradle-plugin'
 
-group = 'dev.githubultimate.companion.webview'
+group = 'dev.alohak.mobile.webview'
 version = '0.1.0'
 
 android {
-  namespace 'dev.githubultimate.companion.webview'
+  namespace 'dev.alohak.mobile.webview'
   defaultConfig {
     minSdkVersion 24
     versionCode 1

@@ -2,7 +2,7 @@
 
 Based on `mickmister/handy-actions` branch `vk/ddd8-lock-screen-acti`:
 `build_mobile.yml`, `update_mobile.yml`, their composite actions, app config and
-`eas.json`. Both companion release workflows run **only on workflow_dispatch**:
+`eas.json`. Both Alohak release workflows run **only on workflow_dispatch**:
 
 | Workflow | Choices | Result |
 | --- | --- | --- |
@@ -17,8 +17,8 @@ credential-free and independent.
 
 ## One-time setup
 
-Create/select an Expo project **for this companion**, with slug
-`github-ultimate-companion` (do not reuse Handy Actions' project ID). Configure
+Create/select an Expo project **for Alohak**, with slug
+`alohak` (do not reuse Handy Actions' project ID). Configure
 these repository settings:
 
 | Setting | Kind | Meaning |
@@ -26,7 +26,7 @@ these repository settings:
 | `EXPO_TOKEN` | GitHub Actions secret | Expo token authorized to build/publish this project |
 | `EXPO_PROJECT_ID` | GitHub Actions variable | Expo project UUID |
 | `EXPO_OWNER` | GitHub Actions variable | Expo account/organization owning the project |
-| `EXPO_PUBLIC_COMPANION_URL` | Optional GitHub Actions variable | Public HTTPS entry URL to prefill native settings; does not grant access |
+| `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions variable | Public HTTPS entry URL to prefill native settings; does not grant access |
 
 The runtime connection credentials remain device-local. `EXPO_TOKEN` is release
 authentication, not GitHub OAuth/S3 credentials or a managed runtime auth backend.
@@ -51,8 +51,8 @@ pnpm exec eas credentials --platform android
 
 Internal iOS builds need a provisioned device list/Apple signing configuration.
 The non-interactive workflow cannot answer missing credential prompts. Native
-identifiers are currently `dev.githubultimate.companion`; select final IDs and
-matching credentials before public distribution. Development builds include
+identifiers are `dev.alohak.mobile`; configure matching credentials before
+public distribution. Development builds include
 `expo-dev-client`; preview produces an internally distributed app (Android APK),
 and production produces store builds. Expo usage/queue limits apply.
 
@@ -74,7 +74,7 @@ gh workflow run build-mobile.yml --repo mickmister/github-ultimate \
 
 gh workflow run update-mobile.yml --repo mickmister/github-ultimate \
   --ref vk/46e5-vd-multi-instanc -f platform=all -f profile=preview \
-  -f message='Companion fixture update'
+  -f message='Alohak fixture update'
 ```
 
 GitHub requires a workflow_dispatch workflow to exist on the repository's

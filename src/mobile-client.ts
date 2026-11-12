@@ -2,8 +2,8 @@ import { mobileProtocol, type MobileReply } from './mobile-protocol';
 
 declare global {
   interface Window {
-    githubUltimateNative?: { protocolVersion: number; documentId: string; postMessage(data: string): void };
-    githubUltimateReceive?: (documentId: string, data: string) => void;
+    alohakNative?: { protocolVersion: number; documentId: string; postMessage(data: string): void };
+    alohakReceive?: (documentId: string, data: string) => void;
   }
 }
 
@@ -13,11 +13,11 @@ export class MobileClient {
   private closed = false;
   private pending = new Map<string, { documentId: string; resolve(value: unknown): void; reject(error: Error): void; timer: ReturnType<typeof setTimeout> }>();
   constructor(private page: Window = window) {
-    page.addEventListener('github-ultimate-native-message', this.receive);
+    page.addEventListener('alohak-native-message', this.receive);
     page.addEventListener('pagehide', this.close);
   }
   request(method: string, params: Record<string, unknown>): Promise<unknown> {
-    const transport = this.page.githubUltimateNative;
+    const transport = this.page.alohakNative;
     if (this.closed) return Promise.reject(new Error('Native client closed.'));
     if (!transport || transport.protocolVersion !== mobileProtocol) return Promise.reject(new Error('Native bridge is not ready or compatible.'));
     if (this.pending.size >= 8) return Promise.reject(new Error('Too many pending native requests.'));
@@ -36,14 +36,14 @@ export class MobileClient {
       const pending = this.pending.get(reply.id);
       if (!pending) return;
       this.pending.delete(reply.id); clearTimeout(pending.timer);
-      if (pending.documentId !== this.page.githubUltimateNative?.documentId) pending.reject(new Error('Document changed.'));
+      if (pending.documentId !== this.page.alohakNative?.documentId) pending.reject(new Error('Document changed.'));
       else if (reply.error) pending.reject(new Error(reply.error.message));
       else pending.resolve(reply.result);
     } catch { /* Ignore malformed replies; bounded timeout handles a broken peer. */ }
   };
   close = () => {
     this.closed = true;
-    this.page.removeEventListener('github-ultimate-native-message', this.receive);
+    this.page.removeEventListener('alohak-native-message', this.receive);
     this.page.removeEventListener('pagehide', this.close);
     for (const item of this.pending.values()) { clearTimeout(item.timer); item.reject(new Error('Native client closed.')); }
     this.pending.clear();

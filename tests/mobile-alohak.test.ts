@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runInNewContext } from 'node:vm';
-import { companionLink, deploymentURL, grantForEntry, matchesMobileGrant, mobileBootstrap, MobileFixtureBroker, mobileReplyScript, resolveCompanionLink } from '../src/mobile-protocol';
+import { alohakLink, deploymentURL, grantForEntry, matchesMobileGrant, mobileBootstrap, MobileFixtureBroker, mobileReplyScript, resolveAlohakLink } from '../src/mobile-protocol';
 import { MobileClient } from '../src/mobile-client';
 
 const entry = 'https://pages.example/project/preview/mobile-proof.html';
@@ -11,9 +11,9 @@ function approved() { const broker = new MobileFixtureBroker(); broker.activate(
 describe('native fixture authorization (native frame/navigation facts supplied separately)', () => {
   it('requires a native grant even for discovery, and revokes an open document', () => {
     const broker = new MobileFixtureBroker(); broker.activate(context);
-    expect(broker.handle(context, request('companion.discover', { protocolVersion: 1 })).error?.code).toBe(-32001);
+    expect(broker.handle(context, request('alohak.discover', { protocolVersion: 1 })).error?.code).toBe(-32001);
     broker.approve(grantForEntry(entry));
-    expect(broker.handle(context, request('companion.discover', { protocolVersion: 1 })).result).toMatchObject({ fixtureOnly: true });
+    expect(broker.handle(context, request('alohak.discover', { protocolVersion: 1 })).result).toMatchObject({ fixtureOnly: true });
     broker.approve();
     expect(broker.handle(context, request('fixture.echo', { text: 'private' })).error?.code).toBe(-32001);
   });
@@ -43,7 +43,7 @@ describe('native fixture authorization (native frame/navigation facts supplied s
     expect(broker.handle(context, '{').error?.code).toBe(-32700);
     expect(broker.handle(context, '界'.repeat(6000)).error?.code).toBe(-32600);
     expect(broker.handle(context, '\ud800').error?.code).toBe(-32700);
-    expect(broker.handle(context, request('companion.discover', { protocolVersion: 2 })).error?.code).toBe(-32602);
+    expect(broker.handle(context, request('alohak.discover', { protocolVersion: 2 })).error?.code).toBe(-32602);
     expect(broker.handle(context, request('fixture.echo', { text: 'ok' })).result).toEqual({ text: 'ok' });
   });
 });
@@ -51,19 +51,19 @@ describe('native fixture authorization (native frame/navigation facts supplied s
 describe('custom-scheme navigation-only links', () => {
   it('round trips query/fragment without changing the configured deployment', () => {
     const target = 'https://pages.example/project/preview/app/?workspace=a%2Fb#/documents/readme';
-    expect(resolveCompanionLink(companionLink(entry, target), entry)).toBe(target);
+    expect(resolveAlohakLink(alohakLink(entry, target), entry)).toBe(target);
   });
   it.each([
-    'githubultimate://open?route=//evil.example/',
-    'githubultimate://open?route=/other/',
-    'githubultimate://open?route=/project/preview-other/',
-    'githubultimate://open?route=/project/preview/%252e%252e/other',
-    'githubultimate://open?route=/project/preview/&grant=true',
-    'githubultimate://open?route=/project/preview/&route=/other/',
-    'githubultimate://user@open?route=/project/preview/',
-    'githubultimate://open?route=/project/preview/#token',
+    'alohak://open?route=//evil.example/',
+    'alohak://open?route=/other/',
+    'alohak://open?route=/project/preview-other/',
+    'alohak://open?route=/project/preview/%252e%252e/other',
+    'alohak://open?route=/project/preview/&grant=true',
+    'alohak://open?route=/project/preview/&route=/other/',
+    'alohak://user@open?route=/project/preview/',
+    'alohak://open?route=/project/preview/#token',
     'https://open?route=/project/preview/',
-  ])('rejects untrusted link %s', link => expect(() => resolveCompanionLink(link, entry)).toThrow());
+  ])('rejects untrusted link %s', link => expect(() => resolveAlohakLink(link, entry)).toThrow());
   it('denies ambiguous deployment paths, schemes and credentials', () => {
     for (const url of ['http://pages.example/project/', 'https://u:p@pages.example/project/', 'https://pages.example/project/%2e%2e/other', 'https://pages.example/project/../other', 'https://pages.example:444/project/']) expect(() => deploymentURL(url)).toThrow();
     expect(matchesMobileGrant(grantForEntry(entry), 'https://evil.example/project/preview/')).toBe(false);
@@ -73,9 +73,9 @@ describe('custom-scheme navigation-only links', () => {
 describe('installed bootstrap, safe replies and page-side JSON-RPC', () => {
   it('treats scripts in reply bodies as inert data and checks document generation', () => {
     const page = new EventTarget() as EventTarget & Record<string, any>;
-    page.top = page; page.webkit = { messageHandlers: { companion: { postMessage() {} } } };
+    page.top = page; page.webkit = { messageHandlers: { alohak: { postMessage() {} } } };
     const received: string[] = [];
-    page.addEventListener('github-ultimate-native-message', (event: Event) => received.push((event as CustomEvent<string>).detail));
+    page.addEventListener('alohak-native-message', (event: Event) => received.push((event as CustomEvent<string>).detail));
     const realm = { window: page, Event, CustomEvent };
     runInNewContext(mobileBootstrap('doc1', 'ios'), realm);
     const hostile = '";globalThis.pwned=true;//\u2028</script>';
@@ -88,12 +88,12 @@ describe('installed bootstrap, safe replies and page-side JSON-RPC', () => {
   it('runs discovery and echo through the actual page client with structured denial', async () => {
     const page = new EventTarget() as unknown as Window;
     const broker = approved();
-    page.githubUltimateNative = { protocolVersion: 1, documentId: context.documentId, postMessage(raw) {
+    page.alohakNative = { protocolVersion: 1, documentId: context.documentId, postMessage(raw) {
       const reply = broker.handle(context, raw);
-      queueMicrotask(() => page.dispatchEvent(new CustomEvent('github-ultimate-native-message', { detail: JSON.stringify(reply) })));
+      queueMicrotask(() => page.dispatchEvent(new CustomEvent('alohak-native-message', { detail: JSON.stringify(reply) })));
     } };
     const client = new MobileClient(page);
-    expect(await client.request('companion.discover', { protocolVersion: 1 })).toMatchObject({ fixtureOnly: true });
+    expect(await client.request('alohak.discover', { protocolVersion: 1 })).toMatchObject({ fixtureOnly: true });
     expect(await client.request('fixture.echo', { text: 'round trip' })).toEqual({ text: 'round trip' });
     await expect(client.request('github.repositories', {})).rejects.toThrow('fixture-only');
     client.close();
@@ -101,11 +101,11 @@ describe('installed bootstrap, safe replies and page-side JSON-RPC', () => {
   it('rejects outstanding calls when the document changes or client closes', async () => {
     const page = new EventTarget() as unknown as Window;
     let sentId = '';
-    page.githubUltimateNative = { protocolVersion: 1, documentId: 'old', postMessage(data) { sentId = JSON.parse(data).id; } };
+    page.alohakNative = { protocolVersion: 1, documentId: 'old', postMessage(data) { sentId = JSON.parse(data).id; } };
     const client = new MobileClient(page);
     const first = client.request('fixture.echo', { text: 'x' });
-    page.githubUltimateNative.documentId = 'new';
-    page.dispatchEvent(new CustomEvent('github-ultimate-native-message', { detail: JSON.stringify({ jsonrpc: '2.0', id: sentId, result: 'stale' }) }));
+    page.alohakNative.documentId = 'new';
+    page.dispatchEvent(new CustomEvent('alohak-native-message', { detail: JSON.stringify({ jsonrpc: '2.0', id: sentId, result: 'stale' }) }));
     await expect(first).rejects.toThrow('Document changed');
     const second = client.request('fixture.echo', { text: 'x' });
     client.close();

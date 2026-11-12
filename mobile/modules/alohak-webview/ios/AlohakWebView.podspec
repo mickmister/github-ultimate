@@ -1,10 +1,10 @@
 Pod::Spec.new do |s|
-  s.name = 'CompanionWebView'
+  s.name = 'AlohakWebView'
   s.version = '0.1.0'
-  s.summary = 'Document-bound fixture WebView for GitHub Ultimate'
+  s.summary = 'Document-bound fixture WebView for Alohak'
   s.description = s.summary
   s.license = { :type => 'MIT' }
-  s.author = 'GitHub Ultimate contributors'
+  s.author = 'Alohak contributors'
   s.homepage = 'https://github.com/mickmister/github-ultimate'
   s.platforms = { :ios => '15.1' }
   s.source = { :git => '' }

@@ -3,8 +3,8 @@ import { AppState, Button, Linking, Platform, ScrollView, StyleSheet, Switch, Te
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
-import CompanionWebView, { type DocumentEvent } from './modules/companion-webview';
-import { deploymentURL, grantForEntry, mobileBootstrap, mobileReplyScript, MobileFixtureBroker, resolveCompanionLink } from '../src/mobile-protocol';
+import AlohakWebView, { type DocumentEvent } from './modules/alohak-webview';
+import { deploymentURL, grantForEntry, mobileBootstrap, mobileReplyScript, MobileFixtureBroker, resolveAlohakLink } from '../src/mobile-protocol';
 import { AsyncPageKVStore } from '../src/page-kv';
 
 export default function App() {
@@ -28,7 +28,7 @@ export default function App() {
   openLink.current = url => {
     if (!entryRef.current) { pendingLink.current = url; setError('Configure the HTTPS deployment before opening this link.'); return; }
     try {
-      const target = resolveCompanionLink(url, entryRef.current);
+      const target = resolveAlohakLink(url, entryRef.current);
       if (lastLink.current === url) return;
       lastLink.current = url;
       broker.invalidate(); setBootstrap(''); setReply(''); setRoute(target); setReload(n => n + 1); setError('');
@@ -65,7 +65,7 @@ export default function App() {
     <View style={styles.toolbar}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
       <Button title="Reload" disabled={!entry} onPress={() => { broker.invalidate(); setBootstrap(''); setReply(''); setReload(n => n + 1); }} /></View>
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
-      <Text accessibilityRole="header">Companion — fixtures and page data</Text>
+      <Text accessibilityRole="header">Alohak — fixtures and page data</Text>
       <Text>No GitHub or S3 credentials are stored. Approve only a deployment whose scripts you trust.</Text>
       <TextInput accessibilityLabel="HTTPS entry URL" autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/mobile-proof.html" style={styles.input} />
       <Button title="Set deployment" onPress={configure} />
@@ -76,7 +76,7 @@ export default function App() {
       <Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text>
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    {entry && <CompanionWebView key={`${entry}:${reload}`} style={styles.webview} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap} reply={reply}
+    {entry && <AlohakWebView key={`${entry}:${reload}`} style={styles.webview} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap} reply={reply}
       onDocument={({ nativeEvent }) => onDocument(nativeEvent)}
       onMessage={({ nativeEvent }) => {
         void broker.handleAsync(nativeEvent, nativeEvent.data).then(result => {

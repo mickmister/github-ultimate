@@ -1,11 +1,11 @@
-# Mobile companion: fixture shell and page storage
+# Alohak: fixture shell and page storage
 
-The mobile companion is an Expo/React Native app for **iOS and Android**. Its
+Alohak is an Expo/React Native app for **iOS and Android**. Its
 WebView loads an explicitly configured remote HTTPS deployment. The installed
 app exposes JSON-RPC through a native, document-bound transport. The desktop
 extension retains its existing protocol and behavior.
 
-The shell implements `companion.discover`, `fixture.echo` and independently
+The shell implements `alohak.discover`, `fixture.echo` and independently
 approved `kv.snapshot/set/remove/clear` page-data operations. No
 GitHub/S3 credentials, OAuth, private reads or remote write methods are present. Device
 flow, GitHub reads, then S3 are the selected subsequent direction; an optional
@@ -29,8 +29,8 @@ cannot run this custom native view. iOS needs a Mac/Xcode and an appropriate
 signing team for a physical device. Android requires a current System WebView
 supporting `WEB_MESSAGE_LISTENER`; unsupported versions fail closed.
 
-Pilot IDs are `dev.githubultimate.companion` (both platforms), and the scheme is
-`githubultimate`. Choose final identifiers before distribution. No cloud build
+App IDs are `dev.alohak.mobile` (both platforms), and the scheme is
+`alohak`. No cloud build
 account, OAuth backend, signing identity or store project is embedded.
 
 Build/publish the normal branch Pages preview, which now includes
@@ -38,7 +38,7 @@ Build/publish the normal branch Pages preview, which now includes
 a controlled HTTPS host. On the device:
 
 1. Enter the complete HTTPS `mobile-proof.html` URL in **Native settings** and
-   tap **Set deployment**. An optional `EXPO_PUBLIC_COMPANION_URL` build variable
+   tap **Set deployment**. An optional `EXPO_PUBLIC_ALOHAK_URL` build variable
    prefills this field; it does not approve it.
 2. Inspect the displayed origin/directory and enable **Approve fixture bridge**.
 3. On the remote page, tap **Discover and echo**. Expect protocol 1, `fixtureOnly:
@@ -48,7 +48,7 @@ a controlled HTTPS host. On the device:
    for M1 and require setup after a cold launch. There is no credential import.
 
 To test page data, enable **Approve page storage** independently, choose
-**Mobile companion** in the proof page's storage backend selector, and tap
+**Alohak** in the proof page's storage backend selector, and tap
 **Open page storage**. Save an empty/dotted-key value, refresh, reload the
 WebView, and cold-launch/reconfigure/reapprove to verify persistence. Revoke
 storage while the page stays open and refresh again; expect denial while the
@@ -69,7 +69,7 @@ and JSON-serialized native-to-page messages. This implementation uses remote
 HTTPS rather than local HTML assets, and no Springboard engine. It does not
 carry over wildcard origins, file access, shared third-party cookies or
 debugging permissions. The native adapter is local Expo module source under
-`mobile/modules/companion-webview/`, not a fork of Songdrive.
+`mobile/modules/alohak-webview/`, not a fork of Songdrive.
 
 ## Native trust boundary
 
@@ -119,14 +119,14 @@ their methods return. Do not enable real credentials until device acceptance.
 The proof page offers **Open in app**, **Stay on web**, and an opt-in preference
 for a single automatic attempt on a future mobile visit. There is no repeated
 retry or installed-app detection; a tap may still be necessary. The automatic
-preference stores only a boolean. It is suppressed inside the companion even
+preference stores only a boolean. It is suppressed inside Alohak even
 before the bridge becomes ready. This pilot is on the proof page; integration
 of the handoff UI into the production webapp is a later milestone.
 
 Links look like:
 
 ```text
-githubultimate://open?route=%2Fproject%2Fpreview%2Fapp%2F%3Fworkspace%3Da%23%2Fdocuments
+alohak://open?route=%2Fproject%2Fpreview%2Fapp%2F%3Fworkspace%3Da%23%2Fdocuments
 ```
 
 Only `route` is accepted. The installed deployment supplies the origin and
@@ -141,8 +141,8 @@ For testing after installation/configuration, opening such a link from a web
 page should reach the same route in the app. Simulator/development commands:
 
 ```sh
-xcrun simctl openurl booted 'githubultimate://open?route=%2Fproject%2Fpreview%2Fmobile-proof.html'
-adb shell am start -a android.intent.action.VIEW -d 'githubultimate://open?route=%2Fproject%2Fpreview%2Fmobile-proof.html' dev.githubultimate.companion
+xcrun simctl openurl booted 'alohak://open?route=%2Fproject%2Fpreview%2Fmobile-proof.html'
+adb shell am start -a android.intent.action.VIEW -d 'alohak://open?route=%2Fproject%2Fpreview%2Fmobile-proof.html' dev.alohak.mobile
 ```
 
 Use your configured directory in place of `/project/preview/`. A future
@@ -159,7 +159,7 @@ project keep EAS Updates disabled and continue to work as the local M1 shell.
 ```sh
 pnpm run check
 pnpm --dir mobile run check
-pnpm exec vitest run tests/mobile-companion.test.ts tests/page-storage.test.ts
+pnpm exec vitest run tests/mobile-alohak.test.ts tests/page-storage.test.ts
 pnpm --dir mobile exec expo install --check
 pnpm --dir mobile exec expo-modules-autolinking resolve --platform apple
 pnpm --dir mobile exec expo-modules-autolinking resolve --platform android
@@ -173,7 +173,7 @@ navigation-only links, actual bootstrap/reply execution with hostile strings,
 and the actual page client's structured round trip. They **do not** establish
 WKWebView/Android WebView isolation. Expo export builds both Hermes bundles;
 prebuild/autolinking confirm project generation, not Swift/Kotlin compilation.
-`mobile-companion.yml` compiles the Android debug app and iOS simulator app in
+`mobile-alohak.yml` compiles the Android debug app and iOS simulator app in
 CI, with no release-signing secrets. Native compilation is not device evidence.
 
 Physical-device acceptance remains `task-3vt.39.6.3`. Record source SHA, native
