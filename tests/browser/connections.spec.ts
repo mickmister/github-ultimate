@@ -235,6 +235,8 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(dashboard.locator('.app-view')).toContainText('no issue query has run');
   await expect(dashboard.getByRole('link', { name: 'Open in github.dev', exact: true })).toHaveAttribute('href', `https://github.dev/mickmister/workspace-storage/tree/${'c'.repeat(40)}/documents`);
   await dashboard.getByRole('link', { name: 'Documents', exact: true }).click();
+  expect(new URLSearchParams(new URL(dashboard.url()).hash.split('?')[1]).has('connection')).toBe(false);
+  await dashboard.reload();
   await expect(dashboard.getByRole('link', { name: 'notes/private.md', exact: true })).toHaveAttribute('href', `https://github.dev/mickmister/workspace-storage/blob/${'c'.repeat(40)}/documents/notes/private.md`);
   await dashboard.getByRole('link', { name: 'Settings', exact: true }).click();
   await expect(dashboard.getByRole('heading', { name: 'Connection & storage settings', exact: true })).toBeVisible();
@@ -266,6 +268,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   expect(documentURL.hash).toMatch(/^#\/documents\/[^?]+\?/);
   expect(new URLSearchParams(documentURL.hash.split('?')[1]).get('workspace')).toBe('workspace-a');
   expect(new URLSearchParams(documentURL.hash.split('?')[1]).get('repository')).toBe('mickmister/workspace-storage');
+  expect(new URLSearchParams(documentURL.hash.split('?')[1]).has('connection')).toBe(false);
   // A fresh page and a reload must reconstruct the same approved workspace and document.
   const linked = await context.newPage();
   await linked.goto(documentURL.href);

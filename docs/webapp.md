@@ -27,8 +27,12 @@ Open `http://127.0.0.1:3100/`. Approve that origin in the extension connection
 settings and reload the page to use real data. The extension handles sign-in and
 read authorization. The new page supports connection selection, repository and
 workspace discovery, verified document listing/reading, and local filtering.
-Document routes carry `connection`, `repository` and `workspace` search fields
-inside the hash. A copied link or reload reconnects through approved extension
+Document routes carry `repository`, `workspace` and an optional `connection`
+search field inside the hash. When exactly one approved, signed-in connection is
+available to this page, links omit its device-local ID and resolve it on opening.
+With multiple approved connections, the link must identify one explicitly;
+an explicitly supplied but unavailable ID never falls back to the sole connection.
+A copied link or reload reconnects through approved extension
 capabilities, discovers that exact workspace, verifies its snapshot and reads
 the requested document. An unavailable connection/workspace/document produces an
 explicit error rather than silently selecting another one. Connection IDs are

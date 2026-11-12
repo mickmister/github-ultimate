@@ -21,6 +21,13 @@ explicit selection. Opening a detail URL never retries with another credential.
 The extension continues to enforce exact-origin approval, selected installation
 identity, repository access, response bounds, shared rate limits and cache scope.
 
+Workspace permalinks may omit `connection` when the extension exposes exactly one
+approved, signed-in connection to the page. The chooser and app tabs generate
+these shorter links automatically in that case. Multiple available connections
+require an explicit ID; an unavailable explicit ID is never replaced with
+another connection. The link's installation ID is still checked against the
+resolved connection.
+
 Discovery is serial, with batches of at most 12 repository/manifest tasks and a
 user-controlled **Load more workspaces** action. One task can require several
 bounded Git reads. This is not background polling or an exhaustive unbounded scan.

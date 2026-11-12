@@ -4,6 +4,7 @@ import { isMarkdown } from './document-format';
 import { ancestorFolders } from './document-tree';
 import { defaultTreeAppearance, type TreeAppearance } from './tree-appearance';
 import type { DocumentLocation } from './navigation';
+import { resolveLinkConnection } from '../../../../hosted/connection-link';
 
 const validRepository = (value: string) => /^(?!\.{1,2}\/)[a-zA-Z0-9_.-]+\/(?!\.{1,2}$)[a-zA-Z0-9_.-]+$/.test(value) && value.length <= 220;
 
@@ -64,7 +65,8 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       if (disposed) return;
       const { connection, repository, workspace, documentId } = location;
       if (!connection && !repository && !workspace && !documentId) { invalidate(emptyDocuments); actions.connect(); return; }
-      if (state.snapshot && connection === state.connectionId && repository === state.repository && workspace === state.workspaceId) {
+      const resolvedId = connection ?? (state.connections.length === 1 ? state.connections[0].id : undefined);
+      if (state.snapshot && resolvedId === state.connectionId && repository === state.repository && workspace === state.workspaceId) {
         if (!documentId) { invalidate({ documentFullscreen: false }); return; }
         if (documentId === state.documentId && state.content !== null) { invalidate({ documentFullscreen: true }); return; }
         if (state.snapshot.documents.some(document => document.id === documentId)) { actions.selectDocument(documentId); return; }
@@ -73,12 +75,11 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       }
       patch({ ...emptyDocuments, connectionId: '', repository: repository ?? '', workspaceId: '', workspaces: [] });
       void run('Restoring workspace document link…', async isCurrent => {
-        if (!connection || !repository || !workspace || !validRepository(repository)) throw new Error('This document link needs a connection, valid repository and workspace. Choose the workspace below to continue.');
+        if (!repository || !workspace || !validRepository(repository)) throw new Error('This document link needs a valid repository and workspace. Choose the workspace below to continue.');
         const connections = state.connections.length ? state.connections : await api.connect();
         if (!isCurrent()) return {};
         patch({ connections });
-        const approved = connections.find(item => item.id === connection);
-        if (!approved) throw new Error('The linked connection is not approved on this device. Open extension connection settings or choose another connection.');
+        const approved = resolveLinkConnection(connection, connections);
         const selected = { connectionId: approved.id, installationId: approved.installationId, repository, workspace };
         patch({ connectionId: approved.id });
         const workspaces = await api.discover(selected);

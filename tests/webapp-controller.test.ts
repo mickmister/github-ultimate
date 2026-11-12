@@ -72,10 +72,51 @@ describe('document browser behavior independent of presentation', () => {
     expect(controller.module.open).toHaveBeenCalledTimes(1);
   });
 
+  it('opens a connection-free link with the sole approved connection and preserves history without refetching', async () => {
+    const navigation = { load: vi.fn(async () => null), save: vi.fn(async () => {}), forget: vi.fn(async () => {}) };
+    const controller = setup(navigation);
+    const location = { ...linked, connection: undefined };
+    controller.actions.openLocation(location);
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: connection.id, installationId: 123, repository: 'owner/storage', workspace: 'workspace-a' });
+    expect(navigation.save).toHaveBeenLastCalledWith({ connectionId: connection.id, installationId: 123, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'note-a', documentPath: 'notes/a.md' });
+    controller.actions.openLocation({ ...location, documentId: undefined });
+    expect(controller.getSnapshot().documentFullscreen).toBe(false);
+    controller.actions.openLocation(location);
+    expect(controller.getSnapshot().documentFullscreen).toBe(true);
+    expect(controller.module.read).toHaveBeenCalledTimes(1);
+    expect(controller.module.open).toHaveBeenCalledTimes(1);
+  });
+
+  it('requires a connection ID for ambiguous links even when a connection was previously selected', async () => {
+    const controller = setup();
+    controller.module.connect.mockResolvedValue([connection, { ...connection, id: 'connection-b', installationId: 456 }]);
+    controller.actions.openLocation(linked);
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    controller.module.open.mockClear(); controller.module.read.mockClear(); controller.module.discover.mockClear();
+    controller.actions.openLocation({ ...linked, connection: undefined });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('more than one approved connection'));
+    expect(controller.module.discover).not.toHaveBeenCalled();
+    expect(controller.module.open).not.toHaveBeenCalled();
+    expect(controller.module.read).not.toHaveBeenCalled();
+    controller.actions.openLocation({ ...linked, connection: 'connection-b' });
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    expect(controller.module.open).toHaveBeenCalledWith({ connectionId: 'connection-b', installationId: 456, repository: 'owner/storage', workspace: 'workspace-a' });
+  });
+
+  it('reports missing approval for a connection-free link without attempting document requests', async () => {
+    const controller = setup();
+    controller.module.connect.mockResolvedValue([]);
+    controller.actions.openLocation({ ...linked, connection: undefined });
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('No approved signed-in connection'));
+    expect(controller.module.discover).not.toHaveBeenCalled();
+    expect(controller.module.open).not.toHaveBeenCalled();
+  });
+
   it('rejects incomplete, unapproved and unavailable link scopes without substituting another connection', async () => {
     const controller = setup();
     controller.actions.openLocation({ documentId: 'note-a' });
-    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('needs a connection'));
+    await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('needs a valid repository and workspace'));
     expect(controller.module.connect).not.toHaveBeenCalled();
     controller.actions.openLocation({ ...linked, connection: 'another-device' });
     await vi.waitFor(() => expect(controller.getSnapshot().error).toContain('not approved'));

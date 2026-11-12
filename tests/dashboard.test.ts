@@ -1,7 +1,7 @@
 import { expect, test, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { githubDevURL } from '../hosted/github-dev';
-import { parseRoute, workspaceURL } from '../hosted/routes';
+import { parseRoute, workspaceURL, resolveWorkspaceConnection } from '../hosted/routes';
 import { WorkspaceCatalog, type Send } from '../hosted/catalog';
 import { defineWorkspaceApps } from '../hosted/workspace-apps';
 import type { HostedRequest } from '../src/hosted-protocol';
@@ -32,6 +32,20 @@ test('workspace detail routes survive refresh and reject invalid access metadata
   expect(parseRoute(workspaceURL(route, 'review.custom'))).toMatchObject({ app: 'review.custom' });
   expect(parseRoute('')).toEqual({ page: 'chooser' });
   expect(() => parseRoute('#/workspace?connection=invalid')).toThrow();
+});
+test('connection-free workspace links resolve only a sole approved connection and still bind installation', () => {
+  const url = workspaceURL({ installationId: 1, repository: 'owner/storage', workspace: 'planning' });
+  expect(url).not.toContain('connection=');
+  const route = parseRoute(url);
+  if (route.page !== 'workspace') throw new Error('Expected workspace route');
+  expect(route.connectionId).toBeUndefined();
+  expect(resolveWorkspaceConnection(route, [connections[0]])).toBe(connections[0]);
+  expect(() => resolveWorkspaceConnection(route, [])).toThrow('No approved signed-in connection');
+  expect(() => resolveWorkspaceConnection(route, connections)).toThrow('more than one approved connection');
+  expect(() => resolveWorkspaceConnection({ ...route, installationId: 999 }, [connections[0]])).toThrow('no fallback');
+  expect(resolveWorkspaceConnection({ ...route, connectionId: connections[0].id }, connections)).toBe(connections[0]);
+  expect(() => resolveWorkspaceConnection({ ...route, connectionId: crypto.randomUUID() }, [connections[0]])).toThrow('not approved');
+  expect(() => parseRoute(url + '&connection=')).toThrow('Invalid workspace link');
 });
 test('catalogue deduplicates workspace identity while preserving each approved access route', async () => {
   const send = transport(), catalog = new WorkspaceCatalog(send as Send, connections, 'owner/storage');

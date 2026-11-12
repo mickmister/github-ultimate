@@ -3,7 +3,7 @@ import type { HostedConnection } from '../src/hosted-protocol';
 import { WorkspaceCatalog, workspaceKey, type WorkspaceAccess } from './catalog';
 import { WorkspaceReader } from './workspaces';
 import { loadNavigation, saveNavigation } from './navigation';
-import { parseRoute, workspaceURL, type WorkspaceRoute } from './routes';
+import { parseRoute, workspaceURL, resolveWorkspaceConnection, type WorkspaceRoute } from './routes';
 import { githubDevURL } from './github-dev';
 import { workspaceApps } from './workspace-apps';
 import { element, externalLink } from './components';
@@ -34,7 +34,7 @@ function description(access: WorkspaceAccess) {
   return access.opened.manifest.purpose || `${access.opened.manifest.repositories?.length ?? 0} attached repositories`;
 }
 
-function renderCards(container: HTMLElement, active: () => boolean) {
+function renderCards(container: HTMLElement, active: () => boolean, available: readonly HostedConnection[]) {
   container.replaceChildren();
   const saved = remembered();
   for (const [key, routes] of catalog!.workspaces) {
@@ -54,7 +54,7 @@ function renderCards(container: HTMLElement, active: () => boolean) {
     const open = element('a', `Open ${routes[0].workspace.name}`, 'button');
     const update = () => {
       const selected = select.value === '' ? undefined : routes[Number(select.value)];
-      if (selected) { open.href = workspaceURL(routeFor(selected)); open.removeAttribute('aria-disabled'); }
+      if (selected) { open.href = workspaceURL({ ...routeFor(selected), connectionId: available.length === 1 ? undefined : selected.connection.id }); open.removeAttribute('aria-disabled'); }
       else { open.removeAttribute('href'); open.setAttribute('aria-disabled', 'true'); }
     };
     select.addEventListener('change', update); update();
@@ -76,9 +76,9 @@ async function chooser(available: HostedConnection[], signal: AbortSignal) {
     if (busy || !active()) return;
     busy = true; refresh.disabled = more.disabled = true;
     try {
-      await catalog!.loadMore(message => { if (active()) report(message); }, active, () => { if (active()) renderCards(cards, active); });
+      await catalog!.loadMore(message => { if (active()) report(message); }, active, () => { if (active()) renderCards(cards, active, available); });
       if (!active()) return;
-      renderCards(cards, active);
+      renderCards(cards, active, available);
       more.hidden = !catalog!.queue.length;
       notices.replaceChildren(element('summary', `${catalog!.incomplete} incomplete namespace(s) · ${catalog!.notices.length} discovery notice(s)`));
       notices.open = catalog!.notices.length > 0;
@@ -99,9 +99,8 @@ async function chooser(available: HostedConnection[], signal: AbortSignal) {
 }
 
 async function resolveWorkspace(route: WorkspaceRoute, available: HostedConnection[], signal: AbortSignal) {
-  const connection = available.find(connection => connection.id === route.connectionId);
-  if (!connection || connection.installation?.id !== route.installationId) throw new Error('This workspace’s saved connection or installation is unavailable. Return to Workspaces and choose an approved access route; no fallback was used.');
-  const cached = catalog?.workspaces.get(workspaceKey(route.repository, route.workspace))?.find(access => access.connection.id === route.connectionId && access.connection.installation?.id === route.installationId);
+  const connection = resolveWorkspaceConnection(route, available);
+  const cached = catalog?.workspaces.get(workspaceKey(route.repository, route.workspace))?.find(access => access.connection.id === connection.id && access.connection.installation?.id === route.installationId);
   if (cached) return cached;
   const reader = new WorkspaceReader(bridgeRequest, connection.id, route.repository, route.installationId, route.workspace);
   const found = await reader.discover();
@@ -123,7 +122,7 @@ async function detail(route: WorkspaceRoute, available: HostedConnection[], sign
   root.append(header);
   const tabs = element('nav', undefined, 'app-tabs'); tabs.setAttribute('aria-label', 'Workspace apps');
   for (const app of workspaceApps.values()) {
-    const link = element('a', app.title); link.href = workspaceURL(route, app.id);
+    const link = element('a', app.title); link.href = workspaceURL({ ...route, connectionId: available.length === 1 ? undefined : access.connection.id }, app.id);
     if (app.id === route.app) link.setAttribute('aria-current', 'page'); tabs.append(link);
   }
   const appRoot = element('section', undefined, 'app-view');

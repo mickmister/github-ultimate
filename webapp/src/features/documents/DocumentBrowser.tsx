@@ -35,7 +35,7 @@ function SubscribedBrowser({ controller, presentation: Presentation, navigation 
 }) {
   const model = useSyncExternalStore(controller.subscribe, controller.getSnapshot, controller.getSnapshot);
   useEffect(() => { if (navigation) controller.actions.openLocation(navigation.location); }, [controller, navigation?.location]);
-  const scope = { connection: model.connectionId, repository: model.repository.trim(), workspace: model.workspaceId };
+  const scope = { connection: model.connections.length === 1 ? undefined : model.connectionId, repository: model.repository.trim(), workspace: model.workspaceId };
   const actions = navigation ? {
     ...controller.actions,
     browseDocuments() {
