@@ -10,7 +10,7 @@
     "github-ultimate-form": "bin/github-ultimate-form"
   },
   "scripts": {
-    "lint:tsx-view-boundary": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset tsx-view-boundary --target . src hosted webapp/src",
+    "lint:tsx-view-boundary": "ast-grep scan --rule .github/openlint/rules/ast-grep/no-intrinsic-jsx-outside-view.yml src hosted webapp/src && ast-grep scan --rule .github/openlint/rules/ast-grep/no-hooks-in-view.yml src hosted webapp/src",
     "lint:tsx-view-boundary:changed": "OPENLINT_POLICY_DIR=.github/openlint ol check --changed --preset tsx-view-boundary --target .",
     "lint:tsx-view-boundary:last-commit": "OPENLINT_POLICY_DIR=.github/openlint ol check --last-commit --preset tsx-view-boundary --target .",
     "lint:ui-customization-fences": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset ui-customization-fences --target . src hosted webapp/src",

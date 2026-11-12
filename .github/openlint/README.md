@@ -2,8 +2,11 @@
 
 Adapted from `vibe-kanban-vscode-web/.github/openlint/openlint.yaml` in the
 `2286-vd-redesign-2` workspace. Both supporting ast-grep rules are included.
-OpenLint is pinned to `@mickmister/openlint@0.1.0`; its ast-grep dependency is
-resolved by `pnpm-lock.yaml`. Run `pnpm install --frozen-lockfile` before using the commands.
+The full TSX boundary command runs both checked-in rules directly through the
+pinned `@ast-grep/cli` dependency. It does not require OpenLint. Run
+`pnpm install --frozen-lockfile` before using the command. The optional
+changed/last-commit and customization-fence commands still require an externally
+installed `@mickmister/openlint@0.1.0` executable (`ol`).
 
 ## Current coverage
 
