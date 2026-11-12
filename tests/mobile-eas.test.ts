@@ -31,6 +31,11 @@ describe('manual EAS release boundary', () => {
       expect(prepared.build[profile].environment).toBe(profile);
     }
   });
+  it.each([undefined, ''])('omits an unset optional deployment URL (%s) from uploaded build profiles', entry => {
+    const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
+    const prepared = configuredBuildProfiles(original, releasePlan({ ...env, EXPO_PUBLIC_ALOHAK_URL: entry }));
+    expect(prepared.build.base.env).toEqual({ EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER });
+  });
   it.each(['android', 'ios'])('fingerprints the actual %s native adapter without an Expo account', platform => {
     const fingerprint = JSON.parse(execFileSync('pnpm', ['--dir', 'mobile', 'exec', 'expo-updates', 'fingerprint:generate', '--platform', platform, '--workflow', 'managed'], {
       cwd: new URL('..', import.meta.url), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,

@@ -32,7 +32,9 @@ export function releasePlan(env) {
 }
 
 export function configuredBuildProfiles(config, plan) {
-  return { ...config, build: { ...config.build, base: { ...config.build.base, env: { ...config.build.base.env, ...plan.publicEnv } } } };
+  // EAS rejects empty env values, including an unset optional deployment URL.
+  const env = Object.fromEntries(Object.entries({ ...config.build.base.env, ...plan.publicEnv }).filter(([, value]) => value !== ''));
+  return { ...config, build: { ...config.build, base: { ...config.build.base, env } } };
 }
 
 function main() {
