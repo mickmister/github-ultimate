@@ -191,9 +191,6 @@ importers:
       '@ast-grep/cli':
         specifier: 0.45.3
         version: 0.45.3
-      '@mickmister/openlint':
-        specifier: 0.1.0
-        version: 0.1.0
       '@playwright/test':
         specifier: ^1.56.1
         version: 1.64.1
@@ -1545,11 +1542,6 @@ packages:
   '@mermaid-js/tiny@12.3.0':
     resolution: {integrity: sha512-90BO2kQvmQWj9YjBX2IsLHCw61rN69dPTn5wFfDu+b9aT7qtzfzTA3wpKWeaRAKK85refSo9How5EOeY39DWfA==}
     engines: {node: '>=22.12.0'}
-
-  '@mickmister/openlint@0.1.0':
-    resolution: {integrity: sha512-OikbKMkKKMxEK4blbi4uf3jIzrkUARLXhSufFeTxRN1mSt/rcv7jwhPOw/RkardrDu5tYDpA9XzTzb03Azb93Q==}
-    engines: {node: '>=18'}
-    hasBin: true
 
   '@napi-rs/wasm-runtime@1.2.7':
     resolution: {integrity: sha512-zJccwplOAbgfZju95IUHazLnx9RAPtPN2YGJXI6UbrgeaR9QfPjGrQL6ERkSAtnVCA4Q+83ApGyaX5zdpCaKkQ==}
@@ -7508,10 +7500,6 @@ snapshots:
       '@jridgewell/sourcemap-codec': 1.6.0
 
   '@mermaid-js/tiny@12.3.0': {}
-
-  '@mickmister/openlint@0.1.0':
-    dependencies:
-      '@ast-grep/cli': 0.45.3
 
   '@napi-rs/wasm-runtime@1.2.7(@emnapi/core@1.11.0)(@emnapi/runtime@1.11.0)':
     dependencies:
