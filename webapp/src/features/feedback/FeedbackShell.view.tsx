@@ -14,33 +14,35 @@ interface Props {
   state: ReturnType<ReturnType<typeof createFeedbackQueue>['getSnapshot']>;
   notice: string;
   commentRef: RefObject<HTMLTextAreaElement | null>;
+  portalContainer: HTMLElement | null;
   actions: {
     closeMenu(): void; select(value: string): void; openReview(element: HTMLElement): void; closeDialog(): void;
     setComment(text: string): void; addComment(): void; edit(id: string, text: string): void;
     remove(id: string): void; copyAndClear(): void;
   };
 }
-export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, actions }: Props) {
+export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, portalContainer, actions }: Props) {
+  const container = portalContainer ? { current: portalContainer } : undefined;
   return <>
     <Menu.Root aria-label="Comment actions" open={Boolean(active)} positioning={{ placement: 'bottom-start', strategy: 'fixed' }}
       onOpenChange={details => { if (!details.open) actions.closeMenu(); }} onSelect={details => actions.select(details.value)}
       onEscapeKeyDown={event => event.stopPropagation()} lazyMount unmountOnExit>
       <Menu.Trigger disabled aria-hidden="true" tabIndex={-1} className="feedback-menu-anchor" style={{ left: active?.point.x ?? 0, top: active?.point.y ?? 0 }} />
       {children}
-      <Portal><Menu.Positioner className="feedback-menu-positioner"><Menu.Content className="feedback-menu" aria-label="Comment actions">
+      <Portal container={container}><Menu.Positioner className="feedback-menu-positioner"><Menu.Content className="feedback-menu" aria-label="Comment actions">
         <Menu.Item value="copy" disabled={!active?.context.selection}>Copy</Menu.Item>
         <Menu.Separator />
         <Menu.Item value="content-comment" disabled={!active?.context.target.resource}>Comment on Content</Menu.Item>
         <Menu.Item value="feature-comment">Comment on Feature</Menu.Item>
       </Menu.Content></Menu.Positioner></Portal>
     </Menu.Root>
-    <div className="feedback-dock" data-feedback-control="true">
+    <Portal container={container}><div className="feedback-dock" data-feedback-control="true">
       <button type="button" onClick={event => actions.openReview(event.currentTarget)}>Comments · {state.items.length}</button>
       {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}
-    </div>
+    </div></Portal>
     <Dialog.Root open={Boolean(composer || review)} onOpenChange={details => { if (!details.open) actions.closeDialog(); }}
       initialFocusEl={() => composer ? commentRef.current : null} onEscapeKeyDown={event => event.stopPropagation()} lazyMount unmountOnExit>
-      <Portal><Dialog.Backdrop className="feedback-backdrop" /><Dialog.Positioner className="feedback-dialog-positioner">
+      <Portal container={container}><Dialog.Backdrop className="feedback-backdrop" /><Dialog.Positioner className="feedback-dialog-positioner">
         <Dialog.Content className="feedback-dialog" data-feedback-control="true" aria-label={composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}>
           <header><Dialog.Title>{composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}</Dialog.Title>
             <button type="button" onClick={actions.closeDialog} aria-label="Close comments">Close</button></header>

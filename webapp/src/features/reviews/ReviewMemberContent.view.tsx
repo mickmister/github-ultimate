@@ -14,7 +14,7 @@ interface Props extends ReviewMemberContentProps { content: string | null; basel
 export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, onAnswer, onSubmit, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode }: Props) {
   if (error) return <p role="alert">{error}</p>;
   if (content === null) return <p role="status">Loading {member.label}…</p>;
-  if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onSaveDraft={onSaveDraft} formStatus={formStatus} />;
+  if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onSaveDraft={onSaveDraft} formStatus={formStatus} feedbackTarget={reviewTarget(scope, review, member, 'rendered-form')} />;
   if (member.kind !== 'document') return null;
   const markdown = isMarkdown(member.target.resource);
   const target = reviewTarget(scope, review, member, markdown ? 'rendered-markdown' : 'source');

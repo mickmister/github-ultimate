@@ -87,15 +87,22 @@ test('draft identity survives unrelated commits and stale saves cannot overwrite
   draft.progress = [];
   await expect(save(first.version)).rejects.toThrow('conflict');
 });
-test('reviewer spoofing, changed form pins and invalid exclusive answers fail before any write', async () => {
+test('reviewer spoofing and changed form pins fail before any write', async () => {
   const { git, value, input } = fixture();
   await expect(writeReview(input(), 'github:2', git.read, git.mutate)).rejects.toThrow('another authenticated');
   value.forms[0].dsl.version = 'c'.repeat(40);
   await expect(writeReview(input(), 'github:1', git.read, git.mutate)).rejects.toThrow('pinned form');
   expect(git.mutations).toHaveLength(0);
-  const valid = fixture();
-  valid.value.forms[0].answers.choice = { one: true, two: true };
-  await expect(writeReview(valid.input(), 'github:1', valid.git.read, valid.git.mutate)).rejects.toThrow('at most one');
+});
+test('hosted responses and drafts preserve multiple checked choices despite exclusive group metadata', async () => {
+  const { git, value, input } = fixture();
+  value.forms[0].answers.choice = { one: true, two: true };
+  value.forms[0].answers.choice_one_more_info = 'Existing per-choice notes remain valid.';
+  const receipt = await writeReview(input(), 'github:1', git.read, git.mutate);
+  expect(JSON.parse(git.blobs.get(receipt.version)!).forms[0].answers).toEqual(value.forms[0].answers);
+  const { intent: _intent, ...rest } = value as Extract<ReviewArtifact, { kind: 'review-response' }>;
+  const draft = { ...rest, kind: 'review-draft' as const, id: 'draft-multi' };
+  await expect(writeReview({ ...input(), text: JSON.stringify(draft) }, 'github:1', git.read, git.mutate)).resolves.toHaveProperty('version');
 });
 test('request amendments do not rebind old responses; failed ref updates issue no receipt', async () => {
   const { git, request, value, input, requestVersion } = fixture();

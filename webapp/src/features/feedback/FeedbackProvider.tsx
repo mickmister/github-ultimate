@@ -6,6 +6,7 @@ import { FeedbackShellView } from './FeedbackShell.view';
 
 interface FeedbackAPI {
   readonly items: readonly FeedbackComment[];
+  setPortalContainer(container: HTMLElement | null): void;
   edit(id: string, text: string): void;
   remove(id: string): void;
   open(target: FeedbackTarget, root: HTMLElement, origin: HTMLElement, point?: { x: number; y: number }, selection?: FeedbackSelection | null): void;
@@ -37,10 +38,11 @@ function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: {
   const [composer, setComposer] = useState<{ kind: FeedbackKind; context: FeedbackCapture; text: string } | null>(null);
   const [review, setReview] = useState(false);
   const [notice, setNotice] = useState('');
+  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const origin = useRef<HTMLElement | null>(null);
   const commentRef = useRef<HTMLTextAreaElement | null>(null);
   const api: FeedbackAPI = {
-    items: state.items, edit: queue.edit, remove: queue.remove,
+    items: state.items, edit: queue.edit, remove: queue.remove, setPortalContainer,
     open(target, root, trigger, point, selection) {
       const rect = trigger.getBoundingClientRect();
       const viewport = root.ownerDocument.defaultView!;
@@ -66,7 +68,7 @@ function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: {
     closeMenu();
   }
   return <FeedbackContext.Provider value={api}>
-    <FeedbackShellView active={active} composer={composer} review={review} state={state} notice={notice} commentRef={commentRef}
+    <FeedbackShellView active={active} composer={composer} review={review} state={state} notice={notice} commentRef={commentRef} portalContainer={portalContainer}
       actions={{
         closeMenu, select,
         openReview(element) { origin.current = element; setNotice(''); setReview(true); },

@@ -5,6 +5,60 @@ async function finishForm(page: Page) {
   await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
 }
 
+for (const { zenMode, width } of [{ zenMode: false, width: 1280 }, { zenMode: true, width: 1280 }, { zenMode: true, width: 390 }]) {
+  test(`form comments and unrestricted selections survive remote save and submission${zenMode ? ' in zen mode' : ''} at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    let state: any = { artifacts: [], revision: 1 };
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().method() === 'POST') state = route.request().postDataJSON();
+      await route.fulfill({ json: state });
+    });
+    await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
+    await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+    if (zenMode) await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    await expect(page.getByText(/^Notes for /)).toHaveCount(0);
+    await page.getByText('Keep this approach', { exact: true }).click();
+    await page.getByText('Revise this approach', { exact: true }).click();
+    for (const name of ['Keep this approach', 'Revise this approach']) await expect(page.getByRole('checkbox', { name, exact: true })).toBeChecked();
+    const description = page.getByText('Continue with the implementation shown in the pinned document.', { exact: true });
+    await description.evaluate(node => {
+      const range = document.createRange(); range.selectNodeContents(node);
+      const selection = getSelection()!; selection.removeAllRanges(); selection.addRange(range);
+    });
+    if (width === 390) await page.getByRole('button', { name: 'Comment on Reader decisions', exact: true }).click();
+    else await description.click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Comment on Content', exact: true }).click();
+    const composer = page.getByRole('dialog', { name: 'Comment on Content', exact: true });
+    await expect(composer.locator('blockquote')).toHaveText('Continue with the implementation shown in the pinned document.');
+    await composer.getByLabel('Your comment').fill('Clarify the next steps in this form.');
+    await composer.getByRole('button', { name: 'Add to queue', exact: true }).click();
+    await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+    const queue = page.getByRole('dialog', { name: 'Queued comments', exact: true });
+    await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Clarify the next steps in this form.');
+    await page.keyboard.press('Escape');
+    await expect(queue).toHaveCount(0);
+    if (zenMode) await expect(page.getByRole('dialog', { name: 'Reader decisions — Zen mode', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Draft saved remotely' })).toBeVisible();
+    const draft = state.artifacts.find((item: any) => item.value.kind === 'review-draft').value;
+    expect(draft.forms[0].answers.decision).toMatchObject({ keep: true, revise: true });
+    expect(draft.comments[0]).toMatchObject({ member_id: 'reader', text: 'Clarify the next steps in this form.', selection: { text: 'Continue with the implementation shown in the pinned document.', representation: 'rendered-form' } });
+    await page.reload();
+    await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+    if (zenMode) await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    for (const name of ['Keep this approach', 'Revise this approach']) await expect(page.getByRole('checkbox', { name, exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+    await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Clarify the next steps in this form.');
+    await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
+    await finishForm(page);
+    await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Response saved remotely' })).toBeVisible();
+    const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
+    expect(response.forms[0].answers.decision).toMatchObject({ keep: true, revise: true });
+    expect(response.comments).toEqual(draft.comments);
+  });
+}
+
 for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
   test(`form zen mode isolates the form, keeps Back sticky and preserves answers at ${viewport.width}px`, async ({ page }) => {
     await page.setViewportSize(viewport);
@@ -19,7 +73,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(zen.getByRole('heading', { name: 'Additional notes', exact: true })).toBeFocused();
     await expect(page.getByRole('link', { name: 'Review inbox', exact: true })).toHaveCount(0);
     await expect(page.getByRole('complementary', { name: 'Review items', exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Comments ·/ })).toHaveCount(0);
+    await expect(zen.getByRole('button', { name: /Comments ·/ })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Check for updates and receipts' })).toHaveCount(0);
     const bounds = (await zen.boundingBox())!;
     expect(bounds).toMatchObject({ x: 0, y: 0, width: viewport.width, height: viewport.height });
@@ -177,6 +231,7 @@ test('submitted answers take precedence over an older saved draft after reopen',
   });
   await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
   await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await page.getByText('Keep this approach', { exact: true }).click();
   await page.getByRole('button', { name: 'Next question', exact: true }).click();
   await page.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('Older saved draft');
   await page.getByRole('button', { name: 'Save draft remotely' }).click();

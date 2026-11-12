@@ -1,6 +1,5 @@
 import { z } from 'zod';
 import { parseRecord, validateAnswers } from './protocol.ts';
-import { choiceOptions } from './choices.ts';
 
 const key = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/);
 const bead = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/);
@@ -86,14 +85,6 @@ export async function validateReviewArtifact(request: ReviewRequest, value: Revi
     if (!('format' in form) || form.id !== member.form_id || form.task_id && form.task_id !== member.bead_id) throw new Error('Pinned DSL does not match its declared form/Bead.');
     if (form.invalidatedAt || form.allowCodeFileChanges === false && answer.intent === 'approved-next-steps') throw new Error('This form cannot authorize code changes.');
     const errors = validateAnswers(form, answer.answers, { allowUnanswered: value.kind === 'review-draft' });
-    for (const question of form.questions) {
-      if (question.type !== 'choices') continue;
-      const selected = answer.answers[question.id];
-      for (const group of question.choiceGroups ?? []) {
-        const count = choiceOptions(form, question).filter(choice => group.choiceIds.includes(choice.id) && typeof selected === 'object' && selected[choice.id]).length;
-        if (group.mode !== 'any' && count > 1) errors.push(`${question.title}: choose at most one option in ${group.title ?? group.id}.`);
-      }
-    }
     if (errors.length) throw new Error(errors.join('\n'));
   }
 }

@@ -156,13 +156,25 @@ the same `previewDirectory()` function used for publication. Set
 ## Hosted form zen mode
 
 Open a form in a review request and choose **Zen mode** to focus on filling it
-out. The form occupies the viewport; workspace navigation, packet details, review
-items and the comment dock are outside the modal interaction. Only the form,
-question controls, draft saving and submission status remain, with one quiet
+out. The form occupies the viewport; workspace navigation, packet details and review
+items are outside the modal interaction. The form, question controls, comments,
+draft saving and submission status remain, with one quiet
 sticky **← Back** button at the top left. **Back** or Escape returns to the review
 without discarding answers or changing the current question. Background controls
 are inert, and keyboard focus returns to the entry button on exit. The layout respects
 mobile safe areas and does not require browser fullscreen permission.
+
+Highlight form text and right-click, or use the form's **Comment ⋯** button, to
+open the shared comment menu. **Comment on Content** captures the selected text
+against the pinned form DSL. The menu, composer and **Comments** queue work inside
+zen mode; Escape closes a comment dialog before exiting zen. Form comments are
+included in remote review drafts and submitted responses.
+
+Checkboxes can be selected independently even when the author suggests a single
+selection or uses exclusive choice-group metadata. Required-answer checks still
+apply. Per-choice **Notes for …** fields are omitted; existing saved notes are
+preserved, and question-level additional context and dedicated notes questions
+remain available.
 
 ## Interchangeable presentation
 
