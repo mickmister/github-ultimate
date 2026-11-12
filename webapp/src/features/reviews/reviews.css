@@ -23,6 +23,17 @@
 .review-checkbox[data-disabled] { opacity: .55; cursor: default; }
 .review-question-heading { scroll-margin-block-start: 1rem; }
 .review-question-navigation { display: flex; flex-wrap: wrap; gap: .75rem; margin-block: 1rem; }
+.review-zen-toggle { margin-block: .5rem; }
+body:has(> .review-zen[open]) > :not(.review-zen) { visibility: hidden; }
+.review-zen { position: fixed; inset: 0; margin: 0; padding: 0; width: 100%; max-width: none; height: 100dvh; max-height: none; border: 0; background: var(--bg); color: var(--fg); overflow: auto; overscroll-behavior: contain; }
+.review-zen::backdrop { background: var(--bg); }
+.review-zen-toolbar { position: sticky; top: 0; z-index: 1; padding: max(.5rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) .5rem max(.75rem, env(safe-area-inset-left)); background: var(--bg); }
+.review-zen .review-zen-back { color: var(--muted); background: transparent; border-color: transparent; font-weight: 400; }
+.review-zen-content { max-width: 90ch; margin-inline: auto; padding: 0 max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); overflow-wrap: anywhere; }
+.review-zen .review-question-heading { scroll-margin-block-start: 5rem; }
+.review-form-actions { margin-block: 1rem; }
+.review-form-actions [role=status], .review-form-actions [role=alert] { margin-block: .75rem; }
+.review-form-actions [role=alert] { color: var(--error); }
 .review-diff { height: 65vh; min-height: 300px; }
 .review-summary code, .review-submit code { overflow-wrap: anywhere; }
 .review-submit { margin-block: 1rem; }

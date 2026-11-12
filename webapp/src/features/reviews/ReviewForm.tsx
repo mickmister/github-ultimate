@@ -3,6 +3,9 @@ import { ReviewFormView, type ReviewFormProps } from './ReviewForm.view';
 
 export function ReviewForm(props: ReviewFormProps) {
   const [step, setStep] = useState(0);
+  const [zen, setZen] = useState(false);
+  const dialog = useRef<HTMLDialogElement>(null);
+  const zenButton = useRef<HTMLButtonElement>(null);
   const heading = useRef<HTMLHeadingElement>(null);
   const previousStep = useRef(step);
   useLayoutEffect(() => {
@@ -11,5 +14,19 @@ export function ReviewForm(props: ReviewFormProps) {
     heading.current?.focus({ preventScroll: true });
     heading.current?.scrollIntoView({ block: 'start', behavior: 'auto' });
   }, [step]);
-  return <ReviewFormView {...props} step={step} heading={heading} onStep={setStep} />;
+  useLayoutEffect(() => {
+    if (!zen || !dialog.current) return;
+    const modal = dialog.current;
+    const overflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    modal.showModal();
+    heading.current?.focus({ preventScroll: true });
+    return () => { modal.close(); document.body.style.overflow = overflow; };
+  }, [zen]);
+  const wasZen = useRef(false);
+  useLayoutEffect(() => {
+    if (wasZen.current && !zen) zenButton.current?.focus({ preventScroll: true });
+    wasZen.current = zen;
+  }, [zen]);
+  return <ReviewFormView {...props} step={step} heading={heading} onStep={setStep} zen={zen} onZen={setZen} dialog={dialog} zenButton={zenButton} />;
 }

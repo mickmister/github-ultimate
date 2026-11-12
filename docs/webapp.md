@@ -153,6 +153,17 @@ the same `previewDirectory()` function used for publication. Set
 `GITHUB_REF_NAME` and `GITHUB_REPOSITORY` when building for another destination.
 `pnpm run webapp:build` builds the standalone SPA at `/` for local static use.
 
+## Hosted form zen mode
+
+Open a form in a review request and choose **Zen mode** to focus on filling it
+out. The form occupies the viewport; workspace navigation, packet details, review
+items and the comment dock are outside the modal interaction. Only the form,
+question controls, draft saving and submission status remain, with one quiet
+sticky **← Back** button at the top left. **Back** or Escape returns to the review
+without discarding answers or changing the current question. Background controls
+are inert, and keyboard focus returns to the entry button on exit. The layout respects
+mobile safe areas and does not require browser fullscreen permission.
+
 ## Interchangeable presentation
 
 ```text

@@ -2,14 +2,22 @@ import type { TaskForm, Answers } from '../../../../src/protocol';
 import type { ReviewArtifact } from '../../../../src/review-protocol';
 import { choiceOptions } from '../../../../src/choices';
 import type { RefObject } from 'react';
+import { createPortal } from 'react-dom';
 import { ReviewCheckbox } from './ReviewCheckbox.view';
 
-export interface ReviewFormProps { form: TaskForm; answer?: ReviewArtifact['forms'][number]; submitted: boolean; busy: boolean; onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void }
-export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubmit, step, heading, onStep }: ReviewFormProps & { step: number; heading: RefObject<HTMLHeadingElement | null>; onStep(step: number): void }) {
+export interface ReviewFormProps {
+  form: TaskForm; answer?: ReviewArtifact['forms'][number]; submitted: boolean; busy: boolean;
+  onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void;
+  onSaveDraft?(): void; formStatus?: { notice: string; error: string; dirty: boolean };
+}
+export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubmit, onSaveDraft, formStatus, step, heading, onStep, zen, onZen, dialog, zenButton }: ReviewFormProps & {
+  step: number; heading: RefObject<HTMLHeadingElement | null>; onStep(step: number): void;
+  zen: boolean; onZen(value: boolean): void; dialog: RefObject<HTMLDialogElement | null>; zenButton: RefObject<HTMLButtonElement | null>;
+}) {
   const answers = answer?.answers ?? {};
   const intent = answer?.intent ?? 'discussion';
   const question = form.questions[step];
-  return <form className="review-form" onSubmit={event => { event.preventDefault(); if (!question) onSubmit(); }}><h3>{form.title}</h3>{form.goal && <p>{form.goal}</p>}{form.description && <p className="review-description">{form.description}</p>}
+  const content = <form className="review-form" onSubmit={event => { event.preventDefault(); if (!question) onSubmit(); }}><h3>{form.title}</h3>{form.goal && <p>{form.goal}</p>}{form.description && <p className="review-description">{form.description}</p>}
     <p className="muted">{question ? `Question ${step + 1} of ${form.questions.length}` : 'Finish response'}</p>
     <h4 ref={heading} tabIndex={-1} className="review-question-heading">{question ? `${question.title}${question.required ? ' (required)' : ''}` : 'Finish and submit'}</h4>
     <fieldset disabled={submitted || busy}><legend>{submitted ? 'Submitted for this revision' : 'Your response'}</legend>
@@ -35,5 +43,13 @@ export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubm
       <button type="button" disabled={busy || step === 0} onClick={() => onStep(step - 1)}>Previous question</button>
       {question && <button type="button" disabled={busy} onClick={() => onStep(step + 1)}>{step + 1 < form.questions.length ? 'Next question' : 'Continue to submission'}</button>}
     </nav>
+    {zen && <div className="review-form-actions">
+      {onSaveDraft && <button type="button" disabled={busy || submitted} onClick={onSaveDraft}>Save draft remotely</button>}
+      {formStatus && <><p role="status">{busy ? 'Saving response…' : `${formStatus.dirty && !submitted ? 'Unsaved changes. ' : ''}${formStatus.notice}`}</p>{formStatus.error && <p role="alert">{formStatus.error}</p>}</>}
+    </div>}
   </form>;
+  return zen ? createPortal(<dialog ref={dialog} className="review-zen" aria-label={`${form.title} — Zen mode`} onCancel={event => { event.preventDefault(); onZen(false); }}>
+    <header className="review-zen-toolbar"><button type="button" className="review-zen-back" onClick={() => onZen(false)}>← Back</button></header>
+    <div className="review-zen-content">{content}</div>
+  </dialog>, document.body) : <><button ref={zenButton} type="button" className="review-zen-toggle" onClick={() => onZen(true)}>Zen mode</button>{content}</>;
 }

@@ -5,6 +5,88 @@ async function finishForm(page: Page) {
   await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
 }
 
+for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 }]) {
+  test(`form zen mode isolates the form, keeps Back sticky and preserves answers at ${viewport.width}px`, async ({ page }) => {
+    await page.setViewportSize(viewport);
+    await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story');
+    await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+    await page.getByText('Keep this approach', { exact: true }).click();
+    await page.getByRole('button', { name: 'Next question', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('Keep my place and answers in zen mode.');
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    const zen = page.getByRole('dialog', { name: 'Reader decisions — Zen mode', exact: true });
+    await expect(zen).toBeVisible();
+    await expect(zen.getByRole('heading', { name: 'Additional notes', exact: true })).toBeFocused();
+    await expect(page.getByRole('link', { name: 'Review inbox', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('complementary', { name: 'Review items', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Comments ·/ })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Check for updates and receipts' })).toHaveCount(0);
+    const bounds = (await zen.boundingBox())!;
+    expect(bounds).toMatchObject({ x: 0, y: 0, width: viewport.width, height: viewport.height });
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
+    for (let index = 0; index < 6; index++) {
+      await page.keyboard.press('Tab');
+      // Native dialogs may hand focus to browser chrome between tab cycles,
+      // represented by body; no background application control may receive it.
+      expect(await zen.evaluate(node => node.contains(document.activeElement) || document.activeElement === document.body)).toBe(true);
+    }
+    await zen.evaluate(node => { node.scrollTop = node.scrollHeight; });
+    const back = zen.getByRole('button', { name: '← Back', exact: true });
+    await expect(back).toHaveCount(1);
+    const position = (await back.boundingBox())!;
+    expect(position.y).toBeGreaterThanOrEqual(0);
+    expect(position.y).toBeLessThan(30);
+    expect(position.x).toBeLessThan(30);
+    expect(await back.evaluate(node => getComputedStyle(node).fontWeight)).toBe('400');
+    expect(await zen.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await zen.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect(zen.getByRole('status')).toContainText('Draft saved remotely');
+    await zen.getByRole('button', { name: 'Previous question', exact: true }).click();
+    await expect(zen.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeChecked();
+    const heading = zen.getByRole('heading', { name: 'Next steps', exact: true });
+    await expect(heading).toBeFocused();
+    expect((await heading.boundingBox())!.y).toBeGreaterThanOrEqual((await back.boundingBox())!.y + position.height);
+    await zen.getByRole('button', { name: 'Next question', exact: true }).click();
+    await expect(zen.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveValue('Keep my place and answers in zen mode.');
+    await back.click();
+    await expect(zen).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+    await expect(page.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveValue('Keep my place and answers in zen mode.');
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(zen).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+  });
+}
+
+test('zen mode shows successful submission and transport failures without leaving the form', async ({ page }) => {
+  let state: any = { artifacts: [], revision: 1, failSecond: true };
+  await page.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') state = route.request().postDataJSON();
+    await route.fulfill({ json: state });
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
+  await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+  await page.getByText('Keep this approach', { exact: true }).click();
+  await finishForm(page);
+  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('status')).toContainText('Response saved remotely');
+  await expect(page.getByRole('button', { name: 'Submit this form', exact: true })).toBeDisabled();
+  await page.getByRole('button', { name: '← Back', exact: true }).click();
+  await page.getByRole('button', { name: 'Review experience', exact: true }).click();
+  await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+  await page.getByText('Revise this approach', { exact: true }).click();
+  await finishForm(page);
+  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Second form transport unavailable');
+  await page.getByRole('button', { name: 'Previous question', exact: true }).click();
+  await page.getByRole('button', { name: 'Previous question', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Revise this approach', exact: true })).toBeChecked();
+  expect(state.artifacts.filter((item: any) => item.value.kind === 'review-response')).toHaveLength(1);
+});
+
 test('remote draft survives a fresh page, two packets stay isolated, and update does not rebind answers', async ({ page }) => {
   let state: any = { artifacts: [], revision: 1 };
   await page.route('**/__review-fixture', async route => {

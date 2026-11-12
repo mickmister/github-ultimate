@@ -27,6 +27,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
       <article className="review-content"><h2>{member.label}</h2><ReviewMemberContent key={member.id} scope={scope} review={review} member={member} service={service}
         answer={submitted.has(member.id) ? responses.flatMap(item => item.value.forms).find(form => form.member_id === member.id) : forms.find(form => form.member_id === member.id)} submitted={submitted.has(member.id)}
         onAnswer={(answers, intent) => actions.answer(member.id, answers, intent)} onSubmit={() => actions.submit(member.id)} busy={busy || !accepting}
+        onSaveDraft={actions.saveDraft} formStatus={{ notice, error, dirty }}
         reviewed={progress.includes(member.id)} onReviewed={checked => actions.progress(member.id, checked)} />
       </article></div>
     <footer className="review-submit"><p role="status">{dirty ? 'Unsaved changes. ' : ''}{notice}</p>{error && <p role="alert">{error}</p>}
