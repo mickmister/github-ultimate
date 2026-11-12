@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
+import { unzipSync } from 'fflate';
 
 for (const browser of ['chrome', 'safari']) {
   test(`${browser} build identifies the actual checkout in its manifest and popup`, () => {
@@ -22,7 +23,15 @@ for (const browser of ['chrome', 'safari']) {
     expect(manifest.background).toEqual(browser === 'safari' ? { scripts: ['background.js'], persistent: false } : { service_worker: 'background.js' });
     expect(readFileSync(`${directory}/connections.html`, 'utf8')).toContain('connections-page.js');
     expect(readFileSync(`${directory}/background.js`, 'utf8')).toContain('github-ultimate-connections-v1');
+    if (browser === 'chrome') {
+      execFileSync(process.execPath, ['scripts/package.mjs']);
+      const archive = unzipSync(readFileSync(`release/github-ultimate-chrome-${version}.zip`));
+      expect(archive['manifest.json']).toEqual(new Uint8Array(readFileSync(`${directory}/manifest.json`)));
+      for (const path of Object.values(manifest.icons) as string[]) {
+        expect(archive[path]).toEqual(new Uint8Array(readFileSync(`${directory}/${path}`)));
+      }
+    }
   // These are full packaging checks, including high-resolution icon generation.
   // Allow CI runners more than Vitest's five-second unit-test default.
-  }, 60000);
+  }, 120000);
 }
