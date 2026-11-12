@@ -3,7 +3,6 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 
 for (const browser of ['chrome', 'safari']) {
-  // Allow a complete bundler subprocess, rather than the default unit timeout.
   test(`${browser} build identifies the actual checkout in its manifest and popup`, () => {
     const commit = execFileSync('git', ['rev-parse', '--verify', 'HEAD'], { encoding: 'utf8' }).trim();
     const dirty = Boolean(execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }).trim());
@@ -23,5 +22,7 @@ for (const browser of ['chrome', 'safari']) {
     expect(manifest.background).toEqual(browser === 'safari' ? { scripts: ['background.js'], persistent: false } : { service_worker: 'background.js' });
     expect(readFileSync(`${directory}/connections.html`, 'utf8')).toContain('connections-page.js');
     expect(readFileSync(`${directory}/background.js`, 'utf8')).toContain('github-ultimate-connections-v1');
+  // These are full packaging checks, including high-resolution icon generation.
+  // Allow CI runners more than Vitest's five-second unit-test default.
   }, 60000);
 }
