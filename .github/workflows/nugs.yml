@@ -1,0 +1,21 @@
+name: Native workspace persistence
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/nugs.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  workspace:
+    # One-time opt-in after configuring the App secrets. No changing native
+    # checkpoint or handoff arguments are required on subsequent invocations.
+    if: ${{ vars.NUGS_WORKSPACE_SEED != '' }}
+    uses: mickmister/gh-agentic-workflows/.github/workflows/nugs-source.yml@vk/46e5-vd-multi-instanc
+    secrets:
+      AGENT_APP_ID: ${{ secrets.AGENT_APP_ID }}
+      AGENT_APP_PRIVATE_KEY: ${{ secrets.AGENT_APP_PRIVATE_KEY }}
+      NUGS_STORAGE_URL: ${{ secrets.NUGS_STORAGE_URL }}

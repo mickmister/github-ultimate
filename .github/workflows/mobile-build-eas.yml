@@ -1,0 +1,57 @@
+name: Mobile EAS build
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        type: choice
+        default: all
+        options: [all, android, ios]
+      profile:
+        description: EAS build profile
+        type: choice
+        default: preview
+        options: [development, preview, production]
+      github_connections:
+        description: GitHub pilot (enable only after signed-device isolation acceptance)
+        type: choice
+        default: '0'
+        options: ['0', '1']
+permissions:
+  contents: read
+concurrency:
+  group: eas-build-${{ github.ref }}-${{ inputs.profile }}-${{ inputs.platform }}
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --dir mobile run check
+      - run: pnpm exec vitest run tests/mobile-*.test.ts
+      - name: Build on EAS and publish links
+        env:
+          EAS_OPERATION: build
+          EAS_PLATFORM: ${{ inputs.platform }}
+          EAS_PROFILE: ${{ inputs.profile }}
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+          EXPO_PROJECT_ID: ${{ secrets.EXPO_PROJECT_ID }}
+          EXPO_OWNER: ${{ secrets.EXPO_OWNER }}
+          EXPO_PUBLIC_ALOHAK_URL: ${{ secrets.EXPO_PUBLIC_ALOHAK_URL }}
+          EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: ${{ inputs.github_connections || '0' }}
+          EAS_RESULT_PATH: ${{ runner.temp }}/eas-build.json
+          EXPO_NO_TELEMETRY: '1'
+        run: node scripts/eas-mobile.mjs
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: eas-build-${{ inputs.platform }}-${{ inputs.profile }}
+          path: ${{ runner.temp }}/eas-build.json
+          if-no-files-found: ignore
+          retention-days: 7

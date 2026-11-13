@@ -1,0 +1,16 @@
+packages:
+  - webapp
+  - mobile
+
+overrides:
+  'monaco-editor>dompurify': '3.4.17'
+
+allowBuilds:
+  '@ast-grep/cli': true
+  esbuild: true
+  # EAS CLI: optional native tracing and version-advice-only postinstall.
+  dtrace-provider: false
+  protobufjs: false
+
+patchedDependencies:
+  react-native-webview@13.15.0: patches/react-native-webview@13.15.0.patch
