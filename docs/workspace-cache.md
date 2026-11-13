@@ -68,7 +68,10 @@ submission merely because a cache adapter exists.
 
 The next slice owns complete Documents inventories, resumable prioritized fills,
 old-snapshot garbage collection, active review retention and large-object/tree
-transport. Large Dolt objects still respect the existing 16 MiB Git read limit.
+transport. The Beads sample now reads native Dolt blobs up to 64 MiB using bounded
+3 MiB bridge replies, with full Git hash verification after reassembly. These
+large-object parts use the connection-scoped transient API cache and are not
+persisted for offline replay. Ordinary document blobs retain their 16 MiB limit.
 
 Tests cover real SQLite file reopen, IndexedDB adapter replacement, count/byte
 eviction, corruption recovery, ETag reuse, access retirement, optimistic document

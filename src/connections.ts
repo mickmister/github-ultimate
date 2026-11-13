@@ -68,7 +68,7 @@ export type PublicConnection = ReturnType<typeof publicConnection>;
 // message response, and callers cannot choose an endpoint, method or headers.
 export class Connections {
   private tail: Promise<unknown> = Promise.resolve();
-  private apiCache = new ApiReadCache();
+  private apiCache = new ApiReadCache(96 * 1024 * 1024);
   private epoch = 0;
   constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache) {}
 
@@ -93,7 +93,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', ...(this.persistentCache ? ['persistedWorkspaceCache'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', ...(this.persistentCache ? ['persistedWorkspaceCache'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
@@ -136,6 +136,16 @@ export class Connections {
         const gitRequest = gitReadSchema.parse(request);
         if (!record.tokens || !record.user) throw new ConnectionError('Sign in before reading workspace data.');
         if (record.installation?.id !== gitRequest.installationId) throw new ConnectionError('The selected installation changed. Reconnect and rediscover workspaces; no fallback is allowed.');
+        if (gitRequest.operation === 'gitBlobPart') {
+          if (gitRequest.cacheOnly) throw new ConnectionError('Large Dolt blob parts require an online authorized read.');
+          const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === gitRequest.repository.toLowerCase());
+          if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
+          // Only the small part crosses the bridge. The bounded full upstream
+          // object is cached transiently under the connection/installation key.
+          const result = await readGit(gitRequest, repo.full_name, (path, limit) => this.api(record, path, limit, 'immutable'));
+          if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+          return result;
+        }
         const scope: CacheScope = { connection: record.id, account: record.user.id, installation: record.installation.id, generation: record.cacheGeneration,
           repository: gitRequest.repository, workspace: 'workspace' in gitRequest ? gitRequest.workspace : '',
           namespace: gitRequest.operation === 'gitRefs' ? 'metadata' : gitRequest.namespace ?? 'documents' };

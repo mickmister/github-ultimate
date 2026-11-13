@@ -239,6 +239,21 @@ test('Git snapshot reads reject truncated trees, identity mismatches, oversized 
   expect(await broker.handleHosted(origin, { ...base, operation: 'gitBlob' })).toEqual({ sha: oid, size: 1, encoding: 'base64', content: 'YQ==' });
   expect(calls.filter(call => call.url.includes('api.github.com')).every(call => !call.init.method)).toBe(true);
 });
+test('Dolt blob parts retain grant, installation and repository authorization on every call', async () => {
+  const connection = await login(), origin = 'https://mickmister.github.io', oid = 'a'.repeat(40);
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin, subpath: '/app/' });
+  const request = { operation: 'gitBlobPart', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', workspace: 'workspace-a', namespace: 'dolt', oid, offset: 0, length: 3 };
+  gitResponses.set(`blobs/${oid}`, { sha: oid, size: 6, encoding: 'base64', content: 'YWJjZGVm' });
+  expect(await broker.handleHosted(origin + '/app/', request)).toMatchObject({ sha: oid, offset: 0, length: 3, content: 'YWJj' });
+  expect(await broker.handleHosted(origin + '/app/', { ...request, offset: 3 })).toMatchObject({ content: 'ZGVm' });
+  expect(calls.filter(call => call.url.includes(`/git/blobs/${oid}`))).toHaveLength(1);
+  await expect(broker.handleHosted(origin + '/sibling/', request)).rejects.toThrow('no approved');
+  await expect(broker.handleHosted(origin + '/app/', { ...request, installationId: 2 })).rejects.toThrow('installation changed');
+  await expect(broker.handleHosted(origin + '/app/', { ...request, repository: 'other/private' })).rejects.toThrow('not available');
+  await broker.handle({ operation: 'revokeOrigin', id: connection.id, origin, subpath: '/app/' });
+  await expect(broker.handleHosted(origin + '/app/', request)).rejects.toThrow('no approved');
+});
 test('review writes recheck exact origin/subpath, installation, repository and authenticated reviewer before mutation', async () => {
   const connection = await login(), origin = 'https://mickmister.github.io';
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });

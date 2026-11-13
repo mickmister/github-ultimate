@@ -117,14 +117,19 @@ Only the `documents/` and `dolt/` matching-ref prefixes are accepted. Object rea
 require full hexadecimal IDs; callers cannot select URLs, headers or methods.
 Metadata JSON is capped at 2 MiB while streaming, refs at 5,000, and recursive
 trees at 10,000 entries. Truncated trees fail rather than return partial data.
-Blob JSON is capped at 24 MiB and decoded blobs at 16 MiB. The hosted reader
+Ordinary blob JSON is capped at 24 MiB and decoded blobs at 16 MiB. The hosted reader
 checks size and Git blob hash before displaying bytes, previews only regular
 UTF-8 text files, and never executes stored HTML or JavaScript.
 
-The Beads inspector reads the Dolt manifest and reports the Git snapshot, storage
-root, file count, archive count and aggregate size. It does not interpret NBS,
-`.darc` archives or issue rows. Authoritative Dolt querying belongs in the hosted
-application; archived JSONL is not used as its Beads data source.
+The dashboard Beads tab links to the [native read sample](beads-sample.md) at
+`app/#/beads`. It resolves the selected workspace's native Git snapshot, verifies
+all native bytes, then uses the integrity-pinned CDN Worker/WASM to execute real
+upstream Beads `list`, `ready` and `blocked` operations. It reports both the Git
+snapshot and the resolved native Dolt commit, full returned records and read-only
+enforcement. Native Dolt blobs up to 64 MiB use 3 MiB bridge replies through the
+`gitBlobPart` capability; their upstream GitHub JSON response is bounded at 96 MiB.
+The complete native snapshot remains bounded at 64 MiB encoded. An old broker
+reports that it needs an update rather than substituting an issue export.
 
 Raw ref discovery can include unprovisioned document namespaces and Dolt-only
 recovery snapshots. A namespace with a missing/invalid workspace manifest is
