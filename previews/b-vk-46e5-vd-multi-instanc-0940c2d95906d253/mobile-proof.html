@@ -6,11 +6,12 @@
 <label><input id="automatic-opening" type="checkbox">Try opening automatically on future visits (best effort)</label>
 <p id="handoff-status" role="status"></p></section>
 <button id="run-proof">Discover and echo</button><pre id="proof-result" role="status">Waiting for native bridge. Configure the HTTPS URL and enable the fixture grant in native settings.</pre>
-<section><h2>Origin-scoped page storage</h2><p>Choose a backend explicitly. In extension/native settings approve page storage separately. All approved paths on this origin share page data, not credentials.</p>
-<label for="storage-backend">Storage backend</label><select id="storage-backend"><option value="browser">Browser</option><option value="extension">Extension</option><option value="mobile">Alohak</option></select>
+<section><h2>Origin-scoped page storage</h2><p>The adapter is chosen automatically. Manual backend choices are diagnostic overrides. In extension/native settings approve page storage separately. All approved paths on this origin share page data, not credentials.</p>
+<label for="storage-backend">Storage backend</label><select id="storage-backend"><option value="auto">Automatic (recommended)</option><option value="browser">Browser (diagnostic override)</option><option value="extension">Extension (diagnostic override)</option><option value="mobile">Alohak (diagnostic override)</option></select>
 <label><input type="checkbox" id="storage-override">Override localStorage after hydration (method API)</label>
 <button id="connect-storage">Open page storage</button>
+<p id="storage-adapter" role="status">Adapter not opened yet.</p>
 <label>Storage key<input id="storage-key" value="example.dotted.key" maxlength="256"></label><label>Storage value<input id="storage-value" value="" maxlength="4096"></label>
 <button id="save-storage">Save page value</button><button id="refresh-storage">Refresh stored values</button><button id="clear-storage">Clear origin page data</button>
 <pre id="storage-result" role="status">Not connected.</pre></section>
-</main><script type="module" src="./mobile-proof-WIOMHF2Y.js"></script></body></html>
+</main><script type="module" src="./mobile-proof-UL3YKWJ7.js"></script></body></html>

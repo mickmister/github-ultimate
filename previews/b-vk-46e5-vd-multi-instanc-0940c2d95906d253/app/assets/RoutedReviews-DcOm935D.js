@@ -1,0 +1,1 @@
+import{ac as r,ad as o,af as c,j as i,ag as n}from"./index-B6Yh-gz9.js";function R(){const t=r({select:e=>e.location.search}),a=o({strict:!1,select:e=>e.requestId}),s={...c(t),requestId:a};return i.jsx(n,{location:s},JSON.stringify(s))}export{R};

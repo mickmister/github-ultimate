@@ -1,0 +1,1 @@
+import{M as s}from"./mobile-client-DdKfOnXW.js";function v(){const e=new s;return{request:t=>{const{operation:o,...r}=t;return e.request({kvSnapshot:"kv.snapshot",kvSet:"kv.set",kvRemove:"kv.remove",kvClear:"kv.clear"}[o],r)},close:()=>e.close()}}export{v as storageAdapter};
