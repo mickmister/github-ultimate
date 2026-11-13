@@ -15,8 +15,9 @@ The proof UI is `mobile-proof.html` in each hosted build.
   origin and directory, then reload the hosted page to inject the current relay.
   The extension also requires the browser's host permission.
 - In native settings, configure the deployment and enable **Approve page
-  storage**. The fixture switch is independent. Deployment/grants remain
-  in-memory and require approval after a cold launch; page values persist.
+  storage**. The fixture switch is independent. The confirmed deployment and
+  both explicit permissions now persist on the device and restore on cold launch.
+  Changing the deployment resets these permissions; it does not transfer approval.
 - The privileged broker uses the original document URL captured by the
   extension relay at `document_start`, or supplied by the native adapter with
   main-frame identity and document generation. Request parameters cannot select
@@ -31,27 +32,58 @@ other page data; anything stored here is readable by approved page scripts.
 
 ## Startup and synchronous methods
 
-Choose the backend explicitly and **await hydration before importing or
-starting the application**. For a bundled frontend in this repository:
+Use the shared SDK and **await hydration before reading persistent preferences**.
+Application components do not select a backend or implement platform RPC:
 
 ```ts
 import { openPageStorage } from './page-storage'; // adjust source import path
 
-const session = await openPageStorage('extension', true);
-// true opts into replacing window.localStorage after successful hydration.
-// Choose 'browser' or 'mobile' explicitly for those deployments.
+const session = await openPageStorage(); // automatic; no platform branching
 await import('./your-app');
 
 session.storage.setItem('editor.theme', 'dark');
 await session.storage.flush(); // resolves only when queued writes succeed
 ```
 
-Without the second argument, use `session.storage` directly and leave
+Use `session.storage` directly and leave
 `window.localStorage` alone. Both forms support `getItem`, `setItem`,
 `removeItem`, `clear`, `key` and `length`. Empty-string values and dotted or
 `__proto__` keys are preserved. Property access such as `localStorage.theme`,
 enumerating object properties, and browser `storage` events are not supported.
-No existing browser-local data is automatically imported.
+The SDK itself does not import existing browser-local data. The production app's
+small `applicationStorage()` facade performs a one-time migration of its existing
+`github-ultimate`-prefixed preferences, preserving native values already present.
+It records migration completion so forgotten preferences are not resurrected.
+Browser `sessionStorage` remains suitable for intentionally tab-scoped state.
+
+## Automatic adapter selection
+
+The native bootstrap installs `window.githubUltimateStorageAdapter`, a versioned
+object with `backend` and asynchronous `request(PageKVRequest)` fields. Its native
+RPC implementation is injected by Alohak rather than implemented by application
+components. The shared SDK hydrates the same `Storage`-compatible facade over it.
+
+Selection is centralized in `hosted/page-storage.ts`:
+
+1. Use the host-injected adapter when present. Inside Alohak, wait for bootstrap;
+   startup timing must not accidentally select browser storage.
+2. Older installed Alohak shells use a lazy compatibility adapter over their
+   existing RPC API.
+3. Outside Alohak, probe the extension relay for availability. A relay announces
+   presence independently of permission, so denied paths/revoked grants produce
+   an error rather than quietly selecting a different store.
+4. With no host present, use the browser-origin IndexedDB adapter.
+
+Fallback implementations live in separate lazy modules under `hosted/storage/`.
+Injected-adapter clients do not load those transport implementations. Detection
+is routing, never authorization: brokers still enforce original-document identity
+and independent grants. Once a backend is selected, errors do not switch backends.
+Manual `browser`/`extension`/`mobile` selections and the optional second `true`
+argument for a `window.localStorage` override remain diagnostic/explicit SDK tools.
+The proof page defaults to **Automatic** and reports which adapter it opened.
+
+The real application's document-tree appearance and workspace-navigation
+preferences use `applicationStorage()`; neither feature knows its host backend.
 
 Reads are synchronous from an optimistic mirror. Writes update that mirror
 synchronously and persist asynchronously, in order. Quota/input violations
@@ -103,4 +135,4 @@ across a browser restart, spoofed initial paths, revocation and a plain browser.
 
 Physical iOS/Android persistence and frame/lifecycle isolation still require
 the device probes in [mobile-alohak.md](mobile-alohak.md), including cold
-launch/reapproval, in-flight revocation/navigation, and background/process loss.
+launch/restored approvals, in-flight revocation/navigation, and background/process loss.

@@ -55,8 +55,10 @@ function storageAction(id: string, action: () => Promise<void>) {
 }
 storageAction('connect-storage', async () => {
   pageStorage?.close(); pageStorage = undefined;
-  const mode = (document.getElementById('storage-backend') as HTMLSelectElement).value as 'browser' | 'extension' | 'mobile';
+  document.getElementById('storage-adapter')!.textContent = 'Selecting storage adapter…';
+  const mode = (document.getElementById('storage-backend') as HTMLSelectElement).value as 'auto' | 'browser' | 'extension' | 'mobile';
   pageStorage = await openPageStorage(mode, (document.getElementById('storage-override') as HTMLInputElement).checked);
+  document.getElementById('storage-adapter')!.textContent = `Using ${pageStorage.backend === 'mobile' ? 'Alohak native' : pageStorage.backend} storage.`;
   showStorage();
 });
 storageAction('save-storage', async () => {

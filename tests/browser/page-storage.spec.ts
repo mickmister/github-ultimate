@@ -1,6 +1,8 @@
 import { test, expect, chromium, type BrowserContext, type Page } from '@playwright/test';
 import { resolve } from 'node:path';
 import { cp, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { grantForEntry, MobileFixtureBroker, mobileBootstrap } from '../../src/mobile-protocol';
+import { AsyncPageKVStore } from '../../src/page-kv';
 
 test('packaged origin storage survives restart, denies spoofed paths and revocation, and stays separate from connection access', async ({}, info) => {
   test.setTimeout(90000);
@@ -32,7 +34,7 @@ test('packaged origin storage survives restart, denies spoofed paths and revocat
   }
   async function open(page: Page, path = 'https://apps.example.test/approved/mobile-proof.html') {
     await page.goto(path);
-    await page.getByLabel('Storage backend', { exact: true }).selectOption('extension');
+    await page.getByLabel('Storage backend', { exact: true }).selectOption('auto');
     await page.getByLabel('Override localStorage after hydration (method API)').check();
     await page.getByRole('button', { name: 'Open page storage', exact: true }).click();
   }
@@ -81,4 +83,41 @@ test('plain browser backend supports the same hydrated method API without an ext
   await page.getByRole('button', { name: 'Open page storage', exact: true }).click();
   await expect(page.locator('#storage-result')).toContainText('browser value');
   await context.close();
+});
+
+test('automatic storage waits for the injected native adapter and never falls back after revocation', async ({ browser }) => {
+  const entry = 'https://native.example/mobile-proof.html', disk = new Map<string, string>();
+  const broker = new MobileFixtureBroker(new AsyncPageKVStore({ async getItem(key) { return disk.get(key) ?? null; }, async setItem(key, value) { disk.set(key, value); } }));
+  const native = { documentId: 'native-storage-document', documentURL: entry, isMainFrame: true };
+  broker.activate(native); broker.approveStorage(grantForEntry(entry));
+  const context = await browser.newContext({ userAgent: 'Mozilla/5.0 Alohak/1' });
+  try {
+    await context.route('https://native.example/**', async route => {
+      const name = new URL(route.request().url()).pathname.slice(1);
+      await route.fulfill({ path: resolve('hosted-dist', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
+    });
+    const page = await context.newPage();
+    await page.exposeFunction('fixtureNativeRPC', (raw: string) => broker.handleAsync(native, raw));
+    await page.addInitScript(`setTimeout(() => {
+      window.webkit = { messageHandlers: { alohak: { postMessage: raw => window.fixtureNativeRPC(raw).then(reply => JSON.stringify(reply)) } } };
+      ${mobileBootstrap(native.documentId, 'ios')}
+    }, 1500);`);
+    await page.goto(entry);
+    await expect(page.getByLabel('Storage backend', { exact: true })).toHaveValue('auto');
+    await page.getByRole('button', { name: 'Open page storage', exact: true }).click();
+    await expect(page.locator('#storage-adapter')).toContainText('Alohak native');
+    await page.getByLabel('Storage value', { exact: true }).fill('native persistent value');
+    await page.getByRole('button', { name: 'Save page value', exact: true }).click();
+    await expect(page.locator('#storage-result')).toContainText('native persistent value');
+    expect([...disk.values()].join('')).toContain('native persistent value');
+    await page.reload();
+    await page.getByRole('button', { name: 'Open page storage', exact: true }).click();
+    await expect(page.locator('#storage-result')).toContainText('native persistent value');
+    broker.approveStorage();
+    await page.getByRole('button', { name: 'Refresh stored values', exact: true }).click();
+    await expect(page.locator('#storage-result')).toContainText('not approved');
+    await page.getByRole('button', { name: 'Open page storage', exact: true }).click();
+    await expect(page.locator('#storage-result')).toContainText('not approved');
+    expect(await page.evaluate(() => indexedDB.databases())).toEqual([]);
+  } finally { await context.close(); }
 });

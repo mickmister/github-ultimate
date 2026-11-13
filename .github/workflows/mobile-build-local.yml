@@ -29,7 +29,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/mobile-webview.test.ts tests/mobile-eas.test.ts tests/page-storage.test.ts tests/connections.test.ts tests/workspace-cache.test.ts
+      - run: pnpm exec vitest run tests/mobile-*.test.ts tests/page-storage.test.ts tests/connections.test.ts tests/workspace-cache.test.ts
       - name: Generate the native project
         run: pnpm --dir mobile exec expo prebuild --no-install --platform ${{ matrix.platform }}
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3

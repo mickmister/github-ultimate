@@ -1,5 +1,8 @@
 import { mutatePageKV, parsePageKVRequest, validatePageKV, type PageKVRequest, type PageKVSnapshot } from './page-kv';
 export type PageStorageTransport = (request: PageKVRequest) => Promise<PageKVSnapshot>;
+export type PageStorageBackend = 'browser' | 'extension' | 'mobile';
+export interface PageStorageAdapter { protocolVersion: 1; backend: PageStorageBackend; request: PageStorageTransport }
+declare global { interface Window { githubUltimateStorageAdapter?: PageStorageAdapter } }
 
 /** Hydrate BEFORE app startup; synchronous methods read an optimistic mirror. */
 export class HydratedPageStorage implements Storage {

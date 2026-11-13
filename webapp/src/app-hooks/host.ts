@@ -5,6 +5,7 @@ import type { AppHooksV1, DocumentSnapshotDTO, WorkspaceScope } from './contract
 import { workspaceNavigationSchema, type WorkspaceNavigation } from '../../../src/workspace-navigation';
 import { createHostedReviews } from './reviews';
 import { createQueryTransport } from '../../../hosted/query-cache';
+import { applicationStorage } from '../app-storage';
 
 export function createHostedAppHooks(): AppHooksV1 {
   const snapshots = new Map<string, { reader: WorkspaceReader; cachedReader: WorkspaceReader; entries: ReturnType<typeof documents> }>();
@@ -32,7 +33,7 @@ export function createHostedAppHooks(): AppHooksV1 {
   const navigation = {
     async load(): Promise<WorkspaceNavigation | null> {
       try {
-        const local = workspaceNavigationSchema.safeParse(JSON.parse(localStorage.getItem(navigationKey()) ?? 'null'));
+        const local = workspaceNavigationSchema.safeParse(JSON.parse((await applicationStorage()).getItem(navigationKey()) ?? 'null'));
         if (local.success) return local.data;
       } catch { /* Extension preferences also work when page storage is blocked. */ }
       const remote = await bridgeRequest<unknown>({ operation: 'loadNavigation' });
@@ -41,11 +42,11 @@ export function createHostedAppHooks(): AppHooksV1 {
     },
     async save(value: WorkspaceNavigation) {
       const preference = workspaceNavigationSchema.parse(value);
-      try { localStorage.setItem(navigationKey(), JSON.stringify(preference)); } catch { /* Broker still remembers. */ }
+      try { const storage = await applicationStorage(); storage.setItem(navigationKey(), JSON.stringify(preference)); await storage.flush(); } catch { /* Broker still remembers. */ }
       await bridgeRequest({ operation: 'saveNavigation', navigation: preference });
     },
     async forget() {
-      try { localStorage.removeItem(navigationKey()); } catch { /* Storage may be unavailable. */ }
+      try { const storage = await applicationStorage(); storage.removeItem(navigationKey()); await storage.flush(); } catch { /* Storage may be unavailable. */ }
       await bridgeRequest({ operation: 'forgetNavigation' });
     },
   };

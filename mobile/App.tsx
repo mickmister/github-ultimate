@@ -9,6 +9,7 @@ import { AsyncPageKVStore } from '../src/page-kv';
 import GitHubConnections from './GitHubConnections';
 import { github } from './github';
 import CacheSettings from './CacheSettings';
+import { MobileSettingsStore, type MobileSettings } from '../src/mobile-settings';
 
 export default function App() {
   const [input, setInput] = useState(String(Constants.expoConfig?.extra?.entryURL ?? ''));
@@ -22,6 +23,8 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(true);
   const [reload, setReload] = useState(0);
   const [navigation, setNavigation] = useState({ key: '', back: false, forward: false });
+  const [settingsBusy, setSettingsBusy] = useState(true);
+  const settings = useRef(new MobileSettingsStore(AsyncStorage)).current;
   const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage), github)).current;
   const webView = useRef<AlohakWebViewHandle>(null);
   const viewKey = `${entry}:${reload}`;
@@ -31,6 +34,22 @@ export default function App() {
   const pendingLink = useRef<string | undefined>(undefined);
   const lastLink = useRef<string | undefined>(undefined);
   const openLink = useRef((url: string) => {});
+  function applySettings(value: MobileSettings) {
+    const url = value.entryURL, grant = grantForEntry(url);
+    broker.invalidate(); broker.approve(value.fixtureApproved ? grant : undefined); broker.approveStorage(value.storageApproved ? grant : undefined);
+    setInput(url); setEntry(url); entryRef.current = url; setRoute(url);
+    setApproved(value.fixtureApproved); setStorageApproved(value.storageApproved);
+    setBootstrap(''); setDocument(undefined); setError(''); setReload(n => n + 1);
+    lastLink.current = undefined;
+    if (pendingLink.current) { const link = pendingLink.current; pendingLink.current = undefined; openLink.current(link); }
+  }
+  useEffect(() => {
+    let stopped = false;
+    void settings.load().then(value => { if (!stopped && value) applySettings(value); })
+      .catch(() => { if (!stopped) setError('Could not restore the saved deployment. Set it again explicitly.'); })
+      .finally(() => { if (!stopped) setSettingsBusy(false); });
+    return () => { stopped = true; };
+  }, [settings]);
   openLink.current = url => {
     if (!entryRef.current) { pendingLink.current = url; setError('Configure the HTTPS deployment before opening this link.'); return; }
     try {
@@ -50,13 +69,30 @@ export default function App() {
     });
     return () => { subscription.remove(); state.remove(); broker.invalidate(); };
   }, [broker]);
+  async function saveSettings(value: MobileSettings, loadDeployment = true) {
+    setSettingsBusy(true);
+    try {
+      await settings.save(value);
+      if (loadDeployment) applySettings(value);
+      else {
+        const grant = grantForEntry(value.entryURL);
+        broker.approve(value.fixtureApproved ? grant : undefined); broker.approveStorage(value.storageApproved ? grant : undefined);
+        setApproved(value.fixtureApproved); setStorageApproved(value.storageApproved); setError('');
+      }
+    } catch { setError('Could not save deployment settings. Retry Set deployment before restarting; changes are not durable.'); }
+    finally { setSettingsBusy(false); }
+  }
   function configure() {
     try {
-      const url = deploymentURL(input).href;
-      broker.invalidate(); broker.approve(); broker.approveStorage(); setApproved(false); setStorageApproved(false); setEntry(url); entryRef.current = url;
-      setRoute(url); setBootstrap(''); setDocument(undefined); setError(''); setReload(n => n + 1);
-      if (pendingLink.current) { const link = pendingLink.current; pendingLink.current = undefined; openLink.current(link); }
+      const entryURL = deploymentURL(input).href, same = entryURL === entry;
+      void saveSettings({ entryURL, fixtureApproved: same && approved, storageApproved: same && storageApproved });
     } catch (cause) { setError(String(cause)); }
+  }
+  function permission(fixtureApproved: boolean, storageApproved: boolean) {
+    // Revocation takes effect before persistence, including during pending reads.
+    if (!fixtureApproved) { broker.approve(); setApproved(false); }
+    if (!storageApproved) { broker.approveStorage(); setStorageApproved(false); }
+    void saveSettings({ entryURL: entry, fixtureApproved, storageApproved }, false);
   }
   function onDocument(event: DocumentEvent) {
     broker.invalidate(); setBootstrap(''); setDocument(event);
@@ -75,12 +111,13 @@ export default function App() {
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
       <Text accessibilityRole="header">Alohak</Text>
       <Text>Approve only a deployment whose scripts you trust. GitHub credentials stay in native secure storage; page storage and GitHub approvals are independent.</Text>
-      <TextInput accessibilityLabel="HTTPS entry URL" autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/mobile-proof.html" style={styles.input} />
-      <Button title="Set deployment" onPress={configure} />
+      <Text>Paste the complete hosted deployment URL supplied by your agent. This is the website URL, not an Expo installation link. The confirmed URL and your approvals are saved on this device.</Text>
+      <TextInput accessibilityLabel="HTTPS entry URL" editable={!settingsBusy} autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/app/" style={styles.input} />
+      <Button title={settingsBusy ? 'Loading or saving deployment…' : 'Set deployment'} disabled={settingsBusy} onPress={configure} />
       {grant && <><Text>Fixture grant: {grant.origin}{grant.subpath}</Text>
-        <View style={styles.toolbar}><Switch accessibilityLabel="Approve fixture bridge" value={approved} onValueChange={value => { broker.approve(value ? grant : undefined); setApproved(value); }} /><Text>Approve fixture bridge</Text></View>
+        <View style={styles.toolbar}><Switch accessibilityLabel="Approve fixture bridge" disabled={settingsBusy} value={approved} onValueChange={value => permission(value, storageApproved)} /><Text>Approve fixture bridge</Text></View>
         <Text>Page data namespace: {grant.origin}. All approved paths on this origin share data; no GitHub/S3 credentials belong here.</Text>
-        <View style={styles.toolbar}><Switch accessibilityLabel="Approve page storage" value={storageApproved} onValueChange={value => { broker.approveStorage(value ? grant : undefined); setStorageApproved(value); }} /><Text>Approve page storage</Text></View></>}
+        <View style={styles.toolbar}><Switch accessibilityLabel="Approve page storage" disabled={settingsBusy} value={storageApproved} onValueChange={value => permission(approved, value)} /><Text>Approve page storage</Text></View></>}
       <Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text>
       <GitHubConnections grant={grant} />
       <CacheSettings />

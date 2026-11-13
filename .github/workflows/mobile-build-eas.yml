@@ -34,7 +34,7 @@ jobs:
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
       - run: pnpm --dir mobile run check
-      - run: pnpm exec vitest run tests/mobile-alohak.test.ts tests/mobile-github.test.ts tests/mobile-webview.test.ts tests/mobile-eas.test.ts
+      - run: pnpm exec vitest run tests/mobile-*.test.ts
       - name: Build on EAS and publish links
         env:
           EAS_OPERATION: build

@@ -15,15 +15,20 @@ export function DocumentBrowser({
 }: { appHooks?: AppHooksV1; presentation?: DocumentBrowserPresentation; navigation?: DocumentNavigation }) {
   const [controller, setController] = useState<ReturnType<typeof createDocumentBrowserController> | null>(null);
   useEffect(() => {
-    const mounted = createDocumentBrowserController(appHooks ?? createHostedAppHooks(), readTreeAppearance());
-    let appearance = mounted.getSnapshot().treeAppearance;
-    const unsubscribe = mounted.subscribe(() => {
-      const next = mounted.getSnapshot().treeAppearance;
-      if (next !== appearance) { appearance = next; saveTreeAppearance(next); }
+    let stopped = false, dispose = () => {};
+    void readTreeAppearance().then(initial => {
+      if (stopped) return;
+      const mounted = createDocumentBrowserController(appHooks ?? createHostedAppHooks(), initial);
+      let appearance = mounted.getSnapshot().treeAppearance;
+      const unsubscribe = mounted.subscribe(() => {
+        const next = mounted.getSnapshot().treeAppearance;
+        if (next !== appearance) { appearance = next; void saveTreeAppearance(next); }
+      });
+      dispose = () => { unsubscribe(); mounted.dispose(); };
+      setController(mounted);
+      if (!navigation) mounted.actions.connect();
     });
-    setController(mounted);
-    if (!navigation) mounted.actions.connect();
-    return () => { unsubscribe(); mounted.dispose(); };
+    return () => { stopped = true; dispose(); };
   }, [appHooks]);
   return controller ? <SubscribedBrowser controller={controller} presentation={Presentation} navigation={navigation} /> : <AppPending />;
 }

@@ -12,6 +12,12 @@ if (window.top === window) {
   let pending = 0;
   window.addEventListener('message', event => {
     if (event.source !== window || event.origin !== documentOrigin) return;
+    if (event.data?.channel === 'github-ultimate-storage-probe-v1' && typeof event.data.requestId === 'string' && event.data.requestId.length <= 80) {
+      // Availability only, never authorization. Every storage operation still
+      // checks the captured original document and current independent grant.
+      window.postMessage({ channel: 'github-ultimate-storage-present-v1', requestId: event.data.requestId }, documentOrigin);
+      return;
+    }
     const message = pageEnvelopeSchema.safeParse(event.data);
     if (!message.success) return;
     const reply = (response: object) => window.postMessage({ channel: replyChannel, version: 1, relayRevision: hostedRelayRevision, requestId: message.data.requestId, ...response }, location.origin);

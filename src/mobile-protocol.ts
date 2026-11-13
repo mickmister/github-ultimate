@@ -137,6 +137,29 @@ export function mobileBootstrap(documentId: string, platform: 'ios' | 'android')
     window.alohakNative = Object.freeze({ protocolVersion: 1, documentId: generation, postMessage: (data) => { if (typeof data === 'string') post(data); } });
     window.alohakReceive = (expected, data) => { if (expected === generation) window.dispatchEvent(new CustomEvent('alohak-native-message', { detail: data })); };
     ${platform === 'android' ? 'window.alohak.onmessage = event => window.alohakReceive?.(generation, event.data);' : ''}
+    let pendingStorage = 0;
+    window.githubUltimateStorageAdapter = Object.freeze({ protocolVersion: 1, backend: 'mobile', request: request => {
+      const methods = { kvSnapshot: 'kv.snapshot', kvSet: 'kv.set', kvRemove: 'kv.remove', kvClear: 'kv.clear' };
+      if (!methods[request.operation] || pendingStorage >= 8 || window.alohakNative.documentId !== generation)
+        return Promise.reject(new Error('Native storage adapter is unavailable. Reopen explicitly.'));
+      const id = 'storage_' + crypto.randomUUID(), params = Object.assign({}, request); delete params.operation;
+      pendingStorage++;
+      return new Promise((resolve, reject) => {
+        const cleanup = () => { clearTimeout(timer); pendingStorage--; window.removeEventListener('alohak-native-message', receive); window.removeEventListener('pagehide', close); };
+        const close = () => { cleanup(); reject(new Error('Native storage document changed.')); };
+        const receive = event => {
+          let reply; try { reply = JSON.parse(event.detail); } catch { return; }
+          if (reply.jsonrpc !== '2.0' || reply.id !== id) return;
+          cleanup();
+          if (window.alohakNative.documentId !== generation) reject(new Error('Native storage document changed.'));
+          else if (reply.error) reject(new Error(reply.error.message)); else resolve(reply.result);
+        };
+        const timer = setTimeout(() => { cleanup(); reject(new Error('Native storage timed out. Reopen explicitly.')); }, 30000);
+        window.addEventListener('alohak-native-message', receive); window.addEventListener('pagehide', close);
+        try { post(JSON.stringify({ jsonrpc: '2.0', id, method: methods[request.operation], params })); }
+        catch { cleanup(); reject(new Error('Native storage transport failed.')); }
+      });
+    } });
     window.dispatchEvent(new Event('alohak-native-ready'));
   })(); true;`;
 }

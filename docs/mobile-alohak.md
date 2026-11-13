@@ -45,14 +45,17 @@ a controlled HTTPS host. On the device:
 3. On the remote page, tap **Discover and echo**. Expect protocol 1, `fixtureOnly:
    true`, the two allowed methods, and echoed text.
 4. Revoke the grant in native settings and repeat; expect denial. Re-enable
-   explicitly. Fixture/page-storage grants and the selected deployment are
-   intentionally in-memory and require setup after a cold launch. GitHub
-   connections have separate persistent grants, described below.
+   explicitly. **Set deployment** now saves the confirmed URL on the device and
+   automatically restores/loads it on cold launch, including after phone restart.
+   The separately chosen fixture/page-storage permissions persist too. Changing
+   the deployment resets those permissions; reapplying the identical URL retains
+   them. Failed writes report an error rather than claiming the new setting is
+   saved. GitHub connections have their own persistent grants, described below.
 
-To test page data, enable **Approve page storage** independently, choose
-**Alohak** in the proof page's storage backend selector, and tap
+To test page data, enable **Approve page storage** independently, leave
+**Automatic** in the proof page's storage backend selector, and tap
 **Open page storage**. Save an empty/dotted-key value, refresh, reload the
-WebView, and cold-launch/reconfigure/reapprove to verify persistence. Revoke
+WebView, and cold-launch to verify restored settings and values. Revoke
 storage while the page stays open and refresh again; expect denial while the
 fixture proof still works. See [page-storage.md](page-storage.md) for the shared
 API, startup hydration, origin scope, asynchronous durability and quotas.
@@ -115,11 +118,34 @@ settings when needed. Upstream revocation may affect other connections to the
 same App. Installation changes and grant revocation suppress pending results
 immediately. There is no implicit switch to another connection or installation.
 
-On cold launch, reconfigure the same deployment; GitHub credentials/grants
-persist independently of the shell's in-memory deployment selection. Verify
+On cold launch, the confirmed deployment and its fixture/storage approvals now
+restore automatically; GitHub credentials/grants persist separately. Verify
 restart, automatic expired-token rotation, **Refresh credentials**, revocation
 during a read, and disconnect/remove for one connection while another still
 works. These require physical-device proof, not just the fixture tests.
+
+## Finding the deployment URL
+
+The deployment URL is the **hosted website Alohak should load**, not a GitHub
+repository URL, Expo build/install link or `alohak://` handoff link. Normally your
+agent supplies the complete URL to paste into **HTTPS entry URL**, followed by
+**Set deployment**. The app saves that confirmed value and restores it after
+restart. Setting a new URL does not approve fixture, storage or GitHub access.
+If you do not have a deployment URL, ask your agent for the current verified
+hosted application link before configuring the app.
+
+For this workspace's current branch preview:
+
+- Main application:
+  `https://mickmister.github.io/github-ultimate/previews/b-vk-46e5-vd-multi-instanc-0940c2d95906d253/app/`
+- Bridge/storage validation page:
+  `https://mickmister.github.io/github-ultimate/previews/b-vk-46e5-vd-multi-instanc-0940c2d95906d253/mobile-proof.html`
+
+These are examples for this branch, not universal defaults. An agent should use
+the successful Pages run/published preview manifest and verify the preview's
+`build.json` branch/source SHA before handing off its URL. Do not invent a preview
+hash or copy a stale URL from another task. Label the main app and validation URLs
+separately and tell the user which one to use for the immediate step.
 
 ## Songdrive reference and differences
 

@@ -5,7 +5,8 @@ import { createHash, randomUUID } from 'node:crypto';
 import { Connections } from '../../src/connections';
 import { MobileConnectionStore } from '../../src/mobile-connection-store';
 import { MobileGitHub } from '../../src/mobile-github';
-import { grantForEntry, MobileFixtureBroker } from '../../src/mobile-protocol';
+import { grantForEntry, MobileFixtureBroker, mobileBootstrap } from '../../src/mobile-protocol';
+import { AsyncPageKVStore } from '../../src/page-kv';
 
 test('hosted app reads a private document over Alohak RPC without extension fallback or credential disclosure', async ({ browser }) => {
   const shell = await readFile(resolve('hosted-dist/app/index.html'), 'utf8');
@@ -33,7 +34,9 @@ test('hosted app reads a private document over Alohak RPC without extension fall
     throw new Error(`Unexpected fixture route ${url}`);
   });
   const github = new MobileGitHub(engine, () => true);
-  const broker = new MobileFixtureBroker(undefined, github);
+  const pageData = new Map<string, string>();
+  const broker = new MobileFixtureBroker(new AsyncPageKVStore({ async getItem(key) { return pageData.get(key) ?? null; }, async setItem(key, value) { pageData.set(key, value); } }), github);
+  broker.approveStorage(grantForEntry(entry));
   const native = { documentId: 'fixture-native-document', documentURL: entry, isMainFrame: true }; broker.activate(native);
   const context = await browser.newContext({ userAgent: 'Mozilla/5.0 Alohak/1' });
   try {
@@ -46,18 +49,16 @@ test('hosted app reads a private document over Alohak RPC without extension fall
     });
     const page = await context.newPage();
     await page.exposeFunction('fixtureNativeRPC', (raw: string) => broker.handleAsync(native, raw));
-    await page.addInitScript(() => {
-      const host = window as unknown as Window & { fixtureNativeRPC(raw: string): Promise<unknown>; extensionAttempts: number };
+    await page.addInitScript(`(() => {
+      const host = window;
       host.extensionAttempts = 0;
       window.addEventListener('message', event => { if (event.data?.channel === 'github-ultimate-page-v1') host.extensionAttempts++; });
       // Exercise waiting for native bootstrap during initial application startup.
       setTimeout(() => {
-        window.alohakNative = { protocolVersion: 1, documentId: 'fixture-native-document', postMessage(raw) {
-          void host.fixtureNativeRPC(raw).then(reply => window.dispatchEvent(new CustomEvent('alohak-native-message', { detail: JSON.stringify(reply) })));
-        } };
-        window.dispatchEvent(new Event('alohak-native-ready'));
+        window.webkit = { messageHandlers: { alohak: { postMessage: raw => host.fixtureNativeRPC(raw).then(reply => JSON.stringify(reply)) } } };
+        ${mobileBootstrap(native.documentId, 'ios')}
       }, 1500);
-    });
+    })();`);
     await page.goto(entry);
     await expect(page.getByRole('status')).toContainText('Connected. Choose a repository');
     await page.getByLabel('Storage repository').fill('owner/private');
@@ -67,11 +68,18 @@ test('hosted app reads a private document over Alohak RPC without extension fall
     await page.getByLabel('Stored workspace').selectOption('workspace-a');
     await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('2 document(s)');
+    await page.getByText('Tree appearance', { exact: true }).click();
+    await page.getByRole('combobox', { name: /Tree density/ }).selectOption('compact');
+    await expect.poll(() => [...pageData.values()].join('')).toContain('compact');
+    expect(await page.evaluate(() => localStorage.getItem('github-ultimate:document-tree-appearance:v1'))).toBeNull();
     await page.getByRole('treeitem', { name: 'notes', exact: true }).click();
     await page.getByRole('treeitem', { name: 'notes/private.md', exact: true }).click();
     await expect(page.getByLabel('Markdown preview', { exact: true })).toContainText('Alohak private note');
     await page.reload();
     await expect(page.getByLabel('Markdown preview', { exact: true })).toContainText('Alohak private note');
+    await page.getByRole('button', { name: 'Back to documents' }).click();
+    await page.getByText('Tree appearance', { exact: true }).click();
+    await expect(page.getByRole('combobox', { name: /Tree density/ })).toHaveValue('compact');
     expect(await page.evaluate(() => (window as unknown as Window & { extensionAttempts: number }).extensionAttempts)).toBe(0);
     expect(await page.evaluate(() => JSON.stringify({ local: { ...localStorage }, session: { ...sessionStorage }, body: document.body.innerText }))).not.toMatch(/ghu_|ghr_/);
     expect(calls.some(url => url.endsWith('/blobs/' + sha))).toBe(true);
