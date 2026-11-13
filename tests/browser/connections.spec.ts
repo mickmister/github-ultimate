@@ -231,8 +231,8 @@ test('hosted branch page reads through an approved connection and revocation tak
   await dashboard.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/');
   await expect(dashboard.getByRole('heading', { name: 'workspace-a', exact: true })).toBeVisible();
   await expect(dashboard.getByRole('heading', { name: 'Beads', exact: true })).toBeVisible();
-  await expect(dashboard.locator('.app-view')).toContainText('Storage manifest verified');
-  await expect(dashboard.locator('.app-view')).toContainText('no issue query has run');
+  await expect(dashboard.getByRole('link', { name: 'Open Beads read sample' })).toHaveAttribute('href', /\.\/app\/#\/beads\?.*workspace=workspace-a/);
+  await expect(dashboard.locator('.app-view')).toContainText('Run list, ready and blocked queries');
   await expect(dashboard.getByRole('link', { name: 'Open in github.dev', exact: true })).toHaveAttribute('href', `https://github.dev/mickmister/workspace-storage/tree/${'c'.repeat(40)}/documents`);
   await dashboard.getByRole('link', { name: 'Documents', exact: true }).click();
   expect(new URLSearchParams(new URL(dashboard.url()).hash.split('?')[1]).has('connection')).toBe(false);

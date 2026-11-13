@@ -28,6 +28,7 @@ export async function responseCooldown(response: Response, now: number, failures
 // In-memory only, bounded and credential/installation scoped. Membership is
 // still revalidated over HTTP before any cached Git object is returned.
 export class ApiReadCache {
+  constructor(private capacityBytes = 32 * 1024 * 1024) {}
   private entries = new Map<string, { value: unknown; etag?: string; bytes: number }>();
   private bytes = 0;
   get(key: string) {
@@ -38,9 +39,9 @@ export class ApiReadCache {
   put(key: string, value: unknown, etag?: string) {
     this.remove(key);
     const bytes = utf8Bytes(JSON.stringify(value));
-    if (bytes > 32 * 1024 * 1024) return;
+    if (bytes > this.capacityBytes) return;
     this.entries.set(key, { value, etag, bytes }); this.bytes += bytes;
-    while (this.bytes > 32 * 1024 * 1024 || this.entries.size > 256) this.remove(this.entries.keys().next().value!);
+    while (this.bytes > this.capacityBytes || this.entries.size > 256) this.remove(this.entries.keys().next().value!);
   }
   private remove(key: string) { const entry = this.entries.get(key); if (entry) this.bytes -= entry.bytes; this.entries.delete(key); }
   clearConnection(id: string) { for (const key of this.entries.keys()) if (key.startsWith(id + ':')) this.remove(key); }

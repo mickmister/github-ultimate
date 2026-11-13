@@ -1,4 +1,5 @@
-import type { GitBlob, GitCommit, GitRead, GitRef, GitTree } from '../src/git-reads';
+import type { GitBlob, GitBlobPart, GitCommit, GitRead, GitRef, GitTree } from '../src/git-reads';
+import { gitBlobPartBytes, maxDoltBlobBytes } from '../src/git-read-limits';
 import { parseWorkspaceManifest } from './manifest';
 
 export type Workspace = { name: string; documents?: string; dolt?: string };
@@ -8,7 +9,7 @@ const maxBlobBytes = 16 * 1024 * 1024;
 
 export class WorkspaceReader {
   constructor(private send: GitTransport, private id: string, private repository: string, private installationId: number, private workspace?: string, private namespace: 'documents' | 'dolt' = 'documents') {}
-  private read<T>(request: Omit<GitRead, 'id' | 'repository' | 'installationId' | 'workspace'> & { prefix?: 'documents/' | 'dolt/'; oid?: string }) {
+  private read<T>(request: Omit<GitRead, 'id' | 'repository' | 'installationId' | 'workspace'> & { prefix?: 'documents/' | 'dolt/'; oid?: string; offset?: number; length?: number }) {
     if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace first.');
     return this.send<T>({ ...(this.namespace === 'dolt' ? { namespace: this.namespace } : {}), ...request, id: this.id, installationId: this.installationId, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
   }
@@ -46,14 +47,29 @@ export class WorkspaceReader {
     const manifest = parseWorkspaceManifest(documentText(await this.blob(entry)), workspace.name);
     return { snapshot, manifest, version: entry.sha };
   }
-  async blob(entry: GitTree['tree'][number]): Promise<Uint8Array<ArrayBuffer>> {
+  async blob(entry: GitTree['tree'][number], signal?: AbortSignal): Promise<Uint8Array<ArrayBuffer>> {
     if (entry.type !== 'blob' || !['100644', '100755'].includes(entry.mode)) throw new Error('Only regular files can be read.');
-    if (entry.size === undefined || entry.size > maxBlobBytes) throw new Error('File exceeds the 16 MiB read limit or has no size.');
+    if (entry.size === undefined || entry.size > (this.namespace === 'dolt' ? maxDoltBlobBytes : maxBlobBytes)) throw new Error('File exceeds the read limit or has no size.');
+    let bytes: Uint8Array<ArrayBuffer>;
+    if (entry.size > maxBlobBytes) {
+      bytes = new Uint8Array(entry.size);
+      for (let offset = 0; offset < entry.size; offset += gitBlobPartBytes) {
+        signal?.throwIfAborted();
+        const part = await this.read<GitBlobPart>({ operation: 'gitBlobPart', namespace: 'dolt', oid: entry.sha, offset, length: gitBlobPartBytes });
+        const length = Math.min(gitBlobPartBytes, entry.size - offset);
+        if (part.sha !== entry.sha || part.size !== entry.size || part.offset !== offset || part.length !== length || part.encoding !== 'base64' || part.content.length > Math.ceil(length / 3) * 4) throw new Error('Git blob part metadata mismatch.');
+        const binary = atob(part.content);
+        if (binary.length !== length) throw new Error('Git blob part size mismatch.');
+        for (let index = 0; index < binary.length; index++) bytes[offset + index] = binary.charCodeAt(index);
+      }
+    } else {
     const blob = await this.read<GitBlob>({ operation: 'gitBlob', oid: entry.sha });
     if (blob.encoding !== 'base64' || blob.size !== entry.size || blob.sha !== entry.sha || blob.content.length > 24 * 1024 * 1024) throw new Error('Git blob metadata mismatch.');
     const binary = atob(blob.content.replace(/\s/g, ''));
     if (binary.length !== entry.size) throw new Error('Git blob size mismatch.');
-    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    bytes = Uint8Array.from(binary, character => character.charCodeAt(0));
+    }
+    signal?.throwIfAborted();
     const header = new TextEncoder().encode(`blob ${bytes.length}\0`);
     const object = new Uint8Array(header.length + bytes.length);
     object.set(header); object.set(bytes, header.length);

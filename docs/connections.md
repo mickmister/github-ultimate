@@ -140,11 +140,16 @@ contact GitHub. A normal permission-denied `403` is not treated as throttling.
 
 Repository membership and workspace-ref lists use ETag conditional requests.
 Unchanged authenticated `304` responses save primary quota. Immutable Git objects
-are reused from an in-memory LRU cache capped at 32 MiB / 256 entries, scoped by
+are reused from an in-memory LRU cache capped at 96 MiB / 256 entries, scoped by
 connection, installation and endpoint. Repository membership is still revalidated
 before cached objects are served; origin grants are checked on every hosted call.
 Disconnect/removal/installation changes clear the connection's cache. No private
 object cache is written to disk or shared with the hosted page's browser storage.
+Large native Dolt blobs use bounded 3 MiB `gitBlobPart` replies while the complete
+upstream object is held only in the bounded transient API cache. The hosted reader
+reassembles and verifies the complete Git blob hash before handing bytes to WASM.
+Ordinary document blobs keep their 16 MiB limit. Each part rechecks grants,
+installation and repository access. Part reads require online access.
 Reads are user-initiated; a Dolt reader should reuse pinned object IDs rather than
 refetch all tablefiles. External clients can consume the shared user budget, so
 the returned headers remain authoritative rather than a hard-coded request count.

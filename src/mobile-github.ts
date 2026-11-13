@@ -1,8 +1,8 @@
 import { Connections, ConnectionError, type ConnectionRequest } from './connections';
 import { hostedRequestSchema } from './hosted-protocol';
 
-export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces', 'rememberNavigation'];
-const reads = new Set(['discover', 'connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'loadNavigation', 'saveNavigation', 'forgetNavigation']);
+export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation'];
+const reads = new Set(['discover', 'connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'loadNavigation', 'saveNavigation', 'forgetNavigation']);
 
 /** Native settings are the only caller of settings(); page RPC can only read. */
 export class MobileGitHub {
