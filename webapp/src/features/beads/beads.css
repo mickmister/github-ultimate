@@ -6,3 +6,24 @@
 .beads-issues { display: grid; gap: .6rem; padding-inline-start: 1.5rem; }
 .beads-issues li { overflow-wrap: anywhere; }
 @media (max-width: 40rem) { .beads-metadata { grid-template-columns: 1fr; } .beads-metadata dd { margin-bottom: .5rem; } }
+.beads-board { position: relative; margin-block: 24px; min-width: 0; }
+.beads-filters { display: flex; flex-wrap: wrap; align-items: end; gap: 12px; margin-bottom: 16px; }
+.beads-filters > label { flex: 1 1 150px; }
+.beads-filters .beads-checkbox { display: flex; align-items: center; flex: 0 1 auto; min-height: 44px; }
+.beads-checkbox input { width: auto; min-height: 20px; }
+.beads-board-viewport { height: min(72vh, 850px); min-height: 420px; min-width: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 12px; }
+.beads-board-viewport > div { height: 100%; }
+.beads-card { display: grid; gap: 8px; width: 100%; text-align: start; white-space: normal; overflow-wrap: anywhere; }
+.beads-card[data-selected] { outline: 2px solid var(--accent); outline-offset: -2px; }
+.beads-card strong { line-height: 1.4; }
+.beads-card-meta { display: flex; justify-content: space-between; flex-wrap: wrap; gap: 4px 8px; font-size: .75rem; font-weight: 500; }
+.beads-badge { border: 1px solid var(--line); border-radius: 4px; padding-inline: 4px; }
+.beads-card-preview { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; font-weight: 400; font-size: .8rem; }
+.beads-detail { position: fixed; inset: 12px 12px 12px auto; width: min(480px, calc(100vw - 24px)); z-index: 30; overflow-y: auto; box-shadow: 0 8px 40px #0005; overflow-wrap: anywhere; }
+.beads-detail h3 { margin-top: 0; }
+.beads-detail pre { max-height: 40vh; overflow: auto; white-space: pre-wrap; }
+.beads-metadata-row { display: contents; }
+.beads-description { white-space: pre-wrap; }
+.beads-query-diagnostics { margin-block: 24px; }
+.beads-sample > details, .beads-sample > section { margin-block: 16px; }
+@media (max-width: 40rem) { .beads-board-viewport { height: 65dvh; } .beads-filters > label { flex-basis: 130px; } }

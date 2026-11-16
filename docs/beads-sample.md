@@ -1,6 +1,6 @@
-# Hosted native Beads read sample
+# Workspace Beads Kanban
 
-Open `app/#/beads` in a published branch preview, or select **Beads read sample**
+Open `app/#/beads` in a published branch preview, or select **Beads Kanban**
 from Documents. The dashboard's workspace **Beads** tab carries its selected
 connection, repository and workspace into this page. Query parameters may prefill
 `connection`, `repository` and `workspace`; authority still comes from the host's
@@ -33,20 +33,52 @@ file. Private native files are passed using temporary local Blob URLs, never
 uploaded to the CDN. The Worker decodes native chunks and resolves
 `refs/heads/main` from the verified storage root.
 
-The initial run executes upstream `list` (priority order, first 50 records),
-`ready` (open, priority policy) and `blocked`. Each panel shows timing, result
-count, issue summaries, the exact request and complete returned JSON. A successful
-empty query is shown as zero results. Native Git snapshot, Dolt commit, storage
+The initial run executes upstream `list` (priority order, no sample limit),
+`ready` (open, priority policy) and `blocked`. The SVAR React Kanban board uses
+the complete list and preserves exact issue IDs, including dotted child IDs.
+Columns reflect stored status: Open, In progress, Blocked, Deferred and opt-in
+Closed. Other statuses remain visible with their raw status in Other status.
+Epics and children are individual cards; parents are not inferred from IDs.
+
+Search by title/ID and filter by label, assignee, issue type and native readiness.
+Ready and Dependency blocked badges/filters use the native query results, not
+guesses based on stored status. An open issue can be dependency-blocked while
+remaining in Open. Closed issues are hidden initially. Matching/total counts
+include the complete loaded snapshot; ordering is priority P0–P4 then issue ID.
+Unknown priorities are displayed honestly and sort last. Empty collections and
+no matching results are separate states; ambiguous issue IDs fail explicitly.
+
+Compact and Comfortable density use the same data/selection. Cards open a
+read-only details pane with description, status, priority, labels, assignee,
+available timestamps and full native JSON. Enter activates a focused card;
+Escape dismisses details and restores card focus. The board follows the system
+light/dark theme and has horizontally scrollable columns on narrow screens.
+Drag/drop, editing and persisted card reordering are disabled.
+
+Expand **Native query diagnostics** for timing, counts, issue summaries, the exact
+request and complete returned JSON. A successful empty query is shown as zero
+results. Native Git snapshot, Dolt commit, storage
 and issue roots and file/byte counts are displayed independently. Store write
 and commit rejection are checked before the UI declares the sample successful.
 
 **Run list/ready/blocked** reuses the same immutable snapshot. **Refresh snapshot
 and run reads** resolves the current published workspace ref and creates a new
 Worker. Cancelling, changing scope or leaving the page disposes the runtime and
-revokes temporary file URLs. This page exposes reads only.
+revokes temporary file URLs. Scope/snapshot changes also reset board filters and
+selection so another workspace's tasks cannot remain visible. This page exposes
+reads only. The engine stays on the existing integrity-pinned CDN; this feature
+does not add WASM or private data to GitHub Pages assets.
 Cancellation or a failed download stops scheduling more files and drains active
 reads before final cleanup. Already-started host HTTP reads may finish; cancelled
 results are discarded and cannot create new file URLs after cancellation.
+
+## Storybook
+
+**Web app / Beads Kanban** contains Compact, Comfortable, Empty, Choose workspace,
+Readiness unavailable, Long titles, Large workspace (1,000 synthetic tasks),
+Invalid snapshot and Workspace switch stories. Fixtures are invented and do not
+load the CDN, extension or private workspace data. Run `pnpm run webapp:storybook`
+or browse the branch preview's published `/storybook/`.
 
 Verification: unit tests cover part bounds/reassembly/corruption, unchanged
 document caps, actual broker HTTP overlap/count and response-byte caps, serialized

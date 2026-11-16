@@ -1,0 +1,47 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { BeadsResult } from '../../../../hosted/beads-sample';
+import { boardIssues, filterIssues, initialBoardFilters, resultIds, statusColumns, type BoardFilters } from './board';
+import { BeadsBoardView } from './BeadsBoard.view';
+
+export type BeadsBoardProps = { results: BeadsResult[]; workspace: string; initialDensity?: 'compact' | 'comfortable' };
+export function BeadsBoard({ results, workspace, initialDensity = 'compact' }: BeadsBoardProps) {
+  const [filters, setFilters] = useState<BoardFilters>(initialBoardFilters);
+  const [selectedId, setSelectedId] = useState(''), [density, setDensity] = useState(initialDensity);
+  const [dark, setDark] = useState(false);
+  const origin = useRef<HTMLElement | null>(null), details = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const media = matchMedia('(prefers-color-scheme: dark)');
+    const update = () => setDark(media.matches); update();
+    media.addEventListener('change', update); return () => media.removeEventListener('change', update);
+  }, []);
+  useEffect(() => { if (selectedId) details.current?.focus(); }, [selectedId]);
+  const parsed = useMemo(() => {
+    try { return { issues: boardIssues(results.find(result => result.operation === 'list')?.issues ?? []), error: '' }; }
+    catch (error) { return { issues: [], error: error instanceof Error ? error.message : 'Invalid issue records.' }; }
+  }, [results]);
+  const readyResult = results.find(result => result.operation === 'ready'), blockedResult = results.find(result => result.operation === 'blocked');
+  const ready = resultIds(readyResult), blocked = resultIds(blockedResult);
+  const visible = filterIssues(parsed.issues, filters, ready, blocked);
+  const selected = parsed.issues.find(issue => issue.id === selectedId);
+  const options = {
+    labels: [...new Set(parsed.issues.flatMap(issue => issue.labels))].sort(),
+    assignees: [...new Set(parsed.issues.map(issue => issue.assignee).filter(Boolean))].sort(),
+    types: [...new Set(parsed.issues.map(issue => issue.type))].sort(),
+  };
+  function select(id: string) {
+    origin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    setSelectedId(id);
+  }
+  function close() { setSelectedId(''); origin.current?.focus(); }
+  const cards = visible.map(issue => ({
+    id: issue.id, label: issue.title, column: statusColumns.some(column => column.id === issue.status && column.id !== 'other') ? issue.status : 'other',
+    issue, ready: ready.has(issue.id), blocked: blocked.has(issue.id), density,
+    selected: selectedId === issue.id, open: () => select(issue.id),
+  }));
+  const columns = statusColumns.filter(column => (column.id !== 'closed' || filters.closed)
+    && (column.id !== 'other' || cards.some(card => card.column === 'other'))).map(column => ({ ...column, addCard: false }));
+  return <BeadsBoardView model={{ workspace, cards, columns, total: parsed.issues.length, filters, density, dark, options, selected,
+    readyAvailable: Boolean(readyResult), blockedAvailable: Boolean(blockedResult), error: parsed.error,
+    loaded: results.some(result => result.operation === 'list'), selectedReady: selected ? ready.has(selected.id) : false, selectedBlocked: selected ? blocked.has(selected.id) : false,
+  }} actions={{ filter: patch => setFilters(current => ({ ...current, ...patch })), clear: () => setFilters(initialBoardFilters), density: setDensity, close }} detailsRef={details} />;
+}

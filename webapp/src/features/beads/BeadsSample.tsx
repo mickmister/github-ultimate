@@ -59,7 +59,7 @@ export function BeadsSample() {
       const values = await run(opened, ['list', 'ready', 'blocked']);
       if (attempt === epoch.current) { setResults(values); setReadOnly(true); setStatus('All three native Beads reads succeeded. Store writes and commits are rejected.'); }
     } catch (reason) {
-      if (attempt === epoch.current) { setError(reason instanceof Error ? reason.message : 'Native Beads query failed.'); setStatus('The sample did not complete. Resolve the error, then load a fresh snapshot.'); active.current?.controller.abort(); setSession(undefined); }
+      if (attempt === epoch.current) { setError(reason instanceof Error ? reason.message : 'Native Beads query failed.'); setStatus('The reads did not complete. Resolve the error, then load a fresh snapshot.'); active.current?.controller.abort(); active.current?.session?.dispose(); active.current = undefined; setSession(undefined); }
     } finally { if (attempt === epoch.current) setBusy(false); }
   }
   async function query(operation: BeadsOperation) {
