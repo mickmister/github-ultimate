@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import { measure, reviewPerf } from '../hosted/performance';
+import { measureOperation } from '../hosted/performance-hooks';
 
 test('diagnostics are opt-in and export bounded OTLP traces without error text', async () => {
   reviewPerf.clear();
@@ -7,7 +8,7 @@ test('diagnostics are opt-in and export bounded OTLP traces without error text',
   expect(reviewPerf.status().count).toBe(0);
   reviewPerf.start();
   await measure('reviews.read', async () => 'private document', { cached: true });
-  await expect(measure('bridge.gitBlob', async () => { throw new Error('token-and-document-path'); })).rejects.toThrow();
+  await expect(measureOperation('bridge.gitBlob', async () => { throw new Error('token-and-document-path'); })).rejects.toThrow();
   reviewPerf.stop();
   const exported = reviewPerf.export();
   const spans = exported.resourceSpans[0].scopeSpans[0].spans;

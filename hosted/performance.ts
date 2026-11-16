@@ -1,3 +1,4 @@
+import { observeOperations } from './performance-hooks';
 type Attributes = Record<string, string | number | boolean>;
 type Span = { name: string; spanId: string; start: number; end: number; attributes: Attributes; failed: boolean };
 const limit = 2000;
@@ -56,4 +57,5 @@ export const reviewPerf = {
   snapshot: () => revision,
 };
 export function installReviewPerf() { window.reviewPerf = reviewPerf; }
+observeOperations(measure);
 declare global { interface Window { reviewPerf: typeof reviewPerf } }
