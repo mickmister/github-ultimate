@@ -15,6 +15,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
   let generation = 0, disposed = false;
   let savedNavigation = '';
   let remembering = true;
+  let caching = new AbortController(), cachingSnapshot = '';
   let state: DocumentBrowserModel = {
     connections: [], connectionId: '', repository: '', workspaces: [], workspaceId: '',
     snapshot: null, documentId: '', query: '', expandedFolders: [], treeAppearance, content: null, documentMode: 'source', documentFullscreen: false, busy: false, error: null,
@@ -22,12 +23,31 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
   };
   function patch(next: Partial<DocumentBrowserModel>) {
     if (disposed) return;
-    const value = { ...state, ...next };
+    const changedSnapshot = next.snapshot !== undefined && next.snapshot?.id !== state.snapshot?.id;
+    const value = { ...state, ...(changedSnapshot ? { cacheStatus: next.snapshot?.cacheState?.complete ? 'Documents snapshot cached. Available offline in this host.' : '' } : {}), ...next };
     state = Object.freeze({ ...value,
       canDiscover: !value.busy && Boolean(value.connectionId) && validRepository(value.repository.trim()),
       canBrowse: !value.busy && Boolean(value.connectionId) && value.workspaces.some(workspace => workspace.id === value.workspaceId && workspace.hasDocuments),
     });
     listeners.forEach(listener => listener());
+    if ((state.snapshot?.id ?? '') !== cachingSnapshot) {
+      caching.abort(); caching = new AbortController();
+      cachingSnapshot = '';
+      const snapshot = state.snapshot, signal = caching.signal;
+      if (snapshot && !state.busy && api.cache) {
+        cachingSnapshot = snapshot.id;
+        // Prefetch is independent of foreground request generations and never holds busy.
+        void api.cache(snapshot.id, () => [state.documentId].filter(Boolean), status => {
+          if (signal.aborted) return;
+          patch({ cacheStatus: status.error ? `Documents cache paused: ${status.error}` : status.complete ? `Documents snapshot cached · ${status.total} verified object(s). Available offline in this host.` : `Caching Documents · ${status.cached}/${status.total} verified object(s)…` });
+        }, signal).catch(error => {
+          if (signal.aborted) return;
+          const message = error instanceof Error ? error.message : 'Retry when online.';
+          if (/access denied|HTTP (401|403|404)|no approved|not approved|sign in|installation changed|access changed/i.test(message)) invalidate({ ...emptyDocuments, error: message, status: 'Workspace access changed. Reconnect to continue.' });
+          else patch({ cacheStatus: `Documents cache paused: ${message}` });
+        });
+      }
+    }
     if (remembering && !state.busy && state.snapshot && api.navigation) {
       const connection = state.connections.find(item => item.id === state.connectionId);
       if (!connection) return;
@@ -40,7 +60,7 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
       }
     }
   }
-  const emptyDocuments = { snapshot: null, documentId: '', query: '', expandedFolders: [], content: null, documentMode: 'source', documentFullscreen: false } as const;
+  const emptyDocuments = { snapshot: null, documentId: '', query: '', expandedFolders: [], content: null, cacheStatus: '', documentMode: 'source', documentFullscreen: false } as const;
   function invalidate(next: Partial<DocumentBrowserModel>) {
     generation++;
     patch({ busy: false, error: null, ...next });
@@ -82,6 +102,8 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     refresh() {
       if (disposed || state.busy || !state.snapshot) return;
       const selected = scope(), previous = state.snapshot;
+      // Reconnect/focus/poll retries a paused fill, reusing already persisted objects.
+      cachingSnapshot = '';
       const path = previous.documents.find(document => document.id === state.documentId)?.path;
       void run('Checking workspace for updates…', async isCurrent => {
         const snapshot = await api.open(selected);
@@ -239,6 +261,6 @@ export function createDocumentBrowserController(appHooks: AppHooksV1, treeAppear
     actions,
     getSnapshot: () => state,
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
-    dispose() { disposed = true; generation++; listeners.clear(); api.dispose(); },
+    dispose() { disposed = true; generation++; caching.abort(); listeners.clear(); api.dispose(); },
   };
 }

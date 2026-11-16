@@ -2,7 +2,7 @@ import { Connections, ConnectionError, type ConnectionRequest } from './connecti
 import { hostedRequestSchema } from './hosted-protocol';
 
 export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation'];
-const reads = new Set(['discover', 'connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'loadNavigation', 'saveNavigation', 'forgetNavigation']);
+const reads = new Set(['discover', 'connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'loadNavigation', 'saveNavigation', 'forgetNavigation', 'documentCache']);
 
 /** Native settings are the only caller of settings(); page RPC can only read. */
 export class MobileGitHub {
@@ -23,7 +23,7 @@ export class MobileGitHub {
       if (!reads.has(request.operation)) throw new ConnectionError('Only GitHub connection discovery and repository reads are available in Alohak.');
       const epoch = this.epoch;
       const result = await this.connections.handleHosted(documentURL, request, () => this.enabled() && current() && epoch === this.epoch);
-      return request.operation === 'discover' ? { protocolVersion: 1, capabilities: [...mobileGitHubCapabilities, ...((result as { capabilities: string[] }).capabilities.includes('persistedWorkspaceCache') ? ['persistedWorkspaceCache'] : [])] } : result;
+      return request.operation === 'discover' ? { protocolVersion: 1, capabilities: [...mobileGitHubCapabilities, ...(result as { capabilities: string[] }).capabilities.filter(capability => ['persistedWorkspaceCache', 'documentSnapshots'].includes(capability))] } : result;
     } catch (cause) { throw this.publicError(cause); }
   }
   private publicError(cause: unknown) {

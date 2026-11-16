@@ -6,8 +6,17 @@ connection, repository and workspace into this page. Query parameters may prefil
 `connection`, `repository` and `workspace`; authority still comes from the host's
 approved connection, installation and repository checks on every read.
 
-Choose an approved connection and storage repository, discover a native workspace,
-then select **Load snapshot and run reads**. The host validates the workspace's
+On the first visit, choose an approved connection and storage repository, find a
+workspace, then select **Open workspace**. The page remembers that choice through
+the shared application storage API (browser, extension, or Alohak persistence).
+Returning to `app/#/beads` restores it and automatically downloads its tasks.
+Complete workspace links also load automatically and override the saved choice;
+partial links never borrow fields from another remembered workspace. A remembered
+connection must still exist in the host's current approved connections. Use the
+workspace button in the compact header to switch; the picker otherwise stays
+hidden. Changing the selection also updates the workspace link for reloads.
+
+The host validates the workspace's
 Documents manifest and pins its `refs/dolt/<workspace>` commit/tree. Regular native
 NBS/archive files and the native manifest are read through the privileged Git
 broker. Every complete blob is size-checked and Git-hash verified. Large Dolt
@@ -40,7 +49,18 @@ Columns reflect stored status: Open, In progress, Blocked, Deferred and opt-in
 Closed. Other statuses remain visible with their raw status in Other status.
 Epics and children are individual cards; parents are not inferred from IDs.
 
-Search by title/ID and filter by label, assignee, issue type and native readiness.
+Search by title/ID; **Filters** opens label, assignee, issue-type and readiness
+controls. Active filters and card density are automatically persisted separately
+for each connection/repository/workspace. **Save filters** records a named filter
+set, which can be reapplied using the **Saved filters** dropdown. Saving with an
+existing name updates it; **Delete saved filter** removes it. Deletion keeps the
+current active filters. **Clear filters** restores the default active-work view.
+Named sets are immutable snapshots of filters until explicitly saved again;
+editing the current search does not rewrite a saved set. Settings store only
+preferences, never issue bodies or engine state. Storage failures are shown as
+actionable errors and do not prevent task browsing. Saved sets share the existing
+page-storage quota; deleting a set frees space.
+
 Ready and Dependency blocked badges/filters use the native query results, not
 guesses based on stored status. An open issue can be dependency-blocked while
 remaining in Open. Closed issues are hidden initially. Matching/total counts
@@ -50,22 +70,22 @@ no matching results are separate states; ambiguous issue IDs fail explicitly.
 
 Compact and Comfortable density use the same data/selection. Cards open a
 read-only details pane with description, status, priority, labels, assignee,
-available timestamps and full native JSON. Enter activates a focused card;
+and available timestamps. Enter activates a focused card;
 Escape dismisses details and restores card focus. The board follows the system
 light/dark theme and has horizontally scrollable columns on narrow screens.
 Drag/drop, editing and persisted card reordering are disabled.
 
-Expand **Native query diagnostics** for timing, counts, issue summaries, the exact
-request and complete returned JSON. A successful empty query is shown as zero
-results. Native Git snapshot, Dolt commit, storage
-and issue roots and file/byte counts are displayed independently. Store write
-and commit rejection are checked before the UI declares the sample successful.
+The page is board-first: search, saved filters, a compact count and the task board.
+Debug panels, raw JSON, engine hashes, query logs and redundant explanatory copy
+are not displayed. Loading uses one concise status; errors remain visible. The
+reader still verifies immutable snapshot identity and store write/commit rejection
+before exposing tasks; removing diagnostic UI does not remove those checks.
 
-**Run list/ready/blocked** reuses the same immutable snapshot. **Refresh snapshot
-and run reads** resolves the current published workspace ref and creates a new
+**Refresh** resolves the current published workspace ref and creates a new
 Worker. Cancelling, changing scope or leaving the page disposes the runtime and
-revokes temporary file URLs. Scope/snapshot changes also reset board filters and
-selection so another workspace's tasks cannot remain visible. This page exposes
+revokes temporary file URLs. Refresh clears issue selection but preserves filters.
+Changing workspaces loads that workspace's own saved filter preferences so another
+workspace's tasks or active filters cannot remain visible. This page exposes
 reads only. The engine stays on the existing integrity-pinned CDN; this feature
 does not add WASM or private data to GitHub Pages assets.
 Cancellation or a failed download stops scheduling more files and drains active
@@ -76,7 +96,9 @@ results are discarded and cannot create new file URLs after cancellation.
 
 **Web app / Beads Kanban** contains Compact, Comfortable, Empty, Choose workspace,
 Readiness unavailable, Long titles, Large workspace (1,000 synthetic tasks),
-Invalid snapshot and Workspace switch stories. Fixtures are invented and do not
+Invalid snapshot, Workspace switch, Remembered workspace and Removed connection
+stories. The remembered-workspace story exercises real application preference
+storage with an invented task-reader host. Fixtures are invented and do not
 load the CDN, extension or private workspace data. Run `pnpm run webapp:storybook`
 or browse the branch preview's published `/storybook/`.
 

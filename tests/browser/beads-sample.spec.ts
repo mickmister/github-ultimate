@@ -25,9 +25,9 @@ test('native Beads page is reachable and requires an approved workspace connecti
   test.setTimeout(45000);
   const base = await serve(page);
   await page.goto(base + '#/beads');
-  await expect(page.getByRole('heading', { name: 'Beads Kanban', exact: true })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Load snapshot and run reads' })).toBeDisabled();
+  await expect(page.getByRole('heading', { name: 'Kanban', exact: true })).toBeVisible();
   await expect(page.getByRole('alert')).toContainText('No bridge response', { timeout: 35000 });
+  await expect(page.getByRole('button', { name: 'Open workspace', exact: true })).toBeDisabled();
 });
 
 test.describe('real selected workspace / published CDN engine', () => {
@@ -67,25 +67,24 @@ test.describe('real selected workspace / published CDN engine', () => {
     }, { channel: pageChannel, reply: replyChannel, revision: hostedRelayRevision });
     const base = await serve(page);
     await page.goto(base + '#/beads?' + new URLSearchParams({ connection, repository, workspace }));
-    await page.getByRole('button', { name: 'Load snapshot and run reads' }).click();
-    await page.waitForFunction(() => document.querySelector('[role=alert]') || document.querySelector('[role=status]')?.textContent?.includes('All three native Beads reads succeeded'), undefined, { timeout: 300000 });
+    // A complete workspace link starts the reader without a load button.
+    await page.waitForFunction(() => document.querySelector('[role=alert]') || document.querySelector('.beads-count'), undefined, { timeout: 300000 });
     await expect(page.getByRole('alert')).toHaveCount(0);
-    await expect(page.getByRole('status')).toContainText('All three native Beads reads succeeded', { timeout: 300000 });
-    await expect(page.getByRole('alert')).toHaveCount(0);
-    await expect(page.locator('.beads-count')).toContainText('issues in the pinned snapshot');
-    await page.getByText('Native query diagnostics', { exact: true }).click();
-    const listArticle = page.locator('[aria-label="Beads read query results"] article').first();
-    const nativeList = JSON.parse((await listArticle.locator('pre').textContent())!);
-    expect(nativeList.request.issueFilter.Limit).toBe(0);
-    expect(Number((await page.locator('.beads-count').innerText()).match(/\/ (\d+) issues/)![1])).toBe((nativeList.response.issues ?? []).length);
+    await expect(page.locator('.beads-count')).toBeVisible();
     expect(parts).toBeGreaterThan(0);
     expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(6);
-    for (const operation of ['list', 'ready', 'blocked']) await expect(page.getByRole('button', { name: `Run ${operation}`, exact: true })).toBeEnabled();
-    await page.getByRole('button', { name: 'Run ready', exact: true }).click();
-    await expect(page.getByRole('status')).toContainText('ready query succeeded', { timeout: 30000 });
-    const evidence = { scope: 'Real private native Git data through authorized Node-side gh transport; actual production UI and published CDN Worker/WASM, not packaged extension authorization acceptance.', workspace, repository, blobPartRequests: parts, maxNativeHTTP, snapshotIdentity: await page.getByRole('region', { name: 'Verified native snapshot' }).innerText(), summaries: await page.locator('[aria-label="Beads read query results"] article > p').allTextContents() };
+    const allCount = await page.locator('.beads-count').innerText();
+    await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    await page.getByRole('combobox', { name: /^Readiness/ }).selectOption('ready');
+    const readyCount = await page.locator('.beads-count').innerText();
+    await page.getByRole('combobox', { name: /^Readiness/ }).selectOption('blocked');
+    const blockedCount = await page.locator('.beads-count').innerText();
+    const evidence = { scope: 'Real private native Git data through authorized Node-side gh transport; actual production UI and published CDN Worker/WASM, not packaged extension authorization acceptance.', workspace, repository, blobPartRequests: parts, maxNativeHTTP, allCount, readyCount, blockedCount };
     await writeFile(info.outputPath('native-beads-proof.json'), JSON.stringify(evidence, null, 2));
-    await page.getByRole('button', { name: 'Dispose engine' }).click();
-    await expect(page.getByRole('status')).toContainText('Worker was disposed');
+    await expect(page.getByText(/Native query diagnostics|Snapshot identity|Verified engine release/)).toHaveCount(0);
+    await page.reload();
+    await page.waitForFunction(() => document.querySelector('[role=alert]') || document.querySelector('.beads-count'), undefined, { timeout: 300000 });
+    await expect(page.locator('.beads-count')).toHaveText(blockedCount);
+    await expect(page.getByRole('alert')).toHaveCount(0);
   });
 });

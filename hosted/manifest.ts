@@ -19,8 +19,8 @@ function timestamp(value: unknown) {
     && (!offsetHour || Number(offsetHour) <= 23 && Number(offsetMinute) <= 59) && Number.isFinite(Date.parse(value));
 }
 
-// Schema-v1 contract shared with nugs manifest.go. This parser stays in the
-// hosted app; the extension only authorizes and bounds Git object transport.
+// Schema-v1 contract shared with nugs manifest.go. Used by hosted browsing and
+// the host-owned Documents cache before promoting a workspace inventory.
 export function parseWorkspaceManifest(text: string, workspace: string): WorkspaceManifest {
   const bad = () => new Error('Invalid workspace/manifest.json: expected matching schema-v1 identity, timestamp, valid optional repository pointers, and a nonblank purpose when no repositories are attached.');
   let value: unknown;

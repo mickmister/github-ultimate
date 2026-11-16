@@ -59,12 +59,16 @@ async function mockGitHub(worker: Worker) {
       if (url === git + 'matching-refs/dolt/') return Response.json([{ ref: 'refs/dolt/workspace-a', object: { sha: 'e'.repeat(40), type: 'commit' } }]);
       if (url === git + 'commits/' + 'c'.repeat(40)) return Response.json({ sha: 'c'.repeat(40), tree: { sha: 'd'.repeat(40) } });
       if (url === git + 'commits/' + 'e'.repeat(40)) return Response.json({ sha: 'e'.repeat(40), tree: { sha: 'f'.repeat(40) } });
-      const note = await blob(document), storage = await blob(manifest), workspace = await blob(workspaceManifest);
-      if (url === git + 'trees/' + 'd'.repeat(40) + '?recursive=1') return Response.json({ sha: 'd'.repeat(40), truncated: false, tree: [{ path: 'documents/notes/private.md', mode: '100644', type: 'blob', sha: note.sha, size: note.size }, { path: 'documents/workspace/manifest.json', mode: '100644', type: 'blob', sha: workspace.sha, size: workspace.size }] });
+      const note = await blob(document), storage = await blob(manifest), workspace = await blob(workspaceManifest), unopened = await blob('Background-prefetched document never opened online');
+      if (url === git + 'trees/' + 'd'.repeat(40) + '?recursive=1') return Response.json({ sha: 'd'.repeat(40), truncated: false, tree: [{ path: 'documents/notes/private.md', mode: '100644', type: 'blob', sha: note.sha, size: note.size }, { path: 'documents/workspace/manifest.json', mode: '100644', type: 'blob', sha: workspace.sha, size: workspace.size }, { path: 'documents/notes/unopened.md', mode: '100644', type: 'blob', sha: unopened.sha, size: unopened.size }] });
       if (url === git + 'trees/' + 'f'.repeat(40) + '?recursive=1') return Response.json({ sha: 'f'.repeat(40), truncated: false, tree: [{ path: 'manifest', mode: '100644', type: 'blob', sha: storage.sha, size: storage.size }] });
       if (url === git + 'blobs/' + note.sha) return Response.json(note);
       if (url === git + 'blobs/' + storage.sha) return Response.json(storage);
       if (url === git + 'blobs/' + workspace.sha) return Response.json(workspace);
+      if (url === git + 'blobs/' + unopened.sha) {
+        if ((globalThis as typeof globalThis & { __failUnopened?: boolean }).__failUnopened) throw new Error('interrupted background fill fixture');
+        return Response.json(unopened);
+      }
       return Response.json({}, { status: 404 });
     };
   });
@@ -259,7 +263,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(modern.getByRole('status')).toContainText('1 workspace(s) found');
   await modern.getByLabel('Stored workspace').selectOption('workspace-a');
   await modern.getByRole('button', { name: 'Browse documents', exact: true }).click();
-  await expect(modern.getByRole('status')).toContainText('2 document(s)');
+  await expect(modern.getByRole('status')).toContainText('3 document(s)');
   await modern.getByRole('treeitem', { name: 'notes', exact: true }).click();
   await modern.getByRole('treeitem', { name: 'notes/private.md', exact: true }).click();
   await expect(modern.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
@@ -429,11 +433,19 @@ test('workspace cache and shared settings survive browser restart and restore Do
   const shell = await readFile(resolve('hosted-dist/app/index.html'), 'utf8');
   const path = shell.match(/href="([^"]+)assets\/[^" ]+\.css"/)![1];
   const page = await context.newPage();
+  await context.serviceWorkers()[0].evaluate(() => { (globalThis as typeof globalThis & { __failUnopened?: boolean }).__failUnopened = true; });
   await page.goto(`https://mickmister.github.io${path}#/documents?repository=mickmister%2Fworkspace-storage&workspace=workspace-a`);
   await page.getByRole('treeitem', { name: 'notes', exact: true }).click();
   await page.getByRole('treeitem', { name: 'notes/private.md', exact: true }).click();
   await expect(page.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
+  await expect(page.getByLabel('Documents cache status')).toContainText('Documents cache paused');
   const url = page.url();
+  // Replace the browser and broker mid-fill, then resume without opening the
+  // missing document. Only the host-owned objects survive this boundary.
+  await context.close();
+  expect(await launch(true)).toBe(id); await serveHosted();
+  const resumed = await context.newPage(); await resumed.goto(url);
+  await expect(resumed.getByLabel('Documents cache status')).toContainText('Documents snapshot cached');
   await context.close();
   expect(await launch(true)).toBe(id); await serveHosted();
   const worker = context.serviceWorkers()[0];
@@ -447,6 +459,9 @@ test('workspace cache and shared settings survive browser restart and restore Do
   await restored.goto(url);
   await expect(restored.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
   await expect(restored.locator('.request-status')).toContainText('Cached snapshot retained');
+  await restored.getByRole('button', { name: 'Back to documents' }).click();
+  await restored.getByRole('treeitem', { name: 'notes/unopened.md', exact: true }).click();
+  await expect(restored.getByLabel('Markdown preview', { exact: true })).toContainText('Background-prefetched document never opened online');
   const cache = await restoredSettings.evaluate(async () => {
     const reply = await chrome.runtime.sendMessage({ channel: 'github-ultimate-connections-v1', request: { operation: 'cacheSettings' } });
     return reply.result.status;
