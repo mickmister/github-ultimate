@@ -1,5 +1,6 @@
 import { bridgeRequest } from './client';
 import { WorkspaceReader, documentText, type GitTransport } from './workspaces';
+import { mapReads } from '../src/bounded-reads';
 
 // Updated only with a verified immutable release; workspace metadata cannot select executable code.
 export const beadsRelease = {
@@ -67,17 +68,22 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     }
     async function reference(entry: NonNullable<typeof manifest>): Promise<FileReference> {
       signal.throwIfAborted();
-      const bytes = await native.blob(entry, signal), url = URL.createObjectURL(new Blob([bytes])); urls.push(url);
-      return { url, size: bytes.length, sha256: await digest(bytes) };
+      const bytes = await native.blob(entry, signal), sha256 = await digest(bytes);
+      signal.throwIfAborted();
+      const url = URL.createObjectURL(new Blob([bytes])); urls.push(url);
+      return { url, size: bytes.length, sha256 };
     }
     const manifestReference = await reference(manifest);
     const fields = documentText(new Uint8Array(await (await fetch(manifestReference.url)).arrayBuffer())).trim().split(':');
     if (fields[0] !== '5' || fields[1] !== '__DOLT__' || !/^[0-9a-v]{32}$/.test(fields[3] ?? '')) throw new Error('Unsupported native Dolt manifest.');
-    const files: FileReference[] = [];
-    for (const [index, entry] of entries.entries()) {
-      progress(`Verifying native file ${index + 1}/${entries.length} · ${entry.path} · ${(entry.size! / 1048576).toFixed(1)} MiB`);
-      files.push(await reference(entry));
-    }
+    let completed = 0;
+    progress(`Downloading native files · 0/${entries.length} verified · up to 3 files in parallel`);
+    const files = await mapReads(entries, 3, signal, async entry => {
+      const file = await reference(entry);
+      completed++;
+      if (!signal.aborted) progress(`Verified native files ${completed}/${entries.length} · ${entry.path} · up to 3 files in parallel`);
+      return file;
+    });
     progress('Loading the integrity-pinned WASM engine and decoding native Dolt chunks…');
     engine = await createEngine(signal); signal.throwIfAborted();
     const opened = await engine.open({ apiVersion: 1, manifest: manifestReference, files }, signal);

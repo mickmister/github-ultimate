@@ -37,7 +37,7 @@ test.describe('real selected workspace / published CDN engine', () => {
     test.setTimeout(360000);
     const workspace = process.env.BEADS_LIVE_WORKSPACE!, repository = process.env.BEADS_LIVE_REPOSITORY ?? 'mickmister/workspace-storage';
     const connection = '11111111-1111-4111-8111-111111111111', api = new Map<string, Promise<unknown>>();
-    let parts = 0;
+    let parts = 0, activeNativeHTTP = 0, maxNativeHTTP = 0;
     await page.exposeFunction('__beadsNativeRead', async (input: unknown) => {
       const request = input as { operation: string };
       if (request.operation === 'connections') return [{ id: connection, name: 'Authorized live-workspace proof', appId: 1, installation: { id: 1, account: 'mickmister' } }];
@@ -47,7 +47,11 @@ test.describe('real selected workspace / published CDN engine', () => {
       if ('workspace' in read) expect(read.workspace).toBe(workspace);
       if (read.operation === 'gitBlobPart') parts++;
       return readGit(read, repository, async path => {
-        if (!api.has(path)) api.set(path, promisify(execFile)('gh', ['api', path], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 }).then(value => JSON.parse(value.stdout)));
+        if (!api.has(path)) {
+          const native = 'namespace' in read && read.namespace === 'dolt' && path.includes('/blobs/');
+          if (native) maxNativeHTTP = Math.max(maxNativeHTTP, ++activeNativeHTTP);
+          api.set(path, promisify(execFile)('gh', ['api', path], { encoding: 'utf8', maxBuffer: 96 * 1024 * 1024 }).then(value => JSON.parse(value.stdout)).finally(() => { if (native) activeNativeHTTP--; }));
+        }
         return api.get(path)!;
       });
     });
@@ -75,10 +79,11 @@ test.describe('real selected workspace / published CDN engine', () => {
     expect(nativeList.request.issueFilter.Limit).toBe(0);
     expect(Number((await page.locator('.beads-count').innerText()).match(/\/ (\d+) issues/)![1])).toBe((nativeList.response.issues ?? []).length);
     expect(parts).toBeGreaterThan(0);
+    expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(3);
     for (const operation of ['list', 'ready', 'blocked']) await expect(page.getByRole('button', { name: `Run ${operation}`, exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Run ready', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('ready query succeeded', { timeout: 30000 });
-    const evidence = { scope: 'Real private native Git data through authorized Node-side gh transport; actual production UI and published CDN Worker/WASM, not packaged extension authorization acceptance.', workspace, repository, blobPartRequests: parts, snapshotIdentity: await page.getByRole('region', { name: 'Verified native snapshot' }).innerText(), summaries: await page.locator('[aria-label="Beads read query results"] article > p').allTextContents() };
+    const evidence = { scope: 'Real private native Git data through authorized Node-side gh transport; actual production UI and published CDN Worker/WASM, not packaged extension authorization acceptance.', workspace, repository, blobPartRequests: parts, maxNativeHTTP, snapshotIdentity: await page.getByRole('region', { name: 'Verified native snapshot' }).innerText(), summaries: await page.locator('[aria-label="Beads read query results"] article > p').allTextContents() };
     await writeFile(info.outputPath('native-beads-proof.json'), JSON.stringify(evidence, null, 2));
     await page.getByRole('button', { name: 'Dispose engine' }).click();
     await expect(page.getByRole('status')).toContainText('Worker was disposed');

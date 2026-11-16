@@ -45,6 +45,87 @@ async function login(client = defaultClient) {
   await broker.handle({ operation: 'poll', id: connection.id });
   return connection;
 }
+
+async function nativeReads() {
+  const connection = await login(), origin = 'https://example.test';
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin, subpath: '/app/' });
+  const releases: (() => void)[] = [];
+  apiOverride = url => {
+    if (!url.includes('/git/blobs/')) return;
+    const sha = url.split('/').at(-1)!;
+    return new Response(new ReadableStream({ start(controller) {
+      releases.push(() => { controller.enqueue(new TextEncoder().encode(JSON.stringify({ sha, size: 3, encoding: 'base64', content: 'YWJj' }))); controller.close(); });
+    } }));
+  };
+  const request = (index: number) => ({ operation: 'gitBlob', namespace: 'dolt', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', workspace: 'test', oid: String(index).repeat(40) });
+  return { connection, origin, releases, request };
+}
+
+test('native HTTP bodies overlap with a three-read cap and refresh rotation stays serialized', async () => {
+  const { connection, origin, releases, request } = await nativeReads();
+  clock += 28800000; oauthResults.push(credentials('rotated'));
+  const reads = Promise.all([1, 2, 3, 4].map(index => broker.handleHosted(origin + '/app/', request(index))));
+  await vi.waitFor(() => expect(releases).toHaveLength(3));
+  expect(calls.filter(call => String(call.init.body).includes('grant_type=refresh_token'))).toHaveLength(1);
+  expect(calls.filter(call => call.url.includes('/git/blobs/')).every(call => (call.init.headers as Record<string, string>).Authorization === 'Bearer ghu_access_rotated')).toBe(true);
+  // Management is not blocked by downloading bodies; completion cannot save an
+  // old token-bearing connection record over a newer rotation.
+  oauthResults.push(credentials('newer')); await broker.handle({ operation: 'refresh', id: connection.id });
+  releases[0](); await vi.waitFor(() => expect(releases).toHaveLength(4));
+  releases.slice(1).forEach(release => release());
+  expect(await reads).toHaveLength(4);
+  expect((await store.get(connection.id))!.tokens!.refreshToken).toBe('ghr_refresh_newer');
+});
+
+test.each(['revokeOrigin', 'disconnect', 'remove', 'selectInstallation', 'narrowGrant', 'navigate'])('in-flight and queued native reads disclose nothing after %s', async operation => {
+  const { connection, origin, releases, request } = await nativeReads(); let current = true;
+  const reads = Promise.allSettled([1, 2, 3, 4].map(index => broker.handleHosted(origin + '/app/', request(index), () => current)));
+  await vi.waitFor(() => expect(releases).toHaveLength(3));
+  if (operation === 'navigate') current = false;
+  else if (operation === 'narrowGrant') await broker.handle({ operation: 'grantOrigin', id: connection.id, origin, subpath: '/other/', replace: { origin, subpath: '/app/' } });
+  else await broker.handle({ operation, id: connection.id, ...(operation === 'revokeOrigin' ? { origin, subpath: '/app/' } : operation === 'selectInstallation' ? { installationId: 1 } : {}) });
+  releases.forEach(release => release());
+  expect((await reads).every(result => result.status === 'rejected')).toBe(true);
+  expect(releases).toHaveLength(3);
+  if (operation === 'disconnect') expect((await store.get(connection.id))!.tokens).toBeUndefined();
+  if (operation === 'remove') expect(await store.get(connection.id)).toBeUndefined();
+});
+
+test('native throttling persists cooldown and prevents subsequent HTTP calls', async () => {
+  const { connection, origin, request } = await nativeReads();
+  apiOverride = url => url.includes('/git/blobs/') ? Response.json({ message: 'rate limited' }, { status: 429, headers: { 'Retry-After': '120' } }) : undefined;
+  await expect(broker.handleHosted(origin + '/app/', request(1))).rejects.toThrow('rate limit');
+  expect((await store.get(connection.id))!.apiCooldown!.until).toBeGreaterThan(clock);
+  const count = calls.length;
+  await expect(broker.handleHosted(origin + '/app/', request(2))).rejects.toThrow('No request was sent');
+  expect(calls).toHaveLength(count);
+});
+
+test('native response streams are cancelled when authority changes before body admission', async () => {
+  const { connection, origin, request } = await nativeReads(); const cancel = vi.fn();
+  let revoked: Promise<unknown> | undefined;
+  apiOverride = url => {
+    if (!url.includes('/git/blobs/')) return;
+    revoked = broker.handle({ operation: 'revokeOrigin', id: connection.id, origin, subpath: '/app/' });
+    return new Response(new ReadableStream({ cancel }));
+  };
+  await expect(broker.handleHosted(origin + '/app/', request(1))).rejects.toThrow('access changed');
+  await revoked; expect(cancel).toHaveBeenCalledOnce();
+});
+
+test('invalid native objects are evicted so an explicit retry can fetch a valid response', async () => {
+  const { origin, request } = await nativeReads(); let valid = false, blobs = 0;
+  apiOverride = url => {
+    if (!url.includes('/git/blobs/')) return;
+    blobs++;
+    return Response.json({ sha: (valid ? '1' : '2').repeat(40), size: 3, encoding: 'base64', content: 'YWJj' });
+  };
+  await expect(broker.handleHosted(origin + '/app/', request(1))).rejects.toThrow('identity mismatch');
+  valid = true;
+  expect(await broker.handleHosted(origin + '/app/', request(1))).toMatchObject({ content: 'YWJj' });
+  expect(blobs).toBe(2);
+});
 test('device flow enforces polling interval/slow_down and never returns device codes or tokens', async () => {
   const connection = await add();
   const started = await broker.handle({ operation: 'start', id: connection.id });

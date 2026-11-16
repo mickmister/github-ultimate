@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
-import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit, verifiedGitBlobBytes, type GitBlob } from './git-reads';
+import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit, verifiedGitBlobBytes, type GitBlob, type GitRead } from './git-reads';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import type { WorkspaceNavigation } from './workspace-navigation';
@@ -8,6 +8,7 @@ import { writeReview } from './review-writes';
 import { cacheSettingsSchema } from './cache-settings';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 import { copyCacheValue } from './workspace-cache';
+import { BoundedReads } from './bounded-reads';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -69,6 +70,7 @@ export type PublicConnection = ReturnType<typeof publicConnection>;
 export class Connections {
   private tail: Promise<unknown> = Promise.resolve();
   private apiCache = new ApiReadCache(96 * 1024 * 1024);
+  private nativeReads = new BoundedReads(3, 128 * 1024 * 1024);
   private epoch = 0;
   constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache) {}
 
@@ -87,6 +89,12 @@ export class Connections {
     isCurrent = () => callerCurrent() && epoch === this.epoch;
     const source = loadedDocument(documentURL);
     const request = hostedRequestSchema.parse(input);
+    if ((request.operation === 'gitBlob' || request.operation === 'gitBlobPart') && request.namespace === 'dolt' && !request.cacheOnly) {
+      return this.nativeReads.run((request.operation === 'gitBlobPart' ? 96 : 24) * 1024 * 1024, () => this.readNativeBlob(source, request, isCurrent)).then(value => {
+        if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
+        return value;
+      });
+    }
     const result = this.tail.catch(() => {}).then(async () => {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const records = await this.store.all();
@@ -181,6 +189,79 @@ export class Connections {
     });
     this.tail = result;
     return result;
+  }
+
+  private state<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.tail.catch(() => {}).then(work);
+    this.tail = result;
+    return result;
+  }
+
+  /** Serialize authority/token changes, not immutable native blob network I/O. */
+  private async readNativeBlob(source: ReturnType<typeof loadedDocument>, request: Extract<GitRead, { operation: 'gitBlob' | 'gitBlobPart' }>, isCurrent: () => boolean) {
+    const ticket = await this.state(async () => {
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+      const approved = (await this.store.all()).filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
+      if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
+      const record = approved.find(record => record.id === request.id);
+      if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
+      if (!record.tokens || !record.user) throw new ConnectionError('Sign in before reading workspace data.');
+      if (record.installation?.id !== request.installationId) throw new ConnectionError('The selected installation changed. Reconnect and rediscover workspaces; no fallback is allowed.');
+      const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
+      if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
+      const token = await this.accessToken(record);
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+      const scope: CacheScope = { connection: record.id, account: record.user.id, installation: record.installation.id, generation: record.cacheGeneration, repository: repo.full_name, workspace: request.workspace, namespace: 'dolt' };
+      const resource = `${request.operation}:${request.oid}`;
+      let cached = request.operation === 'gitBlob' ? await this.persistentCache?.get(scope, resource, request.cacheVisit) : undefined;
+      if (cached !== undefined) {
+        try { cached = await readGit(request, repo.full_name, async () => cached); verifiedGitBlobBytes(cached as GitBlob); }
+        catch { await this.persistentCache?.remove(scope, resource).catch(() => {}); cached = undefined; }
+      }
+      return { id: record.id, account: record.user.id, installation: record.installation.id, generation: record.cacheGeneration, token, scope, resource, cached, repository: repo.full_name };
+    });
+    // Called only on the serialized state lane, using fresh records. Never write
+    // a pre-download record back after a concurrent refresh/revoke/disconnect.
+    const authorize = async () => {
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+      const record = await this.store.get(ticket.id);
+      if (!isCurrent() || !record?.tokens || record.user?.id !== ticket.account || record.installation?.id !== ticket.installation || record.cacheGeneration !== ticket.generation || !hostedGrants(record).some(grant => matchesGrant(grant, source))) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
+      return record;
+    };
+    const result = await readGit(request, ticket.repository, async (path, limit) => {
+      if (ticket.cached !== undefined) return ticket.cached;
+      const key = `${ticket.id}:${ticket.installation}:native:${ticket.generation ?? 0}:${path}`;
+      const cached = this.apiCache.get(key);
+      if (cached) return copyCacheValue(cached.value);
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+      const response = await this.send(`https://api.github.com${path}`, { headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${ticket.token}`, 'X-GitHub-Api-Version': '2022-11-28' } });
+      try { await this.state(async () => {
+        const record = await authorize(), records = await this.store.all();
+        const related = records.filter(other => other.id === ticket.id || other.user?.id === ticket.account || other.apiCooldown?.scope === 'global');
+        const cooldown = await responseCooldown(response, this.now(), Math.max(0, ...related.map(other => other.apiCooldown?.failures ?? 0)));
+        for (const target of records) {
+          if (cooldown && (cooldown.scope === 'global' || target.id === ticket.id || target.user?.id === ticket.account)) {
+            target.apiCooldown = { ...cooldown, until: Math.max(cooldown.until, target.apiCooldown?.until ?? 0) }; await this.store.put(target);
+          }
+        }
+        if (!response.ok) {
+          if (cooldown) throw new ConnectionError(`GitHub API rate limit: retry after ${new Date(cooldown.until).toISOString()}. Retry manually after the cooldown.`);
+          if ([401, 403, 404].includes(response.status)) await this.retireCache(record);
+          throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`);
+        }
+      }); } catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
+      let value: unknown;
+      try { value = await boundedJSON(response, limit ?? maxMetadataBytes); }
+      catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }
+      await this.state(async () => { await authorize(); this.apiCache.put(key, value, response.headers.get('etag') ?? undefined); });
+      return value;
+    }).catch(error => { this.apiCache.clearConnection(ticket.id); throw error; });
+    return this.state(async () => {
+      await authorize();
+      if (request.operation === 'gitBlob' && this.persistentCache) { verifiedGitBlobBytes(result as GitBlob); await this.persistentCache.put(ticket.scope, ticket.resource, result); }
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
+      return result;
+    });
   }
 
   private async retireCache(record: ConnectionRecord) {
