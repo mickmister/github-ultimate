@@ -20,12 +20,12 @@ export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubm
   const answers = answer?.answers ?? {};
   const intent = answer?.intent ?? 'discussion';
   const question = form.questions[step];
-  const content = <form className="review-form" data-feedback-content="true" onSubmit={event => { event.preventDefault(); if (!question) onSubmit(); }}><h3>{form.title}</h3>{form.goal && <p>{form.goal}</p>}{form.description && <p className="review-description">{form.description}</p>}
+  const content = <form className="review-form" data-ui="form" data-feedback-content="true" onSubmit={event => { event.preventDefault(); if (!question) onSubmit(); }}><h3>{form.title}</h3>{form.goal && <p>{form.goal}</p>}{form.description && <p className="review-description">{form.description}</p>}
     <p className="muted">{question ? `Question ${step + 1} of ${form.questions.length}` : 'Finish response'}</p>
     <h4 ref={heading} tabIndex={-1} className="review-question-heading">{question ? `${question.title}${question.required ? ' (required)' : ''}` : 'Finish and submit'}</h4>
     <fieldset disabled={submitted || busy}><legend>{submitted ? 'Submitted for this revision' : 'Your response'}</legend>
-      {question ? <section key={question.id} aria-label={question.title}><p className="review-description">{question.description}</p>
-        {question.type === 'choices' ? <div>{choiceOptions(form, question).map(choice => <div className="review-choice" key={choice.id}><ReviewCheckbox label={choice.label} disabled={submitted || busy} checked={typeof answers[question.id] === 'object' && Boolean((answers[question.id] as Record<string, boolean>)[choice.id])}
+      {question ? <section data-ui="form-question" key={question.id} aria-label={question.title}><p className="review-description">{question.description}</p>
+        {question.type === 'choices' ? <div>{choiceOptions(form, question).map(choice => <div className="review-choice" data-ui="review-choice" key={choice.id}><ReviewCheckbox label={choice.label} disabled={submitted || busy} checked={typeof answers[question.id] === 'object' && Boolean((answers[question.id] as Record<string, boolean>)[choice.id])}
           onChange={checked => {
             const selected = { ...(typeof answers[question.id] === 'object' ? answers[question.id] as Record<string, boolean> : {}), [choice.id]: checked };
             onAnswer({ ...answers, [question.id]: selected }, intent);

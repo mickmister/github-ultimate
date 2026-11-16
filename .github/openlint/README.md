@@ -34,11 +34,18 @@ pnpm run lint:tsx-view-boundary
 pnpm run lint:tsx-view-boundary:changed
 pnpm run lint:tsx-view-boundary:last-commit
 pnpm run lint:ui-customization-fences
+pnpm run customization:audit
 ```
 
 The full commands target `src`, `hosted`, and `webapp/src`, avoiding generated bundles and
 dependencies. Changed/last-commit commands select files via Git. The new SPA's
 views are covered by the full command; the legacy DOM surfaces are not migrated.
+
+`customization:audit` runs the checked-in native-control and inline-style ast-grep
+inventories directly over `webapp/src`, without requiring the OpenLint wrapper.
+Findings are advisory migration candidates, not CI errors: native controls can
+use the shared theme contract, and runtime positioning styles need separate
+review. See `docs/ui-customization.md` for the portable JSON and styling contract.
 
 `tsx-view-boundary` keeps intrinsic elements such as `<button>` in
 `*.view.tsx` (with a story exemption) and hook-like calls/declarations outside

@@ -1,0 +1,33 @@
+import { expect, test } from '@playwright/test';
+
+test('UI and console share portable JSON, preview/reset, shadow styling and device persistence', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-customization--appearance-editor&viewMode=story');
+  await page.getByText('Customize appearance', { exact: true }).click();
+  const save = page.getByRole('button', { name: 'Save customization locally', exact: true });
+  await expect(save).toBeEnabled({ timeout: 30000 });
+  const theme = await page.evaluate(() => ({ ...window.uiCustomization.get(), name: 'Portable', mode: 'dark' as const, tokens: { accent: '#12ab78', fontSize: '17px', radius: '3px' }, css: '[data-ui="review-choice"] { border-style: dashed; }' }));
+  await page.getByLabel('Customization JSON', { exact: true }).fill(JSON.stringify(theme));
+  await page.getByRole('button', { name: 'Preview customization', exact: true }).click();
+  await expect(page.getByText('Preview active; not saved.', { exact: false })).toBeVisible();
+  expect(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())).toBe('#12ab78');
+  await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await expect(page.locator('[data-ui="review-choice"]').first()).toHaveCSS('border-top-style', 'dashed');
+  await expect(page.getByTestId('legacy-theme-host').locator('[data-ui="review-choice"]').first()).toHaveCSS('border-top-style', 'dashed');
+  await page.getByRole('button', { name: 'Cancel preview', exact: true }).click();
+  expect(await page.evaluate(() => window.uiCustomization.get().name)).toBe('Default');
+  await page.getByLabel('Customization JSON', { exact: true }).fill(JSON.stringify(theme)); await save.click();
+  await expect(page.getByText('Customization saved on this device.', { exact: true })).toBeVisible();
+  const downloaded = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export customization JSON', exact: true }).click();
+  expect((await downloaded).suggestedFilename()).toBe('ui-customization.json');
+  expect(await page.evaluate(() => JSON.parse(window.uiCustomization.export()))).toEqual(theme);
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => window.uiCustomization?.get().name)).toBe('Portable');
+  await page.evaluate(() => window.uiCustomization.reset());
+  await page.getByText('Customize appearance', { exact: true }).click();
+  await page.getByLabel('Import customization JSON', { exact: true }).setInputFiles({ name: 'shared.json', mimeType: 'application/json', buffer: Buffer.from(JSON.stringify(theme)) });
+  await expect.poll(() => page.evaluate(() => window.uiCustomization.get().name)).toBe('Portable');
+  await page.getByLabel('Customization JSON', { exact: true }).fill('{"version":99}'); await save.click();
+  await expect(page.locator('[data-ui="customization-panel"]').getByRole('alert')).toBeVisible();
+  expect(await page.evaluate(() => window.uiCustomization.get().name)).toBe('Portable');
+  await page.evaluate(() => window.uiCustomization.reset());
+});
