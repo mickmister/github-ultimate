@@ -16,6 +16,16 @@ online authorization per part, and a bounded 96 MiB transient API cache. Ordinar
 document reads remain capped at 16 MiB. Update the extension or Alohak if the
 page reports that large native reads are unavailable.
 
+Native files download with up to three concurrent file reads. The updated host
+also permits three native blob reads, reserving at most 128 MiB of aggregate
+upstream response limits (24 MiB per ordinary blob, 96 MiB per large-blob part),
+with at most 64 waiting calls. This is a response-admission budget, not a total
+browser-memory limit. Authorization and token rotation remain serialized; native
+blob HTTP/body reads overlap outside that lane. Each completed response rechecks
+the current document, grant, connection, account, installation and cache generation
+before disclosure. Large-file parts stay sequential within each file and reuse
+the bounded transient whole-object cache. Older hosts still serialize downloads.
+
 The page loads one immutable release from `browser-tools.alohak.dev`, pinned in
 `hosted/beads-sample.ts`. It checks the release manifest and client SHA-256 before
 importing the SDK. The SDK verifies its Worker/runtime/WASM and every supplied
@@ -34,9 +44,13 @@ and commit rejection are checked before the UI declares the sample successful.
 and run reads** resolves the current published workspace ref and creates a new
 Worker. Cancelling, changing scope or leaving the page disposes the runtime and
 revokes temporary file URLs. This page exposes reads only.
+Cancellation or a failed download stops scheduling more files and drains active
+reads before final cleanup. Already-started host HTTP reads may finish; cancelled
+results are discarded and cannot create new file URLs after cancellation.
 
 Verification: unit tests cover part bounds/reassembly/corruption, unchanged
-document caps and per-call authorization. The browser test covers missing host
+document caps, actual broker HTTP overlap/count and response-byte caps, serialized
+refresh, and revocation/navigation during active and queued reads. The browser test covers missing host
 access. To explicitly test a private workspace with authorized Node-side `gh`
 transport, run after `pnpm run hosted:build`:
 

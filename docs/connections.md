@@ -127,7 +127,16 @@ S3-compatible endpoints have separate connections and operation grants; see
 [S3-compatible object storage](s3-connections.md). They reuse original-document
 path authorization but do not use GitHub credentials or repository discovery.
 
-The broker serializes requests. It observes `Retry-After`, `X-RateLimit-Remaining`
+The broker serializes management, token rotation and authorization preparation.
+Online immutable Dolt blob downloads use a separate FIFO lane: up to three active
+calls and 128 MiB of reserved response limits, with 64 waiting calls. Ordinary
+blob calls reserve 24 MiB and large-blob part calls reserve 96 MiB; this limits
+response admission, not total browser memory. Network/body reads run concurrently;
+state/cache changes and response authorization run on the serialized lane against
+fresh records. Disconnect, removal, grant changes, installation changes and stale
+documents suppress in-flight results. Other operations retain serialized behavior.
+
+It observes `Retry-After`, `X-RateLimit-Remaining`
 and `X-RateLimit-Reset`, including a successful response that consumes the last
 request. Primary cooldowns are shared across connections for the same GitHub
 user: these are **user access tokens**, not installation access tokens, so another
