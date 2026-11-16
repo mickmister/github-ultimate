@@ -1,7 +1,7 @@
 import { pageChannel, replyChannel, hostedRelayRevision } from '../src/bridge-channels';
 import type { HostedRequest } from '../src/hosted-protocol';
 import { MobileClient } from '../src/mobile-client';
-import { measure } from './performance';
+import { measureOperation } from './performance-hooks';
 
 async function nativeRequest<T>(request: HostedRequest, timeoutMs: number): Promise<T> {
   const started = Date.now();
@@ -18,7 +18,7 @@ async function nativeRequest<T>(request: HostedRequest, timeoutMs: number): Prom
 }
 
 export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000): Promise<T> {
-  return measure(`bridge.${request.operation}`, () => sendBridge<T>(request, timeoutMs));
+  return measureOperation(`bridge.${request.operation}`, () => sendBridge<T>(request, timeoutMs));
 }
 function sendBridge<T>(request: HostedRequest, timeoutMs: number): Promise<T> {
   if (!window.isSecureContext) return Promise.reject(new Error('Open this page over HTTPS (or HTTP localhost for development).'));
