@@ -67,6 +67,17 @@ test('virtualizes a large collection without limiting searches to rendered cards
 });
 
 test('remembers the workspace, auto-loads on return and persists active and named filters per workspace', async ({ page }) => {
+  // Shared page storage updates its UI mirror optimistically. Reload only after
+  // the actual IndexedDB transaction commits, rather than racing flush().
+  const persisted = () => page.evaluate(() => new Promise<{ selectedView: string; filters: { query: string }; views: { name: string }[] }[]>((resolve, reject) => {
+    const open = indexedDB.open('github-ultimate-page-kv', 1);
+    open.onerror = () => reject(open.error);
+    open.onsuccess = () => {
+      const db = open.result, tx = db.transaction('values', 'readonly'), get = tx.objectStore('values').get(location.origin);
+      tx.oncomplete = () => { db.close(); resolve((get.result?.entries ?? []).filter(([key]: [string, string]) => key.startsWith('github-ultimate:beads:filters:v1:')).map(([, value]: [string, string]) => JSON.parse(value))); };
+      tx.onabort = tx.onerror = () => { db.close(); reject(tx.error); };
+    };
+  }));
   await page.goto('/iframe.html?id=web-app-beads-kanban--remembered-workspace&viewMode=story');
   await page.getByLabel('Storage repository', { exact: true }).fill('example/storage');
   await page.getByLabel('Workspace', { exact: true }).fill('first');
@@ -80,12 +91,14 @@ test('remembers the workspace, auto-loads on return and persists active and name
   await page.getByRole('button', { name: 'Save filters', exact: true }).click();
   await expect(page.getByLabel('Saved filters')).toHaveValue('Mobile work');
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
+  await expect.poll(async () => (await persisted()).some(value => value.selectedView === 'Mobile work')).toBe(true);
   // Return through the bare page URL: restoration must not depend on a deep link.
   await page.evaluate(() => history.replaceState(history.state, '', location.pathname + location.search));
   await page.reload();
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   await expect(page.getByLabel('Saved filters')).toHaveValue('Mobile work');
   await page.getByLabel('Search issues').fill('demo-1.2');
+  await expect.poll(async () => (await persisted()).some(value => value.filters.query === 'demo-1.2')).toBe(true);
   await page.reload();
   await expect(page.locator('.beads-count')).toHaveText('1 / 7');
   await expect(page.getByLabel('Search issues')).toHaveValue('demo-1.2');
@@ -103,6 +116,7 @@ test('remembers the workspace, auto-loads on return and persists active and name
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   await page.getByRole('button', { name: /^Filters/ }).click();
   await page.getByRole('button', { name: 'Delete saved filter' }).click();
+  await expect.poll(async () => { const values = await persisted(); return values.length > 0 && values.every(value => value.views.every(view => view.name !== 'Mobile work')); }).toBe(true);
   await page.reload();
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   await expect(page.getByLabel('Saved filters').locator('option[value="Mobile work"]')).toHaveCount(0);
