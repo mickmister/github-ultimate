@@ -15,6 +15,10 @@ The build includes the complete installed dependency license texts in
 `THIRD_PARTY_LICENSES.txt` in the extension ZIP. Exact versions are pinned by
 `pnpm-lock.yaml`. Bundled legal comments are retained.
 
+The hosted TanStack application's Kanban view additionally bundles
+`@svar-ui/react-kanban` 2.6.0 (MIT) and its runtime dependencies. SVAR's board is
+used for read-only presentation; its paid PRO edition is not included.
+
 The form protocol and interaction design were reviewed against
 `vibe-dashboard/vibe-dashboard` / the local `vibe-kanban-vscode-web` checkout,
 branch `vk/8299-beads-web-show-m`, revision

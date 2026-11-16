@@ -25,7 +25,7 @@ test('native Beads page is reachable and requires an approved workspace connecti
   test.setTimeout(45000);
   const base = await serve(page);
   await page.goto(base + '#/beads');
-  await expect(page.getByRole('heading', { name: 'Beads read sample', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Beads Kanban', exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Load snapshot and run reads' })).toBeDisabled();
   await expect(page.getByRole('alert')).toContainText('No bridge response', { timeout: 35000 });
 });
@@ -64,8 +64,16 @@ test.describe('real selected workspace / published CDN engine', () => {
     const base = await serve(page);
     await page.goto(base + '#/beads?' + new URLSearchParams({ connection, repository, workspace }));
     await page.getByRole('button', { name: 'Load snapshot and run reads' }).click();
+    await page.waitForFunction(() => document.querySelector('[role=alert]') || document.querySelector('[role=status]')?.textContent?.includes('All three native Beads reads succeeded'), undefined, { timeout: 300000 });
+    await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.getByRole('status')).toContainText('All three native Beads reads succeeded', { timeout: 300000 });
     await expect(page.getByRole('alert')).toHaveCount(0);
+    await expect(page.locator('.beads-count')).toContainText('issues in the pinned snapshot');
+    await page.getByText('Native query diagnostics', { exact: true }).click();
+    const listArticle = page.locator('[aria-label="Beads read query results"] article').first();
+    const nativeList = JSON.parse((await listArticle.locator('pre').textContent())!);
+    expect(nativeList.request.issueFilter.Limit).toBe(0);
+    expect(Number((await page.locator('.beads-count').innerText()).match(/\/ (\d+) issues/)![1])).toBe((nativeList.response.issues ?? []).length);
     expect(parts).toBeGreaterThan(0);
     for (const operation of ['list', 'ready', 'blocked']) await expect(page.getByRole('button', { name: `Run ${operation}`, exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Run ready', exact: true }).click();

@@ -86,7 +86,8 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     return {
       gitCommit: snapshot.commit, doltCommit: opened.commit, root: opened.root, storageRoot: fields[3], fileCount: files.length, encodedBytes: total,
       async query(operation: BeadsOperation): Promise<BeadsResult> {
-        const request = operation === 'list' ? { operation, issueFilter: { SortBy: 'priority', Limit: 50 } }
+        // A workspace board must not silently truncate the collection to the sample's first 50.
+        const request = operation === 'list' ? { operation, issueFilter: { SortBy: 'priority', Limit: 0 } }
           : operation === 'ready' ? { operation, workFilter: { Status: 'open', SortPolicy: 'priority' } } : { operation, workFilter: {} };
         const start = performance.now(), response = await runtime.query(request, signal);
         return { operation, request, issues: response.issues, durationMs: Math.round(performance.now() - start) };
