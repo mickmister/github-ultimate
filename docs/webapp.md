@@ -153,6 +153,23 @@ the same `previewDirectory()` function used for publication. Set
 `GITHUB_REF_NAME` and `GITHUB_REPOSITORY` when building for another destination.
 `pnpm run webapp:build` builds the standalone SPA at `/` for local static use.
 
+## Rich Markdown review changes
+
+For a pinned Markdown document with a baseline, **Changes** shows a unified,
+rendered Markdown diff. Unchanged blocks remain in context; removed blocks are
+red and labeled **− Removed**, and added blocks are green and labeled **+ Added**.
+Replacements show both versions. Headings, emphasis, links, lists, tables, code
+blocks and Mermaid diagrams retain their normal document presentation. Whole
+blocks are compared so a change cannot break a list or table's markup.
+
+Both revisions use the normal sanitized Markdown renderer, including reference
+links and disabled task-list checkboxes. Equivalent rendered revisions show a
+no-changes status. Large rewrites use a bounded comparison and show the changed
+middle as a complete replacement, retaining common leading and trailing context.
+**Baseline** and **Full document** inspect their respective pinned revisions;
+an unavailable baseline still leaves the full document readable. Other file types
+use the read-only Monaco source diff.
+
 ## Hosted form zen mode
 
 Open a form in a review request and choose **Zen mode** to focus on filling it

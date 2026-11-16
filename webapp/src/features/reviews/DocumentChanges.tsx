@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { DocumentChangesView } from './DocumentChanges.view';
+import { isMarkdown } from '../documents/document-format';
+import { MarkdownChanges } from './MarkdownChanges';
 
-export function DocumentChanges({ path, before, after }: { path: string; before: string; after: string }) {
+interface Props { path: string; before: string; after: string }
+export function DocumentChanges(props: Props) {
+  return isMarkdown(props.path) ? <MarkdownChanges before={props.before} after={props.after} /> : <SourceChanges {...props} />;
+}
+
+function SourceChanges({ path, before, after }: Props) {
   const host = useRef<HTMLDivElement>(null);
   const [error, setError] = useState('');
   useEffect(() => {

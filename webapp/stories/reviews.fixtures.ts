@@ -12,13 +12,19 @@ const before = '# Reader plan\n\nThe baseline had browser-only drafts.\n';
 const form = (id: string, title: string) => JSON.stringify({ format: 'standard', id, task_id: 'task-reader', title, goal: 'Choose the next steps for this implementation.', questions: [{ id: 'decision', type: 'choices', title: 'Next steps', description: 'The author suggests selecting one option. You can choose multiple.', choices: [{ id: 'keep', label: 'Keep this approach', description: 'Continue with the implementation shown in the pinned document.' }, { id: 'revise', label: 'Revise this approach', description: 'Use your notes to describe the changes you want.' }], choiceGroups: [{ id: 'suggested-choice', title: 'Single select question', mode: 'exactlyOne', choiceIds: ['keep', 'revise'] }] }, { id: 'additional_notes', type: 'textarea', title: 'Additional notes' }] });
 const documents = new Map([[target.version, text], [baseline.version, before], [formPin.version, form('reader_decisions', 'Reader decisions')], [secondPin.version, form('review_feedback', 'Review experience feedback')]]);
 export interface ReviewFixtureState { artifacts: ReviewListing['artifacts']; revision: number; failSecond?: boolean; missingBaseline?: boolean }
-export function createReviewFixture({ remote = false, missingBaseline = false } = {}): AppHooksV1 {
+export interface ReviewComparisonFixture { path: string; before: string; after: string }
+export const richComparison: ReviewComparisonFixture = {
+  path: 'threads/task-reader/plan.md',
+  before: '# Reader plan\n\nKeep **local drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save in the browser\n- Reopen this tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Local | One tab |\n\n> This warning was removed.\n\n```ts\nconst storage = "local";\n```\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
+  after: '# Reader plan\n\nKeep **remote drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save remotely\n- Reopen any tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Remote | Persistent |\n\n```ts\nconst storage = "remote";\n```\n\n## Added section\n\nRead the *updated* guidance. [Unsafe](javascript:alert(1))\n\n<script>window.markdownDiffInjected = true</script>\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
+};
+export function createReviewFixture({ remote = false, missingBaseline = false, comparison }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
   const load = async () => remote ? await (await fetch('/__review-fixture')).json() as ReviewFixtureState : state;
   const store = async (next: ReviewFixtureState) => { if (remote) await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) }); else state = next; };
   function packet(id: string, revision: number): OpenReview {
     const request: ReviewRequest = { kind: 'review-request', schema_version: 1, request_id: id, revision_id: `revision-${revision}`, workspace: reviewScope.workspace, bead_id: 'task-reader', related_beads: [], thread: 'threads/task-reader', title: id === 'reader-01' ? 'Reader follow-up' : 'Independent reader review', purpose: 'Review the pinned reader plan and two forms.', question: revision === 1 ? 'What should we do next?' : 'Updated question: which changes should we make?', status: 'published', change_kind: 'implemented', members: [
-      { id: 'plan', kind: 'document', label: 'Reader plan', target, baseline },
+      { id: 'plan', kind: 'document', label: 'Reader plan', target: { ...target, resource: comparison?.path ?? target.resource }, baseline: { ...baseline, resource: comparison?.path ?? baseline.resource } },
       { id: 'reader', kind: 'form', label: 'Reader decisions', bead_id: 'task-reader', form_id: 'reader_decisions', dsl: formPin },
       { id: 'experience', kind: 'form', label: 'Review experience', bead_id: 'task-reader', form_id: 'review_feedback', dsl: secondPin },
     ] };
@@ -26,6 +32,8 @@ export function createReviewFixture({ remote = false, missingBaseline = false } 
   }
   const read = async (_scope: WorkspaceScope, pin: ReviewPin) => {
     if ((await load()).missingBaseline && pin.version === baseline.version) throw new Error('Historical baseline is unavailable.');
+    if (comparison && pin.version === target.version) return comparison.after;
+    if (comparison && pin.version === baseline.version) return comparison.before;
     const text = documents.get(pin.version);
     if (text === undefined) throw new Error('Pinned resource unavailable.');
     return text;

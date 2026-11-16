@@ -196,18 +196,74 @@ test('partial form failure retains the successful response receipt', async ({ pa
 });
 test('full document stays readable when its pinned baseline is unavailable', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--unavailable-baseline&viewMode=story');
-  await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible();
+  await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Changes', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Pinned baseline unavailable');
   await page.getByRole('button', { name: 'Full document', exact: true }).click();
   await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible();
 });
-test('pinned changes render a read-only diff and the baseline remains inspectable', async ({ page }) => {
+test('pinned Markdown changes render rich text and the baseline remains inspectable', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story');
   await page.getByRole('button', { name: 'Changes', exact: true }).click();
-  await expect(page.locator('.monaco-diff-editor')).toBeVisible();
+  const changes = page.getByRole('region', { name: 'Document changes', exact: true });
+  await expect(changes.locator('[data-change=removed]')).toContainText('The baseline had browser-only drafts.');
+  await expect(changes.locator('[data-change=added]')).toContainText('Remote drafts survive reopening.');
+  await expect(changes.getByRole('heading', { name: 'Reader plan', exact: true })).toBeVisible();
+  await expect(page.locator('.monaco-diff-editor')).toHaveCount(0);
   await page.getByRole('button', { name: 'Baseline', exact: true }).click();
   await expect(page.getByText('The baseline had browser-only drafts.')).toBeVisible();
+});
+
+for (const width of [1280, 390]) {
+  test(`rich Markdown changes preserve formatting, safety and document tabs at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/iframe.html?id=web-app-reviews--rich-changes&viewMode=story');
+    await page.getByRole('button', { name: 'Changes', exact: true }).click();
+    const changes = page.getByRole('region', { name: 'Document changes', exact: true });
+    const removed = changes.locator('[data-change=removed]');
+    const added = changes.locator('[data-change=added]');
+    await expect(changes.getByRole('heading', { name: 'Reader plan', exact: true })).toHaveCount(1);
+    await expect(removed.locator('strong')).toHaveText('local drafts');
+    await expect(added.locator('strong')).toHaveText('remote drafts');
+    await expect(removed.getByRole('listitem')).toHaveText(['Save in the browser', 'Reopen this tab']);
+    await expect(added.getByRole('listitem')).toHaveText(['Save remotely', 'Reopen any tab']);
+    await expect(removed.getByRole('table')).toContainText('One tab');
+    await expect(added.getByRole('table')).toContainText('Persistent');
+    await expect(removed.locator('blockquote')).toHaveText('This warning was removed.');
+    await expect(removed.locator('pre code')).toHaveText('const storage = "local";\n');
+    await expect(added.locator('pre code')).toHaveText('const storage = "remote";\n');
+    await expect(added.getByRole('heading', { name: 'Added section', exact: true })).toBeVisible();
+    await expect(added.locator('em')).toHaveText('updated');
+    await expect(added.getByRole('link', { name: 'workspace', exact: true })).toHaveAttribute('href', 'https://example.com/guide');
+    await expect(added.locator('a').filter({ hasText: 'Unsafe' })).not.toHaveAttribute('href');
+    await expect(changes.locator('script, [onclick], [onerror]')).toHaveCount(0);
+    expect(await page.evaluate(() => 'markdownDiffInjected' in window)).toBe(false);
+    await expect(changes.getByRole('img', { name: 'Mermaid diagram', exact: true })).toBeVisible({ timeout: 30000 });
+    await expect(changes.locator('svg')).toHaveCount(1);
+    expect(await page.evaluate(() => document.body.scrollWidth <= window.innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Baseline', exact: true }).click();
+    await expect(page.locator('.markdown-preview strong')).toHaveText('local drafts');
+    await expect(page.getByRole('heading', { name: 'Added section', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Full document', exact: true }).click();
+    await expect(page.locator('.markdown-preview strong')).toHaveText('remote drafts');
+    await expect(page.getByRole('heading', { name: 'Added section', exact: true })).toBeVisible();
+  });
+}
+
+test('identical Markdown revisions show one readable document and a no-changes status', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-reviews--unchanged&viewMode=story');
+  await page.getByRole('button', { name: 'Changes', exact: true }).click();
+  const changes = page.getByRole('region', { name: 'Document changes', exact: true });
+  await expect(changes.getByRole('status')).toHaveText('No rendered changes between these pinned revisions.');
+  await expect(changes.locator('[data-change=added], [data-change=removed]')).toHaveCount(0);
+  await expect(changes.getByRole('heading', { name: 'Reader plan', exact: true })).toHaveCount(1);
+});
+
+test('non-Markdown changes retain the read-only source diff', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-reviews--source-changes&viewMode=story');
+  await page.getByRole('button', { name: 'Changes', exact: true }).click();
+  await expect(page.locator('.monaco-diff-editor')).toBeVisible();
+  await expect(page.locator('.review-markdown-diff')).toHaveCount(0);
 });
 test('repeated packet submission preserves the original receipt without a second response', async ({ page }) => {
   let state: any = { artifacts: [], revision: 1 };

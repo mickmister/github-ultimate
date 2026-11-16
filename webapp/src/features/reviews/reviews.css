@@ -35,6 +35,11 @@ body:has(> .review-zen[open]) > :not(.review-zen) { visibility: hidden; }
 .review-form-actions [role=status], .review-form-actions [role=alert] { margin-block: .75rem; }
 .review-form-actions [role=alert] { color: var(--error); }
 .review-diff { height: 65vh; min-height: 300px; }
+.review-markdown-diff { min-height: 0; }
+.review-markdown-change { min-width: 0; padding: .5rem 1rem; margin-block: .75rem; border-inline-start: 3px solid transparent; }
+.review-markdown-change[data-change=added] { border-color: #238636; background: #23863618; }
+.review-markdown-change[data-change=removed] { border-color: #da3633; background: #da363318; }
+.review-markdown-change-label { margin: 0; font-size: .8rem; font-weight: 600; }
 .review-summary code, .review-submit code { overflow-wrap: anywhere; }
 .review-submit { margin-block: 1rem; }
 .review-submit button { margin: .25rem; }
