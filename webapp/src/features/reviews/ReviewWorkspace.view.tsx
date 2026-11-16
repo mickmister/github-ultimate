@@ -6,6 +6,7 @@ import { ReviewSession } from './ReviewSession';
 import { reviewHref } from './ReviewWorkspace';
 import { reviewStatus } from './model';
 import './reviews.css';
+import { ReviewDiagnostics } from './ReviewDiagnostics';
 
 interface Props {
   connections: readonly ConnectionDTO[]; connectionId: string; repository: string; workspace: string;
@@ -16,6 +17,7 @@ interface Props {
 export function ReviewWorkspaceView({ connections, connectionId, repository, workspace, scope, listing, opened, busy, error, service, actions }: Props) {
   return <main className="app-shell review-workspace"><header className="page-header"><div><p className="eyebrow">GitHub Ultimate</p><h1>{opened ? opened.request.title : 'Review requests'}</h1></div>
     <nav><a href={scope ? reviewHref(scope) : '#/reviews'}>Review inbox</a><a href={`#/documents${scope ? '?' + new URLSearchParams({ connection: scope.connectionId, repository: scope.repository, workspace: scope.workspace }) : ''}`}>Workspace documents</a></nav></header>
+    <ReviewDiagnostics />
     {!opened && <form className="connection-panel connection-fields" onSubmit={event => { event.preventDefault(); actions.load(); }}>
       <label>Approved connection<select value={connectionId} onChange={event => actions.setConnectionId(event.target.value)}><option value="">Choose a connection</option>{connections.map(connection => <option key={connection.id} value={connection.id}>{connection.name} · {connection.account}</option>)}</select></label>
       <label>Storage repository<input value={repository} placeholder="owner/storage" onChange={event => actions.setRepository(event.target.value)} /></label>
