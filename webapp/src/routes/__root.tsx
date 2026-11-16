@@ -3,6 +3,7 @@ import { RootDocument } from '../views/RootDocument.view';
 import { AppPending } from '../views/AppPending.view';
 import { FeedbackProvider } from '../features/feedback/FeedbackProvider';
 import { Customization } from '../features/customization/Customization';
+import { AppSettingsView } from '../views/AppSettings.view';
 
 export const Route = createRootRoute({
   head: () => ({
@@ -25,5 +26,5 @@ function RootContent() {
   const reviewing = useRouterState({ select: state => state.location.pathname === '/reviews' || state.location.pathname.startsWith('/reviews/') });
   // Focused sessions provide their own remotely backed queue. Mounting the
   // general shell as well would expose two overlapping, unrelated queue buttons.
-  return <><Customization />{reviewing ? <Outlet /> : <FeedbackProvider><Outlet /></FeedbackProvider>}</>;
+  return <><AppSettingsView /><Customization />{reviewing ? <Outlet /> : <FeedbackProvider><Outlet /></FeedbackProvider>}</>;
 }

@@ -5,6 +5,7 @@
 input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:20px;margin-right:8px}
 </style></head><body>
 <h1>GitHub App connections</h1>
+<p>Build commit: <code id="build-commit">__BUILD_COMMIT__</code></p>
 <p>Add a named client App connection. Tokens stay in extension-origin credential storage, outside GitHub content scripts and hosted pages. Sign in and select an installation, then approve hosted origins for read access below. Workflow dispatch is not exposed yet.</p>
 <p>Configure the App with device flow and expiring user tokens enabled, Contents read, Actions write, and no Workflows permission. Keep this page open during sign-in; reopening it resumes an unexpired device authorization. No client secret or private key is needed.</p>
 <form id="add"><h2>Add connection</h2>

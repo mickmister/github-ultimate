@@ -26,8 +26,9 @@ if (browser === 'safari') {
 }
 await writeFile(`${outdir}/manifest.json`, JSON.stringify(manifest, null, 2) + '\n');
 const popup = await readFile('popup.html', 'utf8');
-await writeFile(`${outdir}/popup.html`, popup.replace('__BUILD_VERSION__', manifest.version_name));
-await copyFile('connections.html', `${outdir}/connections.html`);
+const buildCommit = `${commit}${dirty ? '-dirty' : ''}`;
+await writeFile(`${outdir}/popup.html`, popup.replace('__BUILD_VERSION__', manifest.version_name).replace('__BUILD_COMMIT__', buildCommit));
+await writeFile(`${outdir}/connections.html`, (await readFile('connections.html', 'utf8')).replace('__BUILD_COMMIT__', buildCommit));
 for (const file of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) await copyFile(file, `${outdir}/${file}`);
 let licenses = '';
 const licensed = new Set();
