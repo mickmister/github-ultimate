@@ -1,76 +1,98 @@
 import { useEffect, useRef, useState } from 'react';
 import { bridgeRequest } from '../../../../hosted/client';
-import { openBeadsSample, type BeadsOperation, type BeadsResult, type BeadsSession } from '../../../../hosted/beads-sample';
+import { openBeadsSample, type BeadsResult, type BeadsSession } from '../../../../hosted/beads-sample';
 import type { HostedConnection } from '../../../../src/hosted-protocol';
 import { WorkspaceReader } from '../../../../hosted/workspaces';
+import { applicationStorage } from '../../app-storage';
+import { lastWorkspaceKey, readWorkspace, validWorkspace, workspaceChoice, type WorkspaceChoice } from './preferences';
 import { BeadsSampleView } from './BeadsSample.view';
 
-export function BeadsSample() {
+const services = {
+  connections: () => bridgeRequest<HostedConnection[]>({ operation: 'connections' }),
+  async discover(choice: WorkspaceChoice, installationId: number) {
+    const reader = new WorkspaceReader(bridgeRequest, choice.connection, choice.repository, installationId);
+    return (await reader.discover()).filter(value => value.dolt && value.documents).map(value => value.name);
+  },
+  open: openBeadsSample, storage: applicationStorage,
+};
+export function BeadsSample({ host = services }: { host?: typeof services }) {
   const [connections, setConnections] = useState<HostedConnection[]>([]);
-  const [connection, setConnection] = useState(''), [repository, setRepository] = useState(''), [workspace, setWorkspace] = useState('');
-  const [workspaces, setWorkspaces] = useState<string[]>([]), [status, setStatus] = useState('Connecting to the workspace host…');
-  const [error, setError] = useState(''), [busy, setBusy] = useState(false), [session, setSession] = useState<BeadsSession>();
-  const [results, setResults] = useState<BeadsResult[]>([]), [readOnly, setReadOnly] = useState(false);
-  const active = useRef<{ controller: AbortController; session?: BeadsSession } | undefined>(undefined);
-  const epoch = useRef(0);
+  const [choice, setChoice] = useState<WorkspaceChoice>({ connection: '', repository: '', workspace: '' });
+  const [loadedChoice, setLoadedChoice] = useState<WorkspaceChoice>();
+  const [workspaces, setWorkspaces] = useState<string[]>([]), [status, setStatus] = useState('Connecting…');
+  const [error, setError] = useState(''), [busy, setBusy] = useState(true), [editing, setEditing] = useState(false);
+  const [results, setResults] = useState<BeadsResult[]>([]);
+  const active = useRef<{ controller: AbortController; session?: BeadsSession } | undefined>(undefined), epoch = useRef(0);
+  const storage = useRef<Awaited<ReturnType<typeof applicationStorage>> | undefined>(undefined);
   function reset() {
     epoch.current++; active.current?.controller.abort(); active.current?.session?.dispose(); active.current = undefined;
-    setSession(undefined); setResults([]); setReadOnly(false); setBusy(false); setError('');
+    setResults([]); setLoadedChoice(undefined); setBusy(false); setError('');
   }
-  useEffect(() => {
-    let current = true;
-    const params = new URLSearchParams(location.hash.split('?')[1] ?? location.search);
-    setRepository(params.get('repository') ?? ''); setWorkspace(params.get('workspace') ?? '');
-    void bridgeRequest<HostedConnection[]>({ operation: 'connections' }).then(values => {
-      if (!current) return;
-      setConnections(values); setConnection(params.get('connection') ?? (values.length === 1 ? values[0].id : ''));
-      setStatus('Choose a workspace, then load and query its native Dolt snapshot.');
-    }).catch(reason => { if (current) { setError(reason instanceof Error ? reason.message : 'Host connection failed.'); setStatus('Connect through the extension or Alohak settings, then reload.'); } });
-    return () => { current = false; epoch.current++; active.current?.controller.abort(); active.current?.session?.dispose(); };
-  }, []);
-  const selected = connections.find(value => value.id === connection);
-  const valid = Boolean(selected?.installation && /^[\w.-]+\/[\w.-]+$/.test(repository) && !repository.split('/').some(part => part === '.' || part === '..'));
-  async function discover() {
-    if (!valid || !selected?.installation) return;
-    reset(); const attempt = epoch.current; setBusy(true); setStatus('Discovering published native workspaces…');
-    try {
-      const reader = new WorkspaceReader(bridgeRequest, connection, repository, selected.installation.id);
-      const values = (await reader.discover()).filter(value => value.dolt && value.documents).map(value => value.name);
-      if (attempt !== epoch.current) return;
-      setWorkspaces(values); setStatus(`Found ${values.length} workspace(s) with native Beads and a workspace manifest.`);
-    } catch (reason) { if (attempt === epoch.current) setError(reason instanceof Error ? reason.message : 'Discovery failed.'); }
-    finally { if (attempt === epoch.current) setBusy(false); }
-  }
-  async function run(current: BeadsSession, operations: BeadsOperation[]) {
-    const values: BeadsResult[] = [];
-    for (const operation of operations) values.push(await current.query(operation));
-    const state = await current.state();
-    if (!state.putRejected || !state.commitRejected || !state.sealed) throw new Error('The engine did not confirm its read-only boundary.');
-    return values;
-  }
-  async function load() {
-    if (!valid || !selected?.installation || !/^[a-zA-Z0-9_-]{1,200}$/.test(workspace)) return;
+  async function load(value: WorkspaceChoice, available = connections) {
+    const selected = available.find(connection => connection.id === value.connection);
+    if (!validWorkspace(value) || !selected?.installation) { setEditing(true); setError('Choose an approved connection and workspace.'); return; }
     reset(); const attempt = epoch.current, controller = new AbortController(); active.current = { controller };
-    setBusy(true);
+    setBusy(true); setEditing(false); setLoadedChoice(value); setStatus('Loading tasks…');
+    // Remember the explicit choice independently of the network operation. It is
+    // restored only after checking the host's current approved connections.
     try {
-      const opened = await openBeadsSample({ connectionId: connection, installationId: selected.installation.id, repository, workspace }, controller.signal, value => { if (attempt === epoch.current) setStatus(value); });
+      if (!storage.current) throw new Error('Settings unavailable');
+      storage.current.setItem(lastWorkspaceKey, JSON.stringify(value));
+      void storage.current.flush().catch(() => { if (attempt === epoch.current) setError('Workspace settings could not be saved.'); });
+    } catch { setError('Workspace settings could not be saved.'); }
+    try {
+      const opened = await host.open({ connectionId: value.connection, installationId: selected.installation.id, repository: value.repository, workspace: value.workspace }, controller.signal, () => {});
       if (attempt !== epoch.current) { opened.dispose(); return; }
-      active.current!.session = opened; setSession(opened); setStatus('Running upstream Beads list, ready and blocked queries…');
-      const values = await run(opened, ['list', 'ready', 'blocked']);
-      if (attempt === epoch.current) { setResults(values); setReadOnly(true); setStatus('All three native Beads reads succeeded. Store writes and commits are rejected.'); }
+      active.current!.session = opened;
+      const values: BeadsResult[] = [];
+      for (const operation of ['list', 'ready', 'blocked'] as const) values.push(await opened.query(operation));
+      const state = await opened.state();
+      if (!state.putRejected || !state.commitRejected || !state.sealed) throw new Error('The task reader could not open a read-only snapshot.');
+      if (attempt === epoch.current) { setResults(values); setStatus(''); }
     } catch (reason) {
-      if (attempt === epoch.current) { setError(reason instanceof Error ? reason.message : 'Native Beads query failed.'); setStatus('The reads did not complete. Resolve the error, then load a fresh snapshot.'); active.current?.controller.abort(); active.current?.session?.dispose(); active.current = undefined; setSession(undefined); }
+      if (attempt === epoch.current) { setError(reason instanceof Error ? reason.message : 'Tasks could not be loaded.'); setStatus(''); controller.abort(); active.current?.session?.dispose(); active.current = undefined; }
     } finally { if (attempt === epoch.current) setBusy(false); }
   }
-  async function query(operation: BeadsOperation) {
-    if (!session || busy) return;
-    const attempt = epoch.current; setBusy(true); setError('');
-    try { const [result] = await run(session, [operation]); if (attempt === epoch.current) { setResults(values => [...values.filter(value => value.operation !== operation), result]); setStatus(`${operation} query succeeded against the same pinned Dolt commit.`); } }
-    catch (reason) { if (attempt === epoch.current) setError(reason instanceof Error ? reason.message : 'Query failed.'); }
-    finally { if (attempt === epoch.current) setBusy(false); }
+  useEffect(() => {
+    let stopped = false, navigate = () => {};
+    const locationChanged = () => navigate();
+    window.addEventListener('hashchange', locationChanged);
+    void (async () => {
+      // Storage failure must not prevent browsing or a supplied deep link.
+      let saved: WorkspaceChoice | undefined;
+      const [values] = await Promise.all([host.connections(), host.storage().then(opened => { if (!stopped) { storage.current = opened; saved = readWorkspace(opened.getItem(lastWorkspaceKey)); } }).catch(() => { if (!stopped) setError('Workspace settings could not be restored.'); })]);
+      if (stopped) return;
+      setConnections(values);
+      navigate = () => {
+        if (stopped) return;
+        const params = new URLSearchParams(location.hash.split('?')[1] ?? location.search);
+        const next = workspaceChoice(params, readWorkspace(storage.current?.getItem(lastWorkspaceKey) ?? null) ?? saved, values.length === 1 ? values[0].id : '');
+        setChoice(next); setBusy(false); setStatus('');
+        if (validWorkspace(next) && values.some(value => value.id === next.connection && value.installation)) void load(next, values);
+        else { reset(); setEditing(true); }
+      };
+      navigate();
+    })().catch(reason => { if (!stopped) { setError(reason instanceof Error ? reason.message : 'Connection failed.'); setStatus(''); setBusy(false); setEditing(true); } });
+    return () => { stopped = true; window.removeEventListener('hashchange', locationChanged); epoch.current++; active.current?.controller.abort(); active.current?.session?.dispose(); active.current = undefined; };
+  }, [host]);
+  const selected = connections.find(value => value.id === choice.connection);
+  const canDiscover = Boolean(selected?.installation && /^[\w.-]+\/[\w.-]+$/.test(choice.repository) && !choice.repository.split('/').some(part => part === '.' || part === '..'));
+  async function discover() {
+    if (!canDiscover || !selected?.installation) return;
+    const attempt = epoch.current; setBusy(true); setError(''); setStatus('Finding workspaces…');
+    try { const values = await host.discover(choice, selected.installation.id); if (attempt === epoch.current) setWorkspaces(values); }
+    catch (reason) { if (attempt === epoch.current) setError(reason instanceof Error ? reason.message : 'Workspaces could not be loaded.'); }
+    finally { if (attempt === epoch.current) { setBusy(false); setStatus(''); } }
   }
-  return <BeadsSampleView model={{ connections, connection, repository, workspace, workspaces, valid, busy, status, error, session, results, readOnly }} actions={{
-    connection(value) { reset(); setWorkspaces([]); setConnection(value); }, repository(value) { reset(); setWorkspaces([]); setRepository(value); }, workspace(value) { reset(); setWorkspace(value); },
-    discover: () => void discover(), load: () => void load(), query: operation => void query(operation), cancel() { reset(); setStatus('Cancelled. The isolated Worker was disposed.'); },
+  return <BeadsSampleView model={{ connections, choice, loadedChoice, workspaces, busy, status, error, editing, results, canDiscover }} actions={{
+    choice(patch) { setChoice(current => ({ ...current, ...patch })); if ('connection' in patch || 'repository' in patch) setWorkspaces([]); },
+    edit: () => setEditing(value => !value), discover: () => void discover(), load() {
+      if (validWorkspace(choice) && selected?.installation) {
+        const url = new URL(location.href); url.hash = '/beads?' + new URLSearchParams(choice);
+        history.replaceState(history.state, '', url);
+      }
+      void load(choice);
+    },
+    refresh: () => { if (loadedChoice) void load(loadedChoice); }, cancel() { reset(); setStatus(''); setEditing(true); },
   }} />;
 }
