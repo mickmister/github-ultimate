@@ -24,14 +24,14 @@ test('failed host work releases its count and byte reservation', async () => {
   blocked.release(); await failed; expect(await second).toBe('next');
 });
 
-test('file map overlaps three reads, preserves input order and respects the count cap', async () => {
-  const controller = new AbortController(), gates = Array.from({ length: 5 }, gate), started: number[] = [];
-  const result = mapReads([0, 1, 2, 3, 4], 3, controller.signal, async index => { started.push(index); await gates[index].promise; return index * 2; });
-  expect(started).toEqual([0, 1, 2]);
-  gates[2].release(); await vi.waitFor(() => expect(started).toEqual([0, 1, 2, 3]));
-  gates[1].release(); await vi.waitFor(() => expect(started).toEqual([0, 1, 2, 3, 4]));
+test('file map overlaps six reads, preserves input order and respects the count cap', async () => {
+  const controller = new AbortController(), gates = Array.from({ length: 8 }, gate), started: number[] = [];
+  const result = mapReads([0, 1, 2, 3, 4, 5, 6, 7], 6, controller.signal, async index => { started.push(index); await gates[index].promise; return index * 2; });
+  expect(started).toEqual([0, 1, 2, 3, 4, 5]);
+  gates[2].release(); await vi.waitFor(() => expect(started).toEqual([0, 1, 2, 3, 4, 5, 6]));
+  gates[1].release(); await vi.waitFor(() => expect(started).toEqual([0, 1, 2, 3, 4, 5, 6, 7]));
   gates.forEach(value => value.release());
-  expect(await result).toEqual([0, 2, 4, 6, 8]);
+  expect(await result).toEqual([0, 2, 4, 6, 8, 10, 12, 14]);
 });
 
 test.each(['cancel', 'error'])('file map stops scheduling on %s and drains active work before rejecting', async mode => {

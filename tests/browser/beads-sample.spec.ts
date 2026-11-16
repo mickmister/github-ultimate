@@ -71,7 +71,7 @@ test.describe('real selected workspace / published CDN engine', () => {
     await expect(page.getByRole('status')).toContainText('All three native Beads reads succeeded', { timeout: 300000 });
     await expect(page.getByRole('alert')).toHaveCount(0);
     expect(parts).toBeGreaterThan(0);
-    expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(3);
+    expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(6);
     for (const operation of ['list', 'ready', 'blocked']) await expect(page.getByRole('button', { name: `Run ${operation}`, exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Run ready', exact: true }).click();
     await expect(page.getByRole('status')).toContainText('ready query succeeded', { timeout: 30000 });

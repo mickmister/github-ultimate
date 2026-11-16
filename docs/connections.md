@@ -128,8 +128,8 @@ S3-compatible endpoints have separate connections and operation grants; see
 path authorization but do not use GitHub credentials or repository discovery.
 
 The broker serializes management, token rotation and authorization preparation.
-Online immutable Dolt blob downloads use a separate FIFO lane: up to three active
-calls and 128 MiB of reserved response limits, with 64 waiting calls. Ordinary
+Online immutable Dolt blob downloads use a separate FIFO lane: up to six active
+calls and 144 MiB of reserved response limits, with 64 waiting calls. Ordinary
 blob calls reserve 24 MiB and large-blob part calls reserve 96 MiB; this limits
 response admission, not total browser memory. Network/body reads run concurrently;
 state/cache changes and response authorization run on the serialized lane against

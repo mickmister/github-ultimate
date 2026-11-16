@@ -9,6 +9,7 @@ import { cacheSettingsSchema } from './cache-settings';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 import { copyCacheValue } from './workspace-cache';
 import { BoundedReads } from './bounded-reads';
+import { nativeReadConcurrency, nativeReadResponseBytes } from './git-read-limits';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -70,7 +71,7 @@ export type PublicConnection = ReturnType<typeof publicConnection>;
 export class Connections {
   private tail: Promise<unknown> = Promise.resolve();
   private apiCache = new ApiReadCache(96 * 1024 * 1024);
-  private nativeReads = new BoundedReads(3, 128 * 1024 * 1024);
+  private nativeReads = new BoundedReads(nativeReadConcurrency, nativeReadResponseBytes);
   private epoch = 0;
   constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache) {}
 

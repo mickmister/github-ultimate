@@ -62,32 +62,32 @@ async function nativeReads() {
   return { connection, origin, releases, request };
 }
 
-test('native HTTP bodies overlap with a three-read cap and refresh rotation stays serialized', async () => {
+test('native HTTP bodies overlap with a six-read cap and refresh rotation stays serialized', async () => {
   const { connection, origin, releases, request } = await nativeReads();
   clock += 28800000; oauthResults.push(credentials('rotated'));
-  const reads = Promise.all([1, 2, 3, 4].map(index => broker.handleHosted(origin + '/app/', request(index))));
-  await vi.waitFor(() => expect(releases).toHaveLength(3));
+  const reads = Promise.all([1, 2, 3, 4, 5, 6, 7].map(index => broker.handleHosted(origin + '/app/', request(index))));
+  await vi.waitFor(() => expect(releases).toHaveLength(6));
   expect(calls.filter(call => String(call.init.body).includes('grant_type=refresh_token'))).toHaveLength(1);
   expect(calls.filter(call => call.url.includes('/git/blobs/')).every(call => (call.init.headers as Record<string, string>).Authorization === 'Bearer ghu_access_rotated')).toBe(true);
   // Management is not blocked by downloading bodies; completion cannot save an
   // old token-bearing connection record over a newer rotation.
   oauthResults.push(credentials('newer')); await broker.handle({ operation: 'refresh', id: connection.id });
-  releases[0](); await vi.waitFor(() => expect(releases).toHaveLength(4));
+  releases[0](); await vi.waitFor(() => expect(releases).toHaveLength(7));
   releases.slice(1).forEach(release => release());
-  expect(await reads).toHaveLength(4);
+  expect(await reads).toHaveLength(7);
   expect((await store.get(connection.id))!.tokens!.refreshToken).toBe('ghr_refresh_newer');
 });
 
 test.each(['revokeOrigin', 'disconnect', 'remove', 'selectInstallation', 'narrowGrant', 'navigate'])('in-flight and queued native reads disclose nothing after %s', async operation => {
   const { connection, origin, releases, request } = await nativeReads(); let current = true;
-  const reads = Promise.allSettled([1, 2, 3, 4].map(index => broker.handleHosted(origin + '/app/', request(index), () => current)));
-  await vi.waitFor(() => expect(releases).toHaveLength(3));
+  const reads = Promise.allSettled([1, 2, 3, 4, 5, 6, 7].map(index => broker.handleHosted(origin + '/app/', request(index), () => current)));
+  await vi.waitFor(() => expect(releases).toHaveLength(6));
   if (operation === 'navigate') current = false;
   else if (operation === 'narrowGrant') await broker.handle({ operation: 'grantOrigin', id: connection.id, origin, subpath: '/other/', replace: { origin, subpath: '/app/' } });
   else await broker.handle({ operation, id: connection.id, ...(operation === 'revokeOrigin' ? { origin, subpath: '/app/' } : operation === 'selectInstallation' ? { installationId: 1 } : {}) });
   releases.forEach(release => release());
   expect((await reads).every(result => result.status === 'rejected')).toBe(true);
-  expect(releases).toHaveLength(3);
+  expect(releases).toHaveLength(6);
   if (operation === 'disconnect') expect((await store.get(connection.id))!.tokens).toBeUndefined();
   if (operation === 'remove') expect(await store.get(connection.id)).toBeUndefined();
 });

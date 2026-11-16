@@ -1,6 +1,7 @@
 import { bridgeRequest } from './client';
 import { WorkspaceReader, documentText, type GitTransport } from './workspaces';
 import { mapReads } from '../src/bounded-reads';
+import { nativeReadConcurrency } from '../src/git-read-limits';
 
 // Updated only with a verified immutable release; workspace metadata cannot select executable code.
 export const beadsRelease = {
@@ -77,11 +78,11 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     const fields = documentText(new Uint8Array(await (await fetch(manifestReference.url)).arrayBuffer())).trim().split(':');
     if (fields[0] !== '5' || fields[1] !== '__DOLT__' || !/^[0-9a-v]{32}$/.test(fields[3] ?? '')) throw new Error('Unsupported native Dolt manifest.');
     let completed = 0;
-    progress(`Downloading native files · 0/${entries.length} verified · up to 3 files in parallel`);
-    const files = await mapReads(entries, 3, signal, async entry => {
+    progress(`Downloading native files · 0/${entries.length} verified · up to ${nativeReadConcurrency} files in parallel`);
+    const files = await mapReads(entries, nativeReadConcurrency, signal, async entry => {
       const file = await reference(entry);
       completed++;
-      if (!signal.aborted) progress(`Verified native files ${completed}/${entries.length} · ${entry.path} · up to 3 files in parallel`);
+      if (!signal.aborted) progress(`Verified native files ${completed}/${entries.length} · ${entry.path} · up to ${nativeReadConcurrency} files in parallel`);
       return file;
     });
     progress('Loading the integrity-pinned WASM engine and decoding native Dolt chunks…');

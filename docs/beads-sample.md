@@ -16,8 +16,8 @@ online authorization per part, and a bounded 96 MiB transient API cache. Ordinar
 document reads remain capped at 16 MiB. Update the extension or Alohak if the
 page reports that large native reads are unavailable.
 
-Native files download with up to three concurrent file reads. The updated host
-also permits three native blob reads, reserving at most 128 MiB of aggregate
+Native files download with up to six concurrent file reads. The updated host
+also permits six native blob reads, reserving at most 144 MiB of aggregate
 upstream response limits (24 MiB per ordinary blob, 96 MiB per large-blob part),
 with at most 64 waiting calls. This is a response-admission budget, not a total
 browser-memory limit. Authorization and token rotation remain serialized; native
