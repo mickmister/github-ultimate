@@ -58,23 +58,68 @@ are retained and the new record is not admitted.
   where available. Uploads remain network-only and invalidate cached results.
   OAuth/token responses and mutation responses are never cache-replayed.
 
-## Foundation boundary
+## Complete Documents snapshots
 
-This is **read-through persistence**, not whole-workspace prefetch. Settings/status
-report `completeSnapshots: false`; an unopened document, evicted record or object
-over the current transport limit may be unavailable offline. The mobile app shell
-is still loaded remotely. Current mobile capabilities do not include S3 or review
-submission merely because a cache adapter exists.
+Opening a workspace in the Documents app starts background filling after the
+foreground open completes. The open document has first priority, followed by
+review request/form files and then the remaining Documents objects. Browsing is
+not held busy by prefetch. The page displays progress, completion or a paused
+reason separately from foreground loading/errors.
 
-The next slice owns complete Documents inventories, resumable prioritized fills,
-old-snapshot garbage collection, active review retention and large-object/tree
-transport. The Beads sample now reads native Dolt blobs up to 64 MiB using bounded
+The host's `documentSnapshots` capability exposes bounded `documentCache` fill and
+restore calls. A fill downloads at most one missing document blob (plus manifest
+and inventory metadata when first preparing a snapshot). Objects are deduplicated
+by OID within the workspace. Persisted, checksummed objects form the resume journal;
+closing the page/browser or replacing the mobile WebView pauses filling without
+discarding its completed downloads. Reopen online, focus/reconnect or visible-page
+polling retries a paused fill. An old preview never replaces a newer pending fill.
+
+The host validates the workspace manifest and complete Git tree, then verifies
+every required blob's Git hash and size before promotion. The completed-snapshot
+index replacement and old-object collection share one IndexedDB/SQLite adapter
+transaction. The last complete snapshot remains available during interrupted or
+over-capacity refreshes. Completed and pending snapshots share the configured byte
+budget; if both cannot fit, caching pauses rather than destroying the last good
+snapshot. The new snapshot is usable online while its fill is incomplete.
+
+Restore prefers the last complete snapshot, independently of cached mutable refs.
+After restoration, live browsing checks the latest published revision. Once a
+snapshot is complete, even documents never individually opened can be read from
+that host's cache. Corruption or missing objects invalidate completeness and are
+repaired on a subsequent online fill. Unsupported files, missing sizes, truncated
+trees, manifests over 256 KiB and document blobs over 16 MiB pause completion with
+an explicit reason; partial inventories are never promoted.
+
+Review reads on capable hosts conservatively retain their pinned commit/tree/blob
+resources across latest-snapshot collection. These pins persist across page and
+host restarts and are released with whole-workspace eviction or access cleanup.
+At the bounded pin-index limit, individual collection is disabled for that
+workspace rather than deleting a potentially active revision. Count/byte eviction
+still applies to the workspace as a whole; this is disposable cache, not durable
+storage for authored review data.
+
+## Remaining boundaries
+
+Completion is **per Documents snapshot**, shown in the Documents app. The legacy
+aggregate settings field `completeSnapshots: false` remains a statement that the
+cache does not guarantee completeness for every workspace/namespace. Eviction,
+quota failure, an incomplete fill or unsupported objects can prevent offline reads.
+The remotely loaded app shell and its assets are not installed offline by this
+feature. Current mobile capabilities do not include S3 or review submission merely
+because a cache adapter exists. Installed-device lifecycle acceptance remains
+separate from adapter tests and native compilation.
+
+The Beads sample reads native Dolt blobs up to 64 MiB using bounded
 3 MiB bridge replies, with full Git hash verification after reassembly. These
 large-object parts use the connection-scoped transient API cache and are not
 persisted for offline replay. Ordinary document blobs retain their 16 MiB limit.
 
-Tests cover real SQLite file reopen, IndexedDB adapter replacement, count/byte
-eviction, corruption recovery, ETag reuse, access retirement, optimistic document
-rendering and packaged-extension browser restart with failed HTTP. Metro exports
+Tests cover resumable Documents fill across real SQLite file reopen and IndexedDB
+replacement, prioritized downloads, atomic promotion failure, last-complete
+retention, review pins, unsupported inventories, count/byte eviction, corruption
+repair, ETag reuse and access retirement. The packaged-extension browser test
+interrupts a background fill, replaces the browser, resumes it and then replaces
+the browser again with GitHub HTTP unavailable to read a never-opened document.
+Metro exports
 and native build CI cover both platforms; installed-device lifecycle acceptance
 must be recorded separately from compilation and Node SQLite adapter tests.
