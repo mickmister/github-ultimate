@@ -6,7 +6,8 @@ import './style.css';
 
 declare const __HOSTED_BUILD__: { branch: string; sha: string };
 document.getElementById('origin')!.textContent = location.origin;
-document.getElementById('build')!.textContent = `Branch: ${__HOSTED_BUILD__.branch} · source ${__HOSTED_BUILD__.sha.slice(0, 12)}`;
+document.getElementById('build')!.textContent = `Branch: ${__HOSTED_BUILD__.branch}`;
+document.getElementById('build-commit')!.textContent = __HOSTED_BUILD__.sha;
 const status = document.getElementById('status')!;
 const result = document.getElementById('result')!;
 const select = document.getElementById('connection') as HTMLSelectElement;

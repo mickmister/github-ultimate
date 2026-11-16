@@ -110,6 +110,7 @@ export default function App() {
       <Button title="Reload" disabled={!entry} onPress={() => { broker.invalidate(); setBootstrap(''); webView.current?.reload(); }} /></View>
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
       <Text accessibilityRole="header">Alohak</Text>
+      <Text selectable>Mobile build commit: {String(Constants.expoConfig?.extra?.buildCommit ?? 'unavailable')}</Text>
       <Text>Approve only a deployment whose scripts you trust. GitHub credentials stay in native secure storage; page storage and GitHub approvals are independent.</Text>
       <Text>Paste the complete hosted deployment URL supplied by your agent. This is the website URL, not an Expo installation link. The confirmed URL and your approvals are saved on this device.</Text>
       <TextInput accessibilityLabel="HTTPS entry URL" editable={!settingsBusy} autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/app/" style={styles.input} />

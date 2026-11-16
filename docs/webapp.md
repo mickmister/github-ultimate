@@ -153,6 +153,19 @@ the same `previewDirectory()` function used for publication. Set
 `GITHUB_REF_NAME` and `GITHUB_REPOSITORY` when building for another destination.
 `pnpm run webapp:build` builds the standalone SPA at `/` for local static use.
 
+## Build identity
+
+The full build commit is available in the hosted app's **Settings** menu and
+**Connection & storage settings**, and in the extension popup and **GitHub App
+connections** settings. Extension builds also retain the version and short hash;
+local modified checkouts have a `-dirty` suffix.
+
+Alohak's **Native settings** shows a selectable **Mobile build commit**. It comes
+from the running mobile bundle's Expo configuration (including OTA updates),
+independently of the hosted deployment URL. Builds resolve the checked-out source;
+EAS source archives without Git use `EAS_BUILD_GIT_COMMIT_HASH`. Older mobile
+bundles without this metadata display `unavailable`.
+
 ## Rich Markdown review changes
 
 For a pinned Markdown document with a baseline, **Changes** shows a unified,

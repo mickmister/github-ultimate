@@ -65,6 +65,7 @@ label:not(.monaco-editor *) { display: grid; gap: 6px; font-size: .875rem; font-
 .document-toolbar button[aria-pressed=true] { border-color: var(--accent); color: var(--accent); background: var(--selected); }
 .monaco-host { height: clamp(320px, 65vh, 900px); width: 100%; min-width: 0; border: 1px solid var(--line); }
 .document-placeholder { min-height: 280px; color: var(--muted); }
+.app-settings code { overflow-wrap: anywhere; }
 .markdown-preview { min-height: 320px; overflow-wrap: anywhere; line-height: 1.75; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3 { margin: 24px 0 12px; }
 .markdown-preview pre { white-space: pre-wrap; overflow-wrap: anywhere; background: var(--bg); padding: 16px; border: 1px solid var(--line); border-radius: 8px; }

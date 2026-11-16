@@ -18,6 +18,11 @@ for (const browser of ['chrome', 'safari']) {
     expect(manifest.version_name).toBe(display);
     expect(readFileSync(`${directory}/popup.html`, 'utf8')).toContain(`Version ${display}`);
     expect(readFileSync(`${directory}/popup.html`, 'utf8')).not.toContain('__BUILD_VERSION__');
+    for (const page of ['popup', 'connections']) {
+      const html = readFileSync(`${directory}/${page}.html`, 'utf8');
+      expect(html).toContain(`${commit}${dirty ? '-dirty' : ''}</code>`);
+      expect(html).not.toContain('__BUILD_COMMIT__');
+    }
     expect(manifest.options_ui.page).toBe('connections.html');
     expect(manifest.host_permissions).toEqual(['https://github.com/*', 'https://api.github.com/*']);
     expect(manifest.background).toEqual(browser === 'safari' ? { scripts: ['background.js'], persistent: false } : { service_worker: 'background.js' });
