@@ -15,7 +15,9 @@ export interface ReviewsModuleV1 {
   save(scope: WorkspaceScope, value: ReviewArtifact, expected: string | null): Promise<ReviewReceipt>;
 }
 export function createHostedReviews(send: GitTransport = bridgeRequest): ReviewsModuleV1 {
-  const reader = (scope: WorkspaceScope, cached = false) => new WorkspaceReader(cached ? request => send({ ...request, cacheOnly: true }) : send, scope.connectionId, scope.repository, scope.installationId, scope.workspace);
+  let support: Promise<boolean> | undefined;
+  const retain = () => support ??= bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' }).then(value => value.capabilities.includes('documentSnapshots'));
+  const reader = (scope: WorkspaceScope, cached = false) => new WorkspaceReader(async request => send({ ...request, ...(await retain() ? { cacheRetain: true } : {}), ...(cached ? { cacheOnly: true } : {}) }), scope.connectionId, scope.repository, scope.installationId, scope.workspace);
   const reviews = (scope: WorkspaceScope) => new ReviewReader(reader(scope), scope.workspace);
   async function list(scope: WorkspaceScope, cached = false) {
       const connections = await bridgeRequest<HostedConnection[]>({ operation: 'connections' });
