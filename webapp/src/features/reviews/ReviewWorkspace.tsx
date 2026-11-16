@@ -5,6 +5,7 @@ import type { ReviewListing } from '../../app-hooks/reviews';
 import type { OpenReview } from '../../../../hosted/reviews';
 import { reviewOid, requestResource } from '../../../../src/review-protocol';
 import { ReviewWorkspaceView } from './ReviewWorkspace.view';
+import { installReviewPerf, measure } from '../../../../hosted/performance';
 
 export interface ReviewLocation { connection?: string; repository?: string; workspace?: string; version?: string; snapshot?: string; requestId?: string }
 export function parseReviewSearch(search: Record<string, unknown>): Omit<ReviewLocation, 'requestId'> {
@@ -33,17 +34,22 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
     if (!scope || JSON.stringify(next) !== JSON.stringify(scope)) { setListing(null); setOpened(null); }
     try {
       if (!hooks.modules.reviews) throw new Error('This host does not provide review requests.');
-      try {
-        const cached = await hooks.modules.reviews.listCached?.(next);
-        if (cached && generation.current === token) { setScope(next); setListing(cached); }
-      } catch { /* Partial cache or a host without persistence; use fresh reads. */ }
-      const found = await hooks.modules.reviews.list(next);
+      const service = hooks.modules.reviews;
+      const requestId = (initial ? location.requestId : opened?.request.request_id) ?? undefined;
+      const pinned = initial && requestId && (location.version || location.snapshot)
+        ? { resource: requestResource(requestId), version_kind: 'git-blob' as const, version: reviewOid.parse(location.version), snapshot: reviewOid.parse(location.snapshot) } : undefined;
+      const openedPending = pinned ? service.open(next, pinned) : Promise.resolve(null);
+      // Cache restoration must not delay the live path. A late cached result must
+      // never overwrite live receipts or a draft the user has started editing.
+      let liveFinished = false;
+      if (!requestId) void service.listCached?.(next).then(cached => {
+        if (cached && !liveFinished && generation.current === token) { setScope(next); setListing(cached); }
+      }).catch(() => {});
+      const [found, pinnedReview] = await measure('reviews.load', () => Promise.all([service.list(next, requestId), openedPending]).finally(() => { liveFinished = true; }));
       let review: OpenReview | null = null;
       if (initial && location.requestId) {
-        if (location.version || location.snapshot) {
-          const version = reviewOid.parse(location.version), snapshot = reviewOid.parse(location.snapshot);
-          review = await hooks.modules.reviews.open(next, { resource: requestResource(location.requestId), version_kind: 'git-blob', version, snapshot });
-        } else review = found.requests.find(item => item.request.request_id === location.requestId) ?? null;
+        if (pinned) review = pinnedReview;
+        else review = found.requests.find(item => item.request.request_id === location.requestId) ?? null;
         if (!review) throw new Error('This review request was not found in the selected workspace.');
       }
       if (generation.current !== token) return;
@@ -59,6 +65,7 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
     finally { if (generation.current === token) setBusy(false); }
   }
   useEffect(() => {
+    installReviewPerf();
     let cancelled = false;
     void hooks.modules.documents.connect().then(async found => {
       if (cancelled) return;

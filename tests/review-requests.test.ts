@@ -6,6 +6,9 @@ import { writeReview } from '../src/review-writes';
 import { artifactResource, parseReviewRequest, reviewRequestSchema, validateReviewArtifact, type ReviewArtifact, type ReviewPin, type ReviewRequest } from '../src/review-protocol';
 import { reviewStatus, restoreReviewComments, storeReviewComments } from '../webapp/src/features/reviews/model';
 import { reviewBeadMetadata } from '../src/review-beads';
+import { createHostedReviews } from '../webapp/src/app-hooks/reviews';
+
+vi.mock('../hosted/client', () => ({ bridgeRequest: vi.fn(async (request: any) => request.operation === 'discover' ? { capabilities: [] } : [{ id: 'a6075abf-226e-4c88-977c-e11404e59f32', installation: { id: 1 }, user: { id: 1 } }]) }));
 
 const scope = { id: 'a6075abf-226e-4c88-977c-e11404e59f32', installationId: 1, repository: 'owner/storage', workspace: 'workspace-a' };
 const oid = (text: string) => createHash('sha1').update(text).digest('hex');
@@ -42,6 +45,41 @@ class GitFixture {
   };
 }
 const manifest = JSON.stringify({ schema_version: 1, workspace: scope.workspace, observed_at: '2026-11-12T00:00:00Z', purpose: 'Review requests' });
+test('targeted review loading skips unrelated packets and foreign drafts, bounds concurrency and reuses pinned snapshots', async () => {
+  const { git, request, value } = fixture();
+  const files: Record<string, string> = {
+    'workspace/manifest.json': manifest,
+    'review-requests/reader-01/request.json': JSON.stringify(request),
+    'review-requests/unrelated/request.json': 'unrelated-invalid-manifest',
+    [`review-requests/reader-01/drafts/2/${value.request.version}.json`]: 'foreign-private-draft',
+  };
+  for (let index = 0; index < 8; index++) {
+    const response = { ...value, id: `response-${index}` };
+    files[artifactResource(response)] = JSON.stringify(response);
+  }
+  git.snapshot(files);
+  let active = 0, peak = 0;
+  const calls: any[] = [];
+  const service = createHostedReviews((async (input: any) => {
+    calls.push(input); active++; peak = Math.max(peak, active);
+    try { await new Promise(resolve => setTimeout(resolve, 2)); return await git.read(input); }
+    finally { active--; }
+  }) as GitTransport);
+  const selected = { connectionId: scope.id, ...scope };
+  const found = await service.list(selected, 'reader-01');
+  expect(found.requests.map(item => item.request.request_id)).toEqual(['reader-01']);
+  expect(found.artifacts).toHaveLength(8);
+  expect(peak).toBe(4);
+  const fetched = calls.filter(item => item.operation === 'gitBlob').map(item => git.blobs.get(item.oid));
+  expect(fetched).not.toContain('foreign-private-draft');
+  expect(fetched).not.toContain('unrelated-invalid-manifest');
+  const pin = (request.members[0] as Extract<ReviewRequest['members'][number], { kind: 'document' }>).target;
+  calls.length = 0;
+  expect(await service.read(selected, pin)).toBe('# Before');
+  expect(await service.read(selected, pin)).toBe('# Before');
+  expect(calls.filter(item => item.operation === 'gitCommit')).toHaveLength(1);
+  expect(calls.filter(item => item.operation === 'gitTree')).toHaveLength(1);
+});
 const formText = JSON.stringify({ format: 'standard', id: 'reader_decisions', task_id: 'task-reader', title: 'Reader choices', questions: [{ id: 'choice', type: 'choices', title: 'Pick', required: true, choices: [{ id: 'one', label: 'One' }, { id: 'two', label: 'Two' }], choiceGroups: [{ id: 'exclusive', mode: 'atMostOne', choiceIds: ['one', 'two'] }] }] });
 function fixture() {
   const git = new GitFixture();

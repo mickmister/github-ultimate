@@ -1,4 +1,7 @@
 .review-workspace { max-width: 1500px; margin: auto; }
+.review-diagnostics { margin-block: 1rem; font-size: .875rem; }
+.review-diagnostics pre { max-height: 18rem; overflow: auto; }
+.review-diagnostics button { margin: .25rem; }
 .review-inbox { padding: 0; list-style: none; display: grid; gap: 1rem; }
 .review-inbox > li, .review-summary, .review-submit { padding: 1rem; border: 1px solid var(--border, #8886); border-radius: .6rem; }
 .review-layout { display: grid; grid-template-columns: minmax(12rem, 20rem) minmax(0, 1fr); gap: 1rem; margin-block: 1rem; }

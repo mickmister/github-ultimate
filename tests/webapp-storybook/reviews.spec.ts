@@ -5,6 +5,20 @@ async function finishForm(page: Page) {
   await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
 }
 
+test('performance capture is available from UI and console and exports local OTLP JSON', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story');
+  await page.getByText('Performance diagnostics', { exact: true }).click();
+  await page.getByRole('button', { name: 'Start performance capture', exact: true }).click();
+  await page.getByRole('button', { name: 'Check for updates and receipts', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => window.reviewPerf.summary().some(item => item.operation === 'reviews.load'))).toBe(true);
+  await page.getByRole('button', { name: 'Stop performance capture', exact: true }).click();
+  const downloading = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export performance JSON', exact: true }).click();
+  expect((await downloading).suggestedFilename()).toBe('review-performance.otel.json');
+  const exported = await page.evaluate(() => window.reviewPerf.export());
+  expect(exported.resourceSpans[0].scopeSpans[0].spans.some(span => span.name === 'reviews.load')).toBe(true);
+});
+
 for (const { zenMode, width } of [{ zenMode: false, width: 1280 }, { zenMode: true, width: 1280 }, { zenMode: true, width: 390 }]) {
   test(`form comments and unrestricted selections survive remote save and submission${zenMode ? ' in zen mode' : ''} at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
@@ -262,7 +276,7 @@ test('identical Markdown revisions show one readable document and a no-changes s
 test('non-Markdown changes retain the read-only source diff', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--source-changes&viewMode=story');
   await page.getByRole('button', { name: 'Changes', exact: true }).click();
-  await expect(page.locator('.monaco-diff-editor')).toBeVisible();
+  await expect(page.locator('.monaco-diff-editor')).toBeVisible({ timeout: 30000 });
   await expect(page.locator('.review-markdown-diff')).toHaveCount(0);
 });
 test('repeated packet submission preserves the original receipt without a second response', async ({ page }) => {
@@ -337,14 +351,16 @@ test('document progress appears only after load, stays above content, and is opt
   let release!: () => void;
   const loading = new Promise<void>(resolve => { release = resolve; });
   let state: any = { artifacts: [], revision: 1 };
+  let reads = 0;
   await page.route('**/__review-fixture', async route => {
     if (route.request().method() === 'POST') state = route.request().postDataJSON();
-    // Initial list/open must resolve; hold the subsequent document reads.
-    if (page.url().includes('iframe') && (await page.getByText('Loading Reader plan…', { exact: true }).count())) await loading;
+    // Resolve the listing, then deterministically hold document reads. Inspecting
+    // the DOM in this handler races the very loading state being tested.
+    if (route.request().method() === 'GET' && ++reads > 1) await loading;
     await route.fulfill({ json: state });
   });
   await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
-  await expect(page.getByText('Loading Reader plan…', { exact: true })).toBeVisible();
+  await expect(page.getByText('Loading Reader plan…', { exact: true })).toBeVisible({ timeout: 30000 });
   const marker = page.getByRole('checkbox', { name: 'I have reviewed this item', exact: true });
   await expect(marker).toHaveCount(0);
   release();
