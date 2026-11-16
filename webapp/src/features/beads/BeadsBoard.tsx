@@ -7,7 +7,7 @@ import { saveFilter } from './preferences';
 
 export type BeadsBoardProps = { results: BeadsResult[]; workspace: string; initialDensity?: 'compact' | 'comfortable'; preferencesScope?: string };
 export function BeadsBoard({ results, workspace, initialDensity = 'compact', preferencesScope }: BeadsBoardProps) {
-  const { preferences, ready: preferencesReady, error: preferencesError, update } = useBoardPreferences(preferencesScope, initialDensity);
+  const { preferences, ready: preferencesReady, saving: preferencesSaving, error: preferencesError, update } = useBoardPreferences(preferencesScope, initialDensity);
   const { filters, density, views, selectedView } = preferences;
   const [selectedId, setSelectedId] = useState(''), [filtersOpen, setFiltersOpen] = useState(false), [filterName, setFilterName] = useState('');
   const [dark, setDark] = useState(false);
@@ -47,7 +47,7 @@ export function BeadsBoard({ results, workspace, initialDensity = 'compact', pre
   return <BeadsBoardView model={{ workspace, cards, columns, total: parsed.issues.length, filters, density, dark, options, selected,
     readyAvailable: Boolean(readyResult), blockedAvailable: Boolean(blockedResult), error: parsed.error,
     loaded: results.some(result => result.operation === 'list'), selectedReady: selected ? ready.has(selected.id) : false, selectedBlocked: selected ? blocked.has(selected.id) : false,
-    preferencesReady, preferencesError, views, selectedView, filtersOpen, filterName,
+    preferencesReady, preferencesSaving, preferencesError, views, selectedView, filtersOpen, filterName,
   }} actions={{ filter: patch => update(current => ({ ...current, filters: { ...current.filters, ...patch }, selectedView: '' })),
     clear: () => update(current => ({ ...current, filters: { ...initialBoardFilters }, selectedView: '' })),
     density: density => update(current => ({ ...current, density })), close,

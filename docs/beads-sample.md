@@ -60,6 +60,9 @@ editing the current search does not rewrite a saved set. Settings store only
 preferences, never issue bodies or engine state. Storage failures are shown as
 actionable errors and do not prevent task browsing. Saved sets share the existing
 page-storage quota; deleting a set frees space.
+Settings show **Saving…** while the selected storage host acknowledges a write.
+Wait for it to finish before reloading or closing the page; board changes are
+optimistic until then. Save/delete actions are disabled while a write is pending.
 
 Ready and Dependency blocked badges/filters use the native query results, not
 guesses based on stored status. An open issue can be dependency-blocked while

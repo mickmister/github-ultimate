@@ -10,7 +10,7 @@ type Props = {
   model: { workspace: string; cards: BoardCard[]; columns: ColumnConfig[]; total: number; filters: BoardFilters; density: string; dark: boolean;
     options: { labels: string[]; assignees: string[]; types: string[] }; selected?: BoardIssue;
     readyAvailable: boolean; blockedAvailable: boolean; selectedReady: boolean; selectedBlocked: boolean; error: string; loaded: boolean;
-    preferencesReady: boolean; preferencesError: string; views: SavedBoardFilter[]; selectedView: string; filtersOpen: boolean; filterName: string };
+    preferencesReady: boolean; preferencesSaving: boolean; preferencesError: string; views: SavedBoardFilter[]; selectedView: string; filtersOpen: boolean; filterName: string };
   actions: { filter(patch: Partial<BoardFilters>): void; clear(): void; density(value: 'compact' | 'comfortable'): void; close(): void;
     toggleFilters(): void; filterName(value: string): void; saveFilter(): void; selectView(name: string): void; deleteView(): void };
   detailsRef: RefObject<HTMLElement | null>;
@@ -26,7 +26,7 @@ function BeadsCardView({ card }: { card: KanbanCard }) {
 export function BeadsBoardView({ model, actions, detailsRef }: Props) {
   const Theme = model.dark ? WillowDark : Willow;
   return <section className="beads-board" aria-label="Workspace Beads Kanban">
-    <fieldset className="beads-controls" disabled={!model.preferencesReady} aria-label="Board filters">
+    <fieldset className="beads-controls" disabled={!model.preferencesReady} aria-label="Board filters" aria-busy={!model.preferencesReady || model.preferencesSaving}>
     <div className="beads-toolbar">
       <input aria-label="Search issues" type="search" value={model.filters.query} placeholder="Search issues" maxLength={500} onChange={event => actions.filter({ query: event.target.value })} />
       <select aria-label="Saved filters" value={model.selectedView} onChange={event => actions.selectView(event.target.value)}><option value="">{Object.values(model.filters).some(value => Boolean(value)) ? 'Custom filters' : 'All active issues'}</option>{model.views.map(view => <option key={view.name} value={view.name}>{view.name}</option>)}</select>
@@ -40,7 +40,7 @@ export function BeadsBoardView({ model, actions, detailsRef }: Props) {
       <label>Readiness<select value={model.filters.readiness} onChange={event => actions.filter({ readiness: event.target.value })}><option value="">All issues</option><option value="ready" disabled={!model.readyAvailable}>Ready</option><option value="blocked" disabled={!model.blockedAvailable}>Dependency blocked</option></select></label>
       <label>Card density<select value={model.density} onChange={event => actions.density(event.target.value as 'compact' | 'comfortable')}><option value="compact">Compact</option><option value="comfortable">Comfortable</option></select></label>
       <label className="beads-checkbox"><input type="checkbox" checked={model.filters.closed} onChange={event => actions.filter({ closed: event.target.checked })} />Include closed</label><button type="button" onClick={actions.clear}>Clear filters</button>
-    </div><form className="beads-save-filter" onSubmit={event => { event.preventDefault(); actions.saveFilter(); }}><input aria-label="Filter name" placeholder="Filter name" maxLength={60} value={model.filterName} onChange={event => actions.filterName(event.target.value)} /><button type="submit" disabled={!model.filterName.trim()}>Save filters</button><button type="button" disabled={!model.selectedView} onClick={actions.deleteView}>Delete saved filter</button></form></div>}
+    </div><form className="beads-save-filter" onSubmit={event => { event.preventDefault(); actions.saveFilter(); }}><input aria-label="Filter name" placeholder="Filter name" maxLength={60} value={model.filterName} onChange={event => actions.filterName(event.target.value)} /><button type="submit" aria-label="Save filters" disabled={!model.filterName.trim() || model.preferencesSaving}>{model.preferencesSaving ? 'Saving…' : 'Save filters'}</button><button type="button" disabled={!model.selectedView || model.preferencesSaving} onClick={actions.deleteView}>Delete saved filter</button></form></div>}
     </fieldset>
     {model.preferencesError && <p role="alert" className="error">{model.preferencesError}</p>}
     {model.error ? <p role="alert" className="error">{model.error}</p> : model.loaded && <>

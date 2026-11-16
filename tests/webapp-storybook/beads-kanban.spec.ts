@@ -67,6 +67,21 @@ test('virtualizes a large collection without limiting searches to rendered cards
 });
 
 test('remembers the workspace, auto-loads on return and persists active and named filters per workspace', async ({ page }) => {
+  // Exercise the public adapter boundary with a deliberately slow host so an
+  // optimistic UI update cannot accidentally stand in for durable completion.
+  await page.addInitScript(() => {
+    window.githubUltimateStorageAdapter = { protocolVersion: 1, backend: 'browser', async request(input) {
+      if (input.operation !== 'kvSnapshot') await new Promise(resolve => setTimeout(resolve, 150));
+      const current = JSON.parse(localStorage.getItem('kanban-test-host') ?? '{"revision":0,"entries":[]}');
+      if (input.operation === 'kvSnapshot') return current;
+      const entries = new Map<string, string>(current.entries);
+      if (input.operation === 'kvSet') entries.set(input.key, input.value);
+      if (input.operation === 'kvRemove') entries.delete(input.key);
+      if (input.operation === 'kvClear') entries.clear();
+      const next = { revision: current.revision + 1, entries: [...entries] };
+      localStorage.setItem('kanban-test-host', JSON.stringify(next)); return next;
+    } };
+  });
   await page.goto('/iframe.html?id=web-app-beads-kanban--remembered-workspace&viewMode=story');
   await page.getByLabel('Storage repository', { exact: true }).fill('example/storage');
   await page.getByLabel('Workspace', { exact: true }).fill('first');
@@ -81,11 +96,13 @@ test('remembers the workspace, auto-loads on return and persists active and name
   await expect(page.getByLabel('Saved filters')).toHaveValue('Mobile work');
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   // Return through the bare page URL: restoration must not depend on a deep link.
+  await expect(page.getByRole('group', { name: 'Board filters' })).toHaveAttribute('aria-busy', 'false');
   await page.evaluate(() => history.replaceState(history.state, '', location.pathname + location.search));
   await page.reload();
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   await expect(page.getByLabel('Saved filters')).toHaveValue('Mobile work');
   await page.getByLabel('Search issues').fill('demo-1.2');
+  await expect(page.getByRole('group', { name: 'Board filters' })).toHaveAttribute('aria-busy', 'false');
   await page.reload();
   await expect(page.locator('.beads-count')).toHaveText('1 / 7');
   await expect(page.getByLabel('Search issues')).toHaveValue('demo-1.2');
@@ -103,6 +120,8 @@ test('remembers the workspace, auto-loads on return and persists active and name
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   await page.getByRole('button', { name: /^Filters/ }).click();
   await page.getByRole('button', { name: 'Delete saved filter' }).click();
+  // The optimistic mirror updates before the selected storage host acknowledges.
+  await expect(page.getByRole('group', { name: 'Board filters' })).toHaveAttribute('aria-busy', 'false');
   await page.reload();
   await expect(page.locator('.beads-count')).toHaveText('2 / 7');
   await expect(page.getByLabel('Saved filters').locator('option[value="Mobile work"]')).toHaveCount(0);

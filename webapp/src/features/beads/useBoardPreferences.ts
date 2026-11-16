@@ -5,6 +5,7 @@ import { boardPreferencesKey, defaultPreferences, readPreferences, type BoardPre
 export function useBoardPreferences(scope: string | undefined, initialDensity: 'compact' | 'comfortable') {
   const [preferences, setPreferences] = useState(() => defaultPreferences(initialDensity));
   const [ready, setReady] = useState(!scope), [error, setError] = useState('');
+  const [saving, setSaving] = useState(false), revision = useRef(0);
   const storage = useRef<Awaited<ReturnType<typeof applicationStorage>> | undefined>(undefined), key = useRef('');
   const current = useRef(preferences);
   useEffect(() => {
@@ -25,13 +26,16 @@ export function useBoardPreferences(scope: string | undefined, initialDensity: '
     catch (reason) { setError(reason instanceof Error ? reason.message : 'Filter settings could not be saved.'); return; }
     current.current = next; setPreferences(next); setError('');
     if (!scope) return;
+    const attempt = ++revision.current;
     try {
       const serialized = JSON.stringify(next);
       if (serialized.length > 4096) throw new Error('Saved filters are full. Delete a filter or shorten its search.');
       if (!storage.current || !key.current) throw new Error('Filter settings could not be saved.');
       storage.current.setItem(key.current, serialized);
-      void storage.current.flush().catch(() => setError('Filter settings could not be saved.'));
-    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Filter settings could not be saved.'); }
+      setSaving(true);
+      void storage.current.flush().catch(() => { if (attempt === revision.current) setError('Filter settings could not be saved.'); })
+        .finally(() => { if (attempt === revision.current) setSaving(false); });
+    } catch (reason) { setSaving(false); setError(reason instanceof Error ? reason.message : 'Filter settings could not be saved.'); }
   }
-  return { preferences, ready, error, update };
+  return { preferences, ready, saving, error, update };
 }
