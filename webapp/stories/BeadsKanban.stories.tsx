@@ -2,6 +2,9 @@ import { useState } from 'react';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { BeadsBoard } from '../src/features/beads/BeadsBoard';
 import { fixtureIssues, fixtureResults } from './beads.fixtures';
+import { BeadsSample } from '../src/features/beads/BeadsSample';
+import { applicationStorage } from '../src/app-storage';
+import type { ComponentProps } from 'react';
 
 const meta = { title: 'Web app/Beads Kanban', component: BeadsBoard, parameters: { layout: 'fullscreen' } } satisfies Meta<typeof BeadsBoard>;
 export default meta;
@@ -19,3 +22,19 @@ function SwitchingWorkspace() {
   return <><button onClick={() => setSecond(value => !value)}>Switch workspace</button><BeadsBoard key={String(second)} workspace={second ? 'Second workspace' : 'First workspace'} results={fixtureResults(second ? [{ id: 'second-1', title: 'A different collection', status: 'open', priority: 2 }] : fixtureIssues)} /></>;
 }
 export const WorkspaceSwitch: Story = { render: () => <SwitchingWorkspace />, args: Compact.args };
+
+const pageHost: NonNullable<ComponentProps<typeof BeadsSample>['host']> = {
+  connections: async () => [{ id: '11111111-1111-4111-8111-111111111111', appId: 1, name: 'Example connection', installation: { id: 1, account: 'example' } }],
+  discover: async () => ['first', 'second'], storage: applicationStorage,
+  async open(scope, signal) {
+    signal.throwIfAborted();
+    const results = fixtureResults(scope.workspace === 'second' ? [{ id: 'second-1', title: 'A different collection', status: 'open', priority: 2 }] : fixtureIssues);
+    return { gitCommit: 'example-git', doltCommit: 'example-dolt', root: 'example-root', storageRoot: 'example-storage', fileCount: 1, encodedBytes: 100,
+      query: async operation => results.find(result => result.operation === operation)!,
+      state: async () => ({ putRejected: true, commitRejected: true, sealed: true, heapAllocBytes: 1, heapSysBytes: 1 }), dispose() {},
+    };
+  },
+};
+export const RememberedWorkspace: Story = { render: () => <BeadsSample host={pageHost} />, args: Compact.args };
+const unavailableHost = { ...pageHost, connections: async () => [] };
+export const RemovedConnection: Story = { render: () => <BeadsSample host={unavailableHost} />, args: Compact.args };

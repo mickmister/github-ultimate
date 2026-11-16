@@ -19,6 +19,17 @@ for (const [entry, page] of [['main', 'index'], ['settings', 'settings'], ['s3',
   const html = (await readFile(`hosted/${page}.html`, 'utf8')).replace(`./${entry}.ts`, `./${script}`).replace('</head>', `<link rel="stylesheet" href="./${stylesheet}"></head>`);
   await writeFile(`hosted-dist/${page}.html`, html);
 }
+// Diagnostics have their own small payload budget and do not enlarge legacy pages.
+const isolation = await build({ entryPoints: ['hosted/mobile-isolation.ts', 'hosted/mobile-isolation-frame.ts'], outdir: 'hosted-dist/isolation', entryNames: '[name]-[hash]', chunkNames: 'shared-[hash]', splitting: true, bundle: true, format: 'esm', target: ['chrome120', 'safari16.4'], minify: true, sourcemap: false, metafile: true, define: { __HOSTED_BUILD__: JSON.stringify(metadata) } });
+for (const [entry, page] of [['mobile-isolation', 'isolation/index'], ['mobile-isolation-frame', 'isolation/frame'], ['mobile-isolation-frame', 'mobile-isolation-outside']]) {
+  const output = Object.entries(isolation.metafile.outputs).find(([, value]) => value.entryPoint === `hosted/${entry}.ts`);
+  if (!output?.[1].cssBundle) throw new Error(`Isolation assets missing for ${entry}.`);
+  const nested = page.startsWith('isolation/'), prefix = nested ? './' : './isolation/';
+  const script = output[0].slice('hosted-dist/isolation/'.length), stylesheet = output[1].cssBundle.slice('hosted-dist/isolation/'.length);
+  const html = (await readFile(`hosted/${page}.html`, 'utf8')).replace(`${nested ? '../' : './'}${entry}.ts`, `${prefix}${script}`).replace('</head>', `<link rel="stylesheet" href="${prefix}${stylesheet}"></head>`);
+  await writeFile(`hosted-dist/${page}.html`, html);
+}
+if (await payloadSize('hosted-dist/isolation') > 32 * 1024) throw new Error('Isolation diagnostics exceed 32 KiB.');
 await writeFile('hosted-dist/build.json', JSON.stringify(metadata) + '\n');
 execFileSync('pnpm', ['--dir', 'webapp', 'build'], { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'production', WEBAPP_BASE_PATH: webappBase } });
 // Start's server build is used only to generate the SPA shell. Publish only

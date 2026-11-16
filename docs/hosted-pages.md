@@ -121,7 +121,7 @@ Ordinary blob JSON is capped at 24 MiB and decoded blobs at 16 MiB. The hosted r
 checks size and Git blob hash before displaying bytes, previews only regular
 UTF-8 text files, and never executes stored HTML or JavaScript.
 
-The dashboard Beads tab links to the [native read sample](beads-sample.md) at
+The dashboard Beads tab links to the [workspace Kanban](beads-sample.md) at
 `app/#/beads`. It resolves the selected workspace's native Git snapshot, verifies
 all native bytes, then uses the integrity-pinned CDN Worker/WASM to execute real
 upstream Beads `list`, `ready` and `blocked` operations. It reports both the Git

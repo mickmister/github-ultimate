@@ -27,3 +27,19 @@
 .beads-query-diagnostics { margin-block: 24px; }
 .beads-sample > details, .beads-sample > section { margin-block: 16px; }
 @media (max-width: 40rem) { .beads-board-viewport { height: 65dvh; } .beads-filters > label { flex-basis: 130px; } }
+.beads-page { max-width: none; padding: 16px; min-height: 100dvh; display: flex; flex-direction: column; }
+.beads-page-header { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.beads-page-header h1 { font-size: 1.25rem; margin: 0; }
+.beads-page-header nav { margin-inline-start: auto; }
+.beads-workspace-picker { margin-block: 12px; }
+.beads-loading { margin: 12px 0 0; }
+.beads-page .beads-board { flex: 1; margin-block: 12px 0; }
+.beads-page .beads-board-viewport { height: calc(100dvh - 150px); }
+.beads-controls { border: 0; padding: 0; margin: 0 0 12px; min-width: 0; }
+.beads-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.beads-toolbar > input { flex: 2 1 200px; width: auto; }
+.beads-toolbar > select { flex: 1 1 160px; width: auto; }
+.beads-count { white-space: nowrap; color: var(--muted); font-size: .875rem; margin-inline-start: auto; }
+.beads-filter-settings { margin-top: 12px; padding: 12px; border: 1px solid var(--line); border-radius: 8px; }
+.beads-save-filter { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.beads-save-filter input { flex: 1 1 160px; width: auto; }

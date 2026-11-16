@@ -76,7 +76,8 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   expect(await readdir('hosted-dist/app')).not.toContain('server');
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.map'))).toBe(false);
   // Keep the original app's size boundary separate from the new React bundle.
-  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app')).toBeLessThan(64 * 1024);
+  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation')).toBeLessThan(64 * 1024);
+  expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);
 }, 120000);
 
 test('Storybook staging replaces stale assets, preserves app files and binds public build metadata', async () => {
