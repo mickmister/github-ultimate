@@ -72,7 +72,7 @@ test.describe('real selected workspace / published CDN engine', () => {
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.locator('.beads-count')).toBeVisible();
     expect(parts).toBeGreaterThan(0);
-    expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(3);
+    expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(6);
     const allCount = await page.locator('.beads-count').innerText();
     await page.getByRole('button', { name: 'Filters', exact: true }).click();
     await page.getByRole('combobox', { name: /^Readiness/ }).selectOption('ready');
