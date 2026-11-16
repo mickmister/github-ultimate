@@ -1,0 +1,7 @@
+id: customization-inline-styles
+language: Tsx
+severity: hint
+message: Inline-style migration candidate; prefer shared theme tokens or semantic selectors. Review runtime geometry separately.
+rule:
+  kind: jsx_attribute
+  regex: '^style\s*='

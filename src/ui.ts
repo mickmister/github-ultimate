@@ -9,11 +9,12 @@ import { choiceOptions, isOtherChoice } from './choices';
 import { ADDITIONAL_NOTES_DESCRIPTION } from './form-copy';
 import css from './workspace.css?inline';
 import { trackViewport, stabilizeZen } from './viewport';
+import { customizeShadow } from './ui-customization';
 
 export function el<K extends keyof HTMLElementTagNameMap>(tag: K, text?: string, className?: string): HTMLElementTagNameMap[K] {
   const node = document.createElement(tag);
   if (text !== undefined) node.textContent = text;
-  if (className) node.className = className;
+  if (className) { node.className = className; const name = className.split(' ')[0]; node.dataset.ui = name === 'choice' ? 'review-choice' : name === 'form-card' ? 'form' : name; }
   return node;
 }
 export function button(text: string, action: () => void, className = ''): HTMLButtonElement {
@@ -31,7 +32,7 @@ export function markdown(text: string | undefined): HTMLDivElement {
 }
 export function shadow(host: HTMLElement): ShadowRoot {
   isolateExtensionKeyboard(); host.setAttribute('data-gu-root', '');
-  const root = host.attachShadow({ mode: 'open' }); const style = el('style'); style.textContent = css; root.append(style); trackViewport(host); return root;
+  const root = host.attachShadow({ mode: 'open' }); const style = el('style'); style.textContent = css; root.append(style); customizeShadow(root); trackViewport(host); return root;
 }
 function commentButton(label: string): HTMLButtonElement {
   const toggle = button('Leave a comment', () => {}, 'note-toggle'); toggle.title = 'Leave a comment'; toggle.setAttribute('aria-label', label.replace(/^Add note/, 'Leave a comment')); toggle.setAttribute('aria-expanded', 'false');

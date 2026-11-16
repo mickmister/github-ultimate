@@ -1,3 +1,4 @@
+/// <reference types="chrome" />
 // Safari exposes the promise-based browser namespace; Chromium exposes chrome.
 // Keep this lazy so the shared renderer also works in the web playground.
 export function extensionAPI(): typeof chrome {

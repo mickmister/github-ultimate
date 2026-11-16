@@ -3,7 +3,7 @@
   --bg: #fff; --surface: #f6f8fa; --fg: #1f2328; --muted: #59636e;
   --border: #d1d9e0; --accent: #6e40c9; --accent-soft: #f3efff;
   --wizard-bg: #edf4ff;
-  font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font: var(--ui-font-size, 14px)/var(--ui-line-height, 1.6) var(--ui-font-family, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif);
   color: var(--fg);
 }
 :host([data-theme=dark]) {
@@ -33,11 +33,11 @@ small, .muted { font-size: 12px; }
 fieldset { border: 0; border-top: 1px solid var(--border); padding: 18px 0 8px; margin: 20px 0 10px; min-width: 0; }
 legend { font-weight: 650; font-size: 16px; padding: 0 8px 0 0; max-width: 100%; overflow-wrap: anywhere; }
 .choice-hint { margin-bottom: 12px; }
-.choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; container-type: inline-size; margin: 10px 0; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); }
+.choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; container-type: inline-size; margin: 10px 0; border: 1px solid var(--border); border-radius: var(--ui-radius, 8px); background: var(--bg); }
 .choice:hover { border-color: var(--accent); }
 .choice:has(input[type=checkbox]:checked) { border-color: var(--accent); background: var(--accent-soft); }
 .choice:has(input[type=checkbox]:focus-visible) { outline: 2px solid var(--accent); outline-offset: 3px; }
-.choice-label { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: flex-start; gap: 12px; min-height: 48px; padding: 12px; margin: 0; font-weight: 600; cursor: pointer; }
+.choice-label { grid-column: 1 / -1; grid-row: 1; display: flex; align-items: flex-start; gap: 12px; min-height: var(--ui-control-size, 48px); padding: var(--ui-spacing, 12px); margin: 0; font-weight: 600; cursor: pointer; }
 .choice-label span { min-width: 0; align-self: center; overflow-wrap: anywhere; }
 .choice-label input { margin: 1px 0 0; accent-color: var(--accent); width: 24px; height: 24px; flex: 0 0 24px; }
 .choice-content { grid-column: 1 / -1; grid-row: 2; padding: 0 12px 10px 48px; min-width: 0; }
@@ -55,7 +55,7 @@ legend { font-weight: 650; font-size: 16px; padding: 0 8px 0 0; max-width: 100%;
 .badge { display: inline-block; padding: 2px 8px; background: var(--accent-soft); color: var(--accent); border-radius: 12px; font-size: 11px; font-weight: 600; margin-bottom: 6px; }
 .status-failed, .bead-blocked { color: #d1242f; background: #ffebe9; }
 .status-done, .bead-closed, .form-card[data-state=submitted] .form-state { color: #116329; background: #dafbe1; }
-textarea, input:not([type=checkbox]), select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: 6px; padding: 9px; width: 100%; max-width: 100%; }
+textarea, input:not([type=checkbox]), select { background: var(--bg); color: var(--fg); border: 1px solid var(--border); border-radius: var(--ui-radius, 6px); padding: var(--ui-spacing, 9px); width: 100%; max-width: 100%; }
 textarea { resize: vertical; min-height: 70px; margin-top: 6px; }
 label { display: block; margin: 8px 0; }
 details { margin: 9px 0; }
@@ -66,7 +66,7 @@ summary { cursor: pointer; font-size: 12px; color: var(--muted); }
 .note-toggle:hover, .note-toggle[aria-expanded=true] { background: var(--accent-soft); color: var(--accent); }
 .note-toggle.has-note::after { content: ""; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; position: absolute; right: 1px; top: 2px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
-button, .link-button { border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--fg); padding: 7px 12px; font-size: 12px; text-decoration: none; font-weight: 600; }
+button, .link-button { border: 1px solid var(--border); border-radius: var(--ui-radius, 6px); background: var(--surface); color: var(--fg); padding: var(--ui-spacing, 7px 12px); font-size: 12px; text-decoration: none; font-weight: 600; }
 button:hover, .link-button:hover { border-color: var(--accent); }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
 .error { white-space: pre-line; color: #d1242f; font-size: 13px; }

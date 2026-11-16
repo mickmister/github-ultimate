@@ -15,7 +15,7 @@ interface Props {
   actions: { setConnectionId(value: string): void; setRepository(value: string): void; setWorkspace(value: string): void; load(): void; refresh(): void; updateListing: Dispatch<SetStateAction<ReviewListing | null>> };
 }
 export function ReviewWorkspaceView({ connections, connectionId, repository, workspace, scope, listing, opened, busy, error, service, actions }: Props) {
-  return <main className="app-shell review-workspace"><header className="page-header"><div><p className="eyebrow">GitHub Ultimate</p><h1>{opened ? opened.request.title : 'Review requests'}</h1></div>
+  return <main className="app-shell review-workspace" data-ui="review-workspace"><header className="page-header"><div><p className="eyebrow">GitHub Ultimate</p><h1>{opened ? opened.request.title : 'Review requests'}</h1></div>
     <nav><a href={scope ? reviewHref(scope) : '#/reviews'}>Review inbox</a><a href={`#/documents${scope ? '?' + new URLSearchParams({ connection: scope.connectionId, repository: scope.repository, workspace: scope.workspace }) : ''}`}>Workspace documents</a></nav></header>
     <ReviewDiagnostics />
     {!opened && <form className="connection-panel connection-fields" onSubmit={event => { event.preventDefault(); actions.load(); }}>
