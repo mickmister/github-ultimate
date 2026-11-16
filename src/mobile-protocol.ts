@@ -64,6 +64,8 @@ export class MobileFixtureBroker {
   private grant?: MobileGrant;
   private storageGrant?: MobileGrant;
   private storage?: PageKVService;
+  private fixtureEpoch = 0;
+  private pendingFixtures = 0;
   constructor(store?: PageKVStore, private github?: MobileGitHub) {
     if (store) this.storage = new PageKVService(store, url => Boolean(this.storageGrant && matchesMobileGrant(this.storageGrant, url)));
   }
@@ -75,10 +77,24 @@ export class MobileFixtureBroker {
     if (pageKVBytes(raw) > maxMobileMessageBytes) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Message exceeds 16 KiB.' } };
     let input: Record<string, unknown>;
     try { input = JSON.parse(raw); } catch { return this.handle(context, raw); }
-    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request') return this.handle(context, raw);
+    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== 'fixture.delay') return this.handle(context, raw);
     const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
     const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
     if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive native RPC.');
+    if (input.method === 'fixture.delay') {
+      const denied = this.handle(context, JSON.stringify({ jsonrpc: '2.0', id, method: 'fixture.echo', params: { text: '' } })).error;
+      if (denied) return { jsonrpc: '2.0', id, error: denied };
+      const { text, delayMs } = input.params;
+      if (!only(input.params, ['text', 'delayMs']) || typeof text !== 'string' || text.length > 1024 || !Number.isInteger(delayMs) || (delayMs as number) < 0 || (delayMs as number) > 10000)
+        return { jsonrpc: '2.0', id, error: { code: -32602, message: 'Use text up to 1024 characters and an integer delayMs from 0 to 10000.' } };
+      if (this.pendingFixtures >= 8) return error('Too many pending fixture requests.');
+      const epoch = this.fixtureEpoch; this.pendingFixtures++;
+      try {
+        await new Promise(resolve => setTimeout(resolve, delayMs as number));
+        if (epoch !== this.fixtureEpoch) return error('Fixture access or document changed during the delay.');
+        return this.handle(context, JSON.stringify({ jsonrpc: '2.0', id, method: 'fixture.echo', params: { text } }));
+      } finally { this.pendingFixtures--; }
+    }
     if (input.method === 'github.request') {
       if (!this.github || !this.isCurrent(context)) return error('GitHub bridge or native document unavailable.');
       try { return { jsonrpc: '2.0', id, result: await this.github.hosted(context.documentURL, input.params, () => this.isCurrent(context)) }; }
@@ -95,8 +111,8 @@ export class MobileFixtureBroker {
   }
   // Native callbacks supply document identity; payload fields never do.
   activate(document: MobileDocument) { this.active = { ...document }; }
-  invalidate() { this.active = undefined; }
-  approve(grant?: MobileGrant) { this.grant = grant && { ...grant }; }
+  invalidate() { this.active = undefined; this.fixtureEpoch++; }
+  approve(grant?: MobileGrant) { this.fixtureEpoch++; this.grant = grant && { ...grant }; }
   handle(context: MobileDocument & { isMainFrame: boolean }, raw: string): MobileReply {
     let id: string | null = null;
     const fail = (code: number, message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code, message } });
@@ -111,7 +127,7 @@ export class MobileFixtureBroker {
     if (!plain(input.params)) return fail(-32602, 'Expected named parameters.');
     if (input.method === 'alohak.discover') {
       if (!only(input.params, ['protocolVersion']) || input.params.protocolVersion !== mobileProtocol) return fail(-32602, 'Unsupported protocol. Update the app/page.');
-      return { jsonrpc: '2.0', id, result: { protocolVersion: mobileProtocol, fixtureOnly: true, capabilities: ['alohak.discover', 'fixture.echo'] } };
+      return { jsonrpc: '2.0', id, result: { protocolVersion: mobileProtocol, fixtureOnly: true, capabilities: ['alohak.discover', 'fixture.echo', 'fixture.delay'] } };
     }
     if (input.method === 'fixture.echo') {
       if (!only(input.params, ['text']) || typeof input.params.text !== 'string' || input.params.text.length > 1024) return fail(-32602, 'Echo text must be at most 1024 characters.');

@@ -243,6 +243,12 @@ hosting; no domains/association files are provisioned here.
 
 ## Checks and remaining acceptance
 
+Use the [credential-free isolation harness](mobile-isolation.md) at
+`isolation/index.html` for source/nonce-correlated raw-frame probes, out-of-order
+replies, delayed revocation and copyable per-device evidence. It requires the
+bundled `fixture.delay` capability for delayed probes, and explicitly leaves
+silence and unperformed manual lifecycle/redirect checks inconclusive.
+
 Manual cloud builds and installed-shell OTA updates are available through the
 [EAS dispatch workflows](mobile-eas.md). Updates require an EAS-enabled native
 build and a matching native fingerprint. SecureStore, Expo Crypto and the new
