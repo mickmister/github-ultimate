@@ -90,7 +90,10 @@ export class Connections {
     const source = loadedDocument(documentURL);
     const request = hostedRequestSchema.parse(input);
     if ((request.operation === 'gitBlob' || request.operation === 'gitBlobPart') && request.namespace === 'dolt' && !request.cacheOnly) {
-      return this.nativeReads.run((request.operation === 'gitBlobPart' ? 96 : 24) * 1024 * 1024, () => this.readNativeBlob(source, request, isCurrent));
+      return this.nativeReads.run((request.operation === 'gitBlobPart' ? 96 : 24) * 1024 * 1024, () => this.readNativeBlob(source, request, isCurrent)).then(value => {
+        if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
+        return value;
+      });
     }
     const result = this.tail.catch(() => {}).then(async () => {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
@@ -232,7 +235,7 @@ export class Connections {
       if (cached) return copyCacheValue(cached.value);
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed.');
       const response = await this.send(`https://api.github.com${path}`, { headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${ticket.token}`, 'X-GitHub-Api-Version': '2022-11-28' } });
-      await this.state(async () => {
+      try { await this.state(async () => {
         const record = await authorize(), records = await this.store.all();
         const related = records.filter(other => other.id === ticket.id || other.user?.id === ticket.account || other.apiCooldown?.scope === 'global');
         const cooldown = await responseCooldown(response, this.now(), Math.max(0, ...related.map(other => other.apiCooldown?.failures ?? 0)));
@@ -246,7 +249,7 @@ export class Connections {
           if ([401, 403, 404].includes(response.status)) await this.retireCache(record);
           throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`);
         }
-      });
+      }); } catch (error) { await response.body?.cancel().catch(() => {}); throw error; }
       let value: unknown;
       try { value = await boundedJSON(response, limit ?? maxMetadataBytes); }
       catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }

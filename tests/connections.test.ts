@@ -102,6 +102,18 @@ test('native throttling persists cooldown and prevents subsequent HTTP calls', a
   expect(calls).toHaveLength(count);
 });
 
+test('native response streams are cancelled when authority changes before body admission', async () => {
+  const { connection, origin, request } = await nativeReads(); const cancel = vi.fn();
+  let revoked: Promise<unknown> | undefined;
+  apiOverride = url => {
+    if (!url.includes('/git/blobs/')) return;
+    revoked = broker.handle({ operation: 'revokeOrigin', id: connection.id, origin, subpath: '/app/' });
+    return new Response(new ReadableStream({ cancel }));
+  };
+  await expect(broker.handleHosted(origin + '/app/', request(1))).rejects.toThrow('access changed');
+  await revoked; expect(cancel).toHaveBeenCalledOnce();
+});
+
 test('invalid native objects are evicted so an explicit retry can fetch a valid response', async () => {
   const { origin, request } = await nativeReads(); let valid = false, blobs = 0;
   apiOverride = url => {
