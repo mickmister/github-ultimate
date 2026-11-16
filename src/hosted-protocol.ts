@@ -4,6 +4,7 @@ import { gitReadSchemas } from './git-reads';
 import { workspaceNavigationSchema } from './workspace-navigation';
 import { s3HostedSchemas } from './s3-protocol';
 import { reviewWriteSchema } from './review-protocol';
+import { documentCacheSchema } from './document-cache';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -15,6 +16,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('repositories'), id: z.string().uuid() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
+  documentCacheSchema,
   reviewWriteSchema,
   ...s3HostedSchemas,
   z.object({ operation: z.literal('kvSnapshot') }).strict(),

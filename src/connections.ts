@@ -10,6 +10,7 @@ import type { CacheScope, WorkspaceCache } from './workspace-cache';
 import { copyCacheValue } from './workspace-cache';
 import { BoundedReads } from './bounded-reads';
 import { nativeReadConcurrency, nativeReadResponseBytes } from './git-read-limits';
+import { documentCache, reviewCachePinsKey } from './document-cache';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -102,7 +103,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', ...(this.persistentCache ? ['persistedWorkspaceCache'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
@@ -131,6 +132,16 @@ export class Connections {
       if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
+      if (request.operation === 'documentCache') {
+        if (!this.persistentCache) throw new ConnectionError('Persistent workspace cache is unavailable.');
+        if (!record.tokens || !record.user || record.installation?.id !== request.installationId) throw new ConnectionError('Sign in and select the original installation before caching documents.');
+        const scope: CacheScope = { connection: record.id, account: record.user.id, installation: record.installation.id, generation: record.cacheGeneration, repository: request.repository, workspace: request.workspace, namespace: 'documents' };
+        if (request.action === 'fill') {
+          const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
+          if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
+        }
+        return documentCache(this.persistentCache, scope, request, <T>(input: GitRead) => readGit(input, request.repository, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'conditional' : 'immutable')) as Promise<T>, isCurrent);
+      }
       if (request.operation === 'reviewWrite') {
         if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('The authenticated reviewer or installation changed. Reconnect before saving.');
         const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
@@ -159,6 +170,15 @@ export class Connections {
           repository: gitRequest.repository, workspace: 'workspace' in gitRequest ? gitRequest.workspace : '',
           namespace: gitRequest.operation === 'gitRefs' ? 'metadata' : gitRequest.namespace ?? 'documents' };
         const resource = gitRequest.operation === 'gitRefs' ? gitRequest.prefix : `${gitRequest.operation}:${gitRequest.oid}`;
+        if (gitRequest.cacheRetain && gitRequest.operation !== 'gitRefs' && scope.namespace === 'documents' && this.persistentCache) {
+          const pins = z.array(z.string()).max(10000).parse(await this.persistentCache.get(scope, reviewCachePinsKey) ?? []);
+          if (!pins.includes(resource) && !pins.includes('*')) {
+            // Conservatively disable per-object collection at the bounded pin-index
+            // limit. Whole-workspace LRU eviction still enforces count/byte limits.
+            const retained = pins.length >= 9999 ? [...pins, '*'] : [...pins, resource];
+            if (!await this.persistentCache.put(scope, reviewCachePinsKey, retained)) throw new ConnectionError('Unable to retain the review revision in the workspace cache. Check cache capacity and retry.');
+          }
+        }
         let cached = await this.persistentCache?.get(scope, resource, gitRequest.cacheOnly || gitRequest.cacheVisit);
         if (cached !== undefined) {
           try { cached = await readGit(gitRequest, gitRequest.repository, async () => cached); if (gitRequest.operation === 'gitBlob') verifiedGitBlobBytes(cached as GitBlob); }

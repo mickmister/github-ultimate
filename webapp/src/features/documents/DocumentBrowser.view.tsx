@@ -26,7 +26,7 @@ export function DocumentBrowserView({ model, actions }: DocumentBrowserProps) {
         <button className="primary" disabled={!model.canBrowse} onClick={actions.browseDocuments}>Browse documents</button>
       </div>
     </section></>}
-    <div className="request-status"><p role="status" aria-live="polite">{model.status}</p>{model.error && <p role="alert" className="error">{model.error}</p>}</div>
+    <div className="request-status"><p role="status" aria-live="polite">{model.status}</p>{model.cacheStatus && <p aria-label="Documents cache status" aria-live="polite">{model.cacheStatus}</p>}{model.error && <p role="alert" className="error">{model.error}</p>}</div>
     {model.snapshot ? <section className="browser" aria-label="Document browser" aria-busy={model.busy}>
       {!fullscreen && <aside className="document-sidebar"><h2>Documents <span className="count">{model.snapshot.documents.length}</span></h2><label>Find a document<input type="search" value={model.query} onChange={event => actions.setQuery(event.target.value)} /></label>
         <details className="tree-appearance"><summary>Tree appearance</summary>

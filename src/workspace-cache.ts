@@ -52,25 +52,26 @@ export class WorkspaceCache {
       } catch { this.failure = 'Persistent cache is unavailable. Network reads remain available.'; return; }
     });
   }
-  async put(scope: CacheScope, resource: string, value: unknown) {
+  async put(scope: CacheScope, resource: string, value: unknown, collect: string[] = []): Promise<boolean> {
     return this.serial(async () => {
       try {
         const settings = await this.settings.read();
-        if (scope.namespace === 'dolt' && !settings.cacheDolt) return;
-        const key = this.key(scope, resource), scopeKey = cacheScopeKey(scope), entries = await this.list();
+        if (scope.namespace === 'dolt' && !settings.cacheDolt) return false;
+        const key = this.key(scope, resource), scopeKey = cacheScopeKey(scope), garbage = new Set(collect.map(resource => this.key(scope, resource))), entries = (await this.list()).filter(entry => !garbage.has(entry.key));
         const existing = entries.filter(entry => entry.scope === scopeKey);
         const entry: CacheEntry = { key, scope: scopeKey, connection: scope.connection, namespace: scope.namespace,
           visitedAt: Math.max(0, ...existing.map(entry => entry.visitedAt)) || this.now(), bytes: 0, digest: digest(value), value: copyCacheValue(value) };
         // Include the separate metadata index and key, not just raw payload size.
         let previous = -1;
         while (previous !== entry.bytes) { previous = entry.bytes; const { value: _, ...metadata } = entry; entry.bytes = pageKVBytes(JSON.stringify(entry)) + pageKVBytes(JSON.stringify(metadata)) + pageKVBytes(key); }
-        if (entry.bytes > settings.capacityMiB * 1024 * 1024) { this.failure = 'This object exceeds cache capacity; it was read but not persisted.'; return; }
+        if (entry.bytes > settings.capacityMiB * 1024 * 1024) { this.failure = 'This object exceeds cache capacity; it was read but not persisted.'; return false; }
         const all = [...entries.filter(item => item.key !== key), entry];
         const remove = this.evictions(all, settings, scopeKey);
-        if (remove === undefined) { this.failure = 'Workspace cache capacity reached. This read was not persisted.'; return; }
-        await this.store.write(entry, remove);
+        if (remove === undefined) { this.failure = 'Workspace cache capacity reached. This read was not persisted.'; return false; }
+        await this.store.write(entry, [...remove, ...garbage]);
         this.failure = '';
-      } catch { this.failure = 'Cache persistence failed. Displayed data may not survive restart.'; }
+        return true;
+      } catch { this.failure = 'Cache persistence failed. Displayed data may not survive restart.'; return false; }
     });
   }
   private evictions(entries: CacheMetadata[], settings: Awaited<ReturnType<CacheSettingsService['read']>>, protectedScope?: string) {
@@ -102,6 +103,9 @@ export class WorkspaceCache {
     return this.serial(async () => { await this.store.write(undefined, (await this.store.list()).filter(entry => entry.connection === connection).map(entry => entry.key)); });
   }
   async remove(scope: CacheScope, resource: string) { return this.serial(() => this.store.write(undefined, [this.key(scope, resource)])); }
+  async resources(scope: CacheScope): Promise<string[]> {
+    return this.serial(async () => (await this.list()).filter(entry => entry.scope === cacheScopeKey(scope)).map(entry => JSON.parse(entry.key)[1] as string));
+  }
   async status() {
     await this.tail.catch(() => {});
     try {
