@@ -14,6 +14,7 @@ export interface ReviewMemberContentProps {
   reviewed: boolean; onReviewed(checked: boolean): void;
   onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void;
   onSaveDraft?(): void; formStatus?: ReviewFormProps['formStatus'];
+  onNextForm?(): void; onSubmitReview?(): void;
 }
 export function ReviewMemberContent(props: ReviewMemberContentProps) {
   const { member, contents } = props;

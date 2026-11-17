@@ -88,7 +88,7 @@ test('live pinned review reads, remote draft reopen, response and intake acknowl
     await page.getByRole('button', { name: 'Automated verification form', exact: true }).click();
     await page.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('Automated transport verification; not a human review decision.');
     await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
-    await page.getByRole('button', { name: 'Submit this form' }).click();
+    await page.getByRole('button', { name: 'Submit just this form' }).click();
     await expect(page.getByLabel('Submission receipts')).toContainText('Response saved; task notification pending', { timeout: 90000 });
     expect(receipts.some(receipt => receipt.resource.includes('/drafts/'))).toBe(true);
     expect(receipts.some(receipt => receipt.resource.includes('/responses/'))).toBe(true);

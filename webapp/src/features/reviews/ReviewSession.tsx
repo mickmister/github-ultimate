@@ -20,15 +20,23 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const [recovery] = useState(() => readRecovery(key, listing.reviewer, { id: review.request.request_id, version: review.pin.version, snapshot: review.pin.snapshot }));
   const recoveredPending = useRef(recovery?.pending ?? null);
   const [queue] = useState(() => {
-    const key = `review-feature-intake:${scope.repository}:${scope.workspace}:${listing.reviewer}`;
+    const commentKey = `review-comment-recovery:${key}`;
+    const intakeKey = `review-feature-intake:${scope.repository}:${scope.workspace}:${listing.reviewer}`;
     let features = [] as ReturnType<typeof restoreFeedbackDraft>;
-    try { features = restoreFeedbackDraft(sessionStorage.getItem(key)).filter(item => item.kind === 'feature-comment'); } catch { /* Tab storage unavailable. */ }
-    const restored = restoreReviewComments(scope, review, initial?.value.comments ?? []);
-    const intake = [...restored.filter(item => item.kind === 'feature-comment' && !features.some(local => local.id === item.id)), ...features];
-    if (intake.length) try { sessionStorage.setItem(key, JSON.stringify({ schemaVersion: 1, interactions: intake })); } catch { /* Keep the restored intake in memory. */ }
+    try { features = restoreFeedbackDraft(sessionStorage.getItem(intakeKey)).filter(item => item.kind === 'feature-comment'); } catch { /* Tab storage unavailable. */ }
+    const remote = restoreReviewComments(scope, review, initial?.value.comments ?? []);
+    let restored = remote.filter(item => item.kind === 'content-comment');
+    try {
+      const local = localStorage.getItem(commentKey);
+      if (local !== null) restored = restoreFeedbackDraft(local).filter(item => item.kind === 'content-comment');
+    } catch { /* Use the remote draft when local storage is unavailable. */ }
+    const intake = [...remote.filter(item => item.kind === 'feature-comment' && !features.some(local => local.id === item.id)), ...features];
+    if (intake.length) try { sessionStorage.setItem(intakeKey, JSON.stringify({ schemaVersion: 1, interactions: intake })); } catch { /* Keep the restored intake in memory. */ }
     return createFeedbackQueue([...restored.filter(item => item.kind === 'content-comment'), ...intake], text => {
+      const content = restoreFeedbackDraft(text).filter(item => item.kind === 'content-comment');
       const restored = restoreFeedbackDraft(text).filter(item => item.kind === 'feature-comment');
-      sessionStorage.setItem(key, JSON.stringify({ schemaVersion: 1, interactions: restored }));
+      try { localStorage.setItem(commentKey, JSON.stringify({ schemaVersion: 1, interactions: content })); }
+      finally { sessionStorage.setItem(intakeKey, JSON.stringify({ schemaVersion: 1, interactions: restored })); }
     });
   });
   const comments = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
@@ -39,7 +47,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const [draftVersion, setDraftVersion] = useState<string | null>(initial?.pin.version ?? null);
   const [draftId] = useState(recovery?.draft.id ?? initial?.value.id ?? `draft-${crypto.randomUUID()}`);
   const [saved, setSaved] = useState('');
-  const [notice, setNotice] = useState(recovery ? 'Local answers and progress restored. Nothing was submitted automatically. Review your choices and submit when ready.' : initial ? 'Remote draft restored.' : 'Changes are unsaved until you save a draft or submit.');
+  const [notice, setNotice] = useState(recovery ? 'Local answers and progress restored. Nothing was submitted automatically. Review your choices and submit when ready.' : initial ? 'Remote draft restored.' : 'Queued comments are saved locally. Save a draft or submit to save remotely.');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef<{ fingerprint: string; value: ReviewArtifact } | null>(null);
