@@ -1,11 +1,21 @@
 import { bridgeRequest } from '../../../hosted/client';
 import { WorkspaceReader, documents, documentText, type GitTransport } from '../../../hosted/workspaces';
 import { ReviewReader, type OpenReview } from '../../../hosted/reviews';
-import { artifactResource, parseReviewArtifact, type ReviewArtifact, type ReviewPin, type ReviewReceipt } from '../../../src/review-protocol';
+import { artifactResource, parseReviewArtifact, requestResource, type ReviewArtifact, type ReviewPin, type ReviewReceipt } from '../../../src/review-protocol';
 import type { HostedConnection } from '../../../src/hosted-protocol';
 import type { WorkspaceScope } from './contracts';
 import { limitConcurrency } from '../../../hosted/concurrency';
 import { measure } from '../../../hosted/performance';
+
+export const PROCESS_REVIEW_UPDATE = 'This process review requires an updated credential broker. Update the browser extension or Alohak broker, then reload this page and submit again. No review was accepted by this attempt. Capability support does not grant workflow permission.';
+export function isLegacyProcessSchemaError(error: unknown): boolean {
+  try {
+    const issues = JSON.parse(error instanceof Error ? error.message : typeof error === 'string' ? error : '');
+    return Array.isArray(issues) && issues.length === 1 && issues[0]?.code === 'unrecognized_keys'
+      && Array.isArray(issues[0].keys) && issues[0].keys.length === 1 && issues[0].keys[0] === 'process'
+      && Array.isArray(issues[0].path) && issues[0].path.length === 0;
+  } catch { return false; }
+}
 
 export interface StoredReviewArtifact { value: ReviewArtifact; pin: ReviewPin; dispatch?: ReviewReceipt['dispatch'] }
 export interface ReviewListing { requests: OpenReview[]; artifacts: StoredReviewArtifact[]; reviewer: string; acknowledgements: string[] }
@@ -84,7 +94,16 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
     async save(scope, value, expected) {
       const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
       if (!support.capabilities?.includes('reviewWrite')) throw new Error('Update the credential broker to save review drafts and responses.');
-      return bridgeRequest<ReviewReceipt>({ operation: 'reviewWrite', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, text: JSON.stringify(value), expected }, 120000);
+      // Resolve the exact immutable request, not mutable head or page-supplied process data.
+      const pinned = await reviews(scope).open({ resource: requestResource(value.request.id), version_kind: 'git-blob', version: value.request.version, snapshot: value.request.snapshot });
+      const processBound = Boolean(pinned.request.process);
+      if (processBound && !support.capabilities?.includes('qrspiProcessReview')) throw new Error(PROCESS_REVIEW_UPDATE);
+      try {
+        return await bridgeRequest<ReviewReceipt>({ operation: 'reviewWrite', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, text: JSON.stringify(value), expected }, 120000);
+      } catch (error) {
+        if (processBound && isLegacyProcessSchemaError(error)) throw new Error(PROCESS_REVIEW_UPDATE);
+        throw error;
+      }
     },
   };
 }

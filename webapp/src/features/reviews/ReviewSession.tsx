@@ -7,6 +7,7 @@ import type { ReviewListing, ReviewsModuleV1 } from '../../app-hooks/reviews';
 import { createFeedbackQueue, restoreFeedbackDraft } from '../feedback/queue';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { restoreReviewComments, responsesFor, storeReviewComments } from './model';
+import { readRecovery, recoveryKey, writeRecovery, recoveryFingerprint } from './recovery';
 import { ReviewSessionView } from './ReviewSession.view';
 import type { createReviewContents, ReviewContents } from './review-contents';
 
@@ -14,7 +15,10 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; service: ReviewsModuleV1; refresh(): void; updateListing: Dispatch<SetStateAction<ReviewListing | null>>;
   contentsCache: ReturnType<typeof createReviewContents>; contents: ReviewContents; initialSelected: string;
 }) {
-  const initial = useMemo(() => listing.artifacts.find(item => item.value.kind === 'review-draft' && item.value.reviewer === listing.reviewer && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version), []);
+  const initial = useMemo(() => listing.artifacts.find(item => item.value.kind === 'review-draft' && item.value.reviewer === listing.reviewer && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version && item.value.request.snapshot === review.pin.snapshot), []);
+  const key = recoveryKey(scope, review, listing.reviewer);
+  const [recovery] = useState(() => readRecovery(key, listing.reviewer, { id: review.request.request_id, version: review.pin.version, snapshot: review.pin.snapshot }));
+  const recoveredPending = useRef(recovery?.pending ?? null);
   const [queue] = useState(() => {
     const key = `review-feature-intake:${scope.repository}:${scope.workspace}:${listing.reviewer}`;
     let features = [] as ReturnType<typeof restoreFeedbackDraft>;
@@ -28,14 +32,14 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
     });
   });
   const comments = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
-  const [forms, setForms] = useState<ReviewArtifact['forms']>(initial?.value.forms ?? []);
-  const [progress, setProgress] = useState(initial?.value.progress ?? []);
+  const [forms, setForms] = useState<ReviewArtifact['forms']>(recovery?.draft.forms ?? initial?.value.forms ?? []);
+  const [progress, setProgress] = useState(recovery?.draft.progress ?? initial?.value.progress ?? []);
   const [selected, setSelected] = useState(initialSelected);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [draftVersion, setDraftVersion] = useState<string | null>(initial?.pin.version ?? null);
-  const [draftId] = useState(initial?.value.id ?? `draft-${crypto.randomUUID()}`);
+  const [draftId] = useState(recovery?.draft.id ?? initial?.value.id ?? `draft-${crypto.randomUUID()}`);
   const [saved, setSaved] = useState('');
-  const [notice, setNotice] = useState(initial ? 'Remote draft restored.' : 'Changes are unsaved until you save a draft or submit.');
+  const [notice, setNotice] = useState(recovery ? 'Local answers and progress restored. Nothing was submitted automatically. Review your choices and submit when ready.' : initial ? 'Remote draft restored.' : 'Changes are unsaved until you save a draft or submit.');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const pending = useRef<{ fingerprint: string; value: ReviewArtifact } | null>(null);
@@ -48,6 +52,10 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
     request: { id: review.request.request_id, version: review.pin.version, snapshot: review.pin.snapshot },
     reviewer: listing.reviewer, forms, progress, comments: storeReviewComments(scope, review, comments.items.filter(item => item.kind === 'content-comment')),
   };
+  function persist() {
+    return writeRecovery(key, { version: 1, time: Date.now(), draft: { ...body, comments: [], kind: 'review-draft', id: draftId }, pending: recoveredPending.current });
+  }
+  useEffect(() => { persist(); }, [forms, progress]);
   const fingerprint = JSON.stringify(body);
   const initialFingerprint = useRef(fingerprint);
   const dirty = (saved || initialFingerprint.current) !== fingerprint;
@@ -71,10 +79,13 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
         setNotice('This feedback already has a saved response receipt.'); return;
       }
       const identity = JSON.stringify({ submit, memberId, ...content });
+      const digest = await recoveryFingerprint(identity);
       if (pending.current?.fingerprint !== identity) pending.current = { fingerprint: identity, value: submit
-        ? { ...content, kind: 'review-response', intent: 'feedback', id: `response-${crypto.randomUUID()}` }
+        ? { ...content, kind: 'review-response', intent: 'feedback', id: recoveredPending.current?.fingerprint === digest ? recoveredPending.current.id : `response-${crypto.randomUUID()}` }
         : { ...content, kind: 'review-draft', id: draftId } };
       const value = pending.current.value;
+      recoveredPending.current = { fingerprint: digest, id: value.id };
+      if (!persist()) setNotice('Browser recovery storage is unavailable or full. Keep this page open to retain answers and retry identity; do not reload yet.');
       if (memberId && !value.forms.length) throw new Error('Enter an answer before submitting this form.');
       await validateReviewArtifact(review.request, value, contentsCache.read);
       const receipt = await service.save(scope, value, submit ? null : draftVersion);
