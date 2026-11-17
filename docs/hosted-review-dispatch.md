@@ -20,6 +20,43 @@ Answer/progress recovery is tab-session storage, scoped to exact connection, ins
 
 Production deployment requires an updated installed broker and hosted webapp. No installed-extension acceptance, workflow start, or real human response has been observed by this implementation lane.
 
+## Review inbox entry
+
+The inbox is workspace-scoped. A link can provide both `repository` and `workspace`
+at `#/reviews?repository=owner%2Fstorage&workspace=workspace-handle`; the user still
+needs an approved broker connection. With just a repository, **Find workspaces**
+discovers accessible document workspaces. A single result opens automatically;
+multiple results are offered in the Workspace field. Missing connections and
+empty discovery have explicit guidance instead of an unexplained disabled button.
+
+The default **Only waiting for my response** filter includes published requests
+not fully answered by the authenticated reviewer at their current request revision.
+Other reviewers' responses cannot satisfy this personal filter. Turn it off to
+include responded, draft and withdrawn requests. It is not an assigned-reviewer
+queue or a global cross-workspace inbox.
+
+## After a process response is submitted
+
+The post-submission panel shows saved-response identity, delivery evidence,
+exactly correlated Actions status and same-process follow-up review links. It
+checks every 30 seconds while visible; refreshing never resubmits a response.
+Successful process form submission exits form Zen mode and brings the workflow
+panel into view. Non-process review behavior is preserved.
+
+Live lookup requires the `qrspiWorkflowProgress` broker capability and an updated
+engine run name containing the exact immutable response blob as a delimited
+token. The broker requires its retained same-reviewer delivery receipt, current
+storage/source access and trusted configured workflow/ref. A similarly named
+process or the latest run is insufficient. Multiple matches remain ambiguous.
+Older runs/brokers and unavailable evidence remain unknown, not failed or complete.
+
+The extension already brokers S3 list/read/upload and the preview publishes
+`../s3.html`. That is a generic bounded object browser, not an integrated agent
+transcript viewer. Runtime Pi events/native/output/result bundles stay private;
+the review panel does not yet bind a run to those object keys. S3 connections and
+origin/subpath grants are separately configured; hosted pages do not inherit CI
+credentials. See [S3 connections](s3-connections.md) for current bounds and setup.
+
 ## Engine wire contract
 
 After immutable submitted response persistence and byte-for-byte readback, the broker sends Actions dispatch inputs:

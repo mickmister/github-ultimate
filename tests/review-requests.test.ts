@@ -374,6 +374,16 @@ test('missing historical bytes are unavailable, never replaced with a current do
   expect(await reader.read(pin)).toBe('# Before');
   await expect(reader.read({ ...pin, snapshot: git.head })).rejects.toThrow('unavailable');
 });
+test('the personal inbox is not satisfied by another reviewer response or draft', () => {
+  const { request, requestVersion, value, git } = fixture();
+  const pin = { resource: 'review-requests/reader-01/request.json', version_kind: 'git-blob' as const, version: requestVersion, snapshot: git.head };
+  const review = {request, pin};
+  const artifacts = [{value, pin}];
+  expect(reviewStatus(review, artifacts, value.reviewer)).toBe('Responded');
+  expect(reviewStatus(review, artifacts, 'github:2')).toBe('Needs response');
+  const {intent: _intent, ...rest} = value as Extract<ReviewArtifact, {kind:'review-response'}>;
+  expect(reviewStatus(review, [{value:{...rest,kind:'review-draft'},pin}], 'github:2')).toBe('Needs response');
+});
 test('withdrawal stops new saves against a previously published revision', async () => {
   const { git, request, input } = fixture();
   git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': JSON.stringify({ ...request, status: 'withdrawn', revision_id: 'withdrawn-1' }) });

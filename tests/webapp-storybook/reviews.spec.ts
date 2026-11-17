@@ -10,6 +10,50 @@ function pinnedReviewURL() {
   return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
 }
 
+test('repository-only inbox setup discovers a workspace and opens it without a hidden required field', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-reviews--inbox&viewMode=story#/reviews');
+  await page.getByRole('textbox', {name:'Storage repository', exact:true}).fill('example/storage');
+  await expect(page.getByRole('button', {name:'Find workspaces',exact:true})).toBeEnabled();
+  await page.getByRole('button', {name:'Find workspaces',exact:true}).click();
+  await expect(page.getByRole('region', {name:'Review inbox',exact:true})).toBeVisible();
+  await expect(page.getByRole('combobox', {name:'Workspace',exact:true})).toHaveValue('reader-workspace');
+  await expect(page.getByRole('checkbox', {name:'Only waiting for my response',exact:true})).toBeChecked();
+  await expect(page.getByRole('link', {name:'Reader follow-up',exact:true})).toBeVisible();
+});
+
+test('process submission explains correlated workflow progress and exposes the next checkpoint without resubmitting',async({page})=>{
+  let state:any={artifacts:[],revision:1,workflow:{state:'running',checked_at:'2026-11-17T00:00:00Z',dispatch:{state:'dispatched'},run:{id:1,url:'https://github.com/example/source/actions/runs/1',status:'in_progress',conclusion:null}}};
+  let saves=0;
+  await page.route('**/__review-fixture',async route=>{
+    if(route.request().method()==='POST'){saves++;state=route.request().postDataJSON();}
+    await route.fulfill({json:state});
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--process-context&viewMode=story&remoteFixture=true');
+  await page.getByRole('button',{name:'Reader decisions',exact:true}).click();
+  await page.getByRole('button',{name:'Zen mode',exact:true}).click();
+  await page.getByText('Keep this approach',{exact:true}).click();
+  await finishForm(page);
+  await page.getByRole('button',{name:'Submit this form',exact:true}).click();
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  const panel=page.getByRole('region',{name:'Workflow after submission',exact:true});
+  await expect(panel.getByText('Workflow is running',{exact:true})).toBeVisible();
+  await expect(panel.getByRole('link',{name:'Open the correlated workflow run',exact:true})).toHaveAttribute('href','https://github.com/example/source/actions/runs/1');
+  state.nextCheckpoint=true;state.workflow={...state.workflow,state:'completed',run:{...state.workflow.run,status:'completed',conclusion:'success'}};
+  await panel.getByRole('button',{name:'Refresh workflow progress',exact:true}).click();
+  await expect(panel.getByRole('link',{name:'Open next checkpoint: Next Goals checkpoint',exact:true})).toBeVisible();
+  state.nextCheckpoint=false;
+  await panel.getByRole('button',{name:'Refresh workflow progress',exact:true}).click();
+  await expect(panel.getByRole('link',{name:'Open next checkpoint: Next Goals checkpoint',exact:true})).toHaveCount(0);
+  state.nextCheckpoint=true;state.workflowError=true;
+  await panel.getByRole('button',{name:'Refresh workflow progress',exact:true}).click();
+  await expect(panel.getByRole('link',{name:'Open next checkpoint: Next Goals checkpoint',exact:true})).toBeVisible();
+  await expect(panel.getByRole('alert')).toContainText('Actions unavailable');
+  expect(saves).toBe(1);
+  await expect(panel.getByText('You do not need to resubmit this response to check progress.',{exact:false})).toBeVisible();
+  await panel.getByText('Agent transcripts and diagnostics',{exact:true}).click();
+  await expect(panel.getByRole('link',{name:'Open private S3 object browser',exact:true})).toHaveAttribute('href',/\/s3\.html$/);
+});
+
 test('pinned deep links render and preload before targeted saved-state loading, then restore the remote draft', async ({ page }) => {
   let state: any = { artifacts: [], revision: 1 };
   let holdListing = false;

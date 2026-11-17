@@ -3,7 +3,8 @@ import { expect, test } from '@playwright/test';
 test('production process context shows pinned/current evidence and retries the saved response', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--process-context&viewMode=story');
   const evidence = page.getByRole('region', { name: 'QRSPI process evidence' });
-  await expect(evidence).toContainText('QRSPI · hosted-pilot');
+  // The first story may still be compiling on the development server.
+  await expect(evidence).toContainText('QRSPI · hosted-pilot',{timeout:30000});
   await expect(evidence).toContainText('route: goals → questions → research → design → plan → implement');
   await expect(evidence).toContainText('Stale review pin');
   await page.getByRole('button', { name: 'Submit review feedback', exact: true }).click();

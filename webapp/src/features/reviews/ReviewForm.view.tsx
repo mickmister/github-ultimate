@@ -10,7 +10,7 @@ import type { FeedbackTarget } from '../feedback/contracts';
 export interface ReviewFormProps {
   form: TaskForm; answer?: ReviewArtifact['forms'][number]; submitted: boolean; busy: boolean;
   onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void;
-  onSaveDraft?(): void; formStatus?: { notice: string; error: string; dirty: boolean };
+  onSaveDraft?(): void; formStatus?: { notice: string; error: string; dirty: boolean; workflowAfterSubmit?:boolean };
   feedbackTarget?: FeedbackTarget;
 }
 export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubmit, onSaveDraft, formStatus, feedbackTarget, step, heading, onStep, zen, onZen, dialog, zenButton }: ReviewFormProps & {

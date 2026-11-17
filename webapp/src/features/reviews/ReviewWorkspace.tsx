@@ -22,6 +22,8 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
   const [connectionId, setConnectionId] = useState(location.connection ?? '');
   const [repository, setRepository] = useState(location.repository ?? '');
   const [workspace, setWorkspace] = useState(location.workspace ?? '');
+  const [workspaces, setWorkspaces] = useState<readonly string[]>([]);
+  const [waitingOnly, setWaitingOnly] = useState(true);
   const [scope, setScope] = useState<WorkspaceScope | null>(null);
   const [listing, setListing] = useState<ReviewListing | null>(null);
   const [opened, setOpened] = useState<OpenReview | null>(null);
@@ -86,8 +88,33 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
     return () => { cancelled = true; generation.current++; hooks.modules.documents.dispose(); };
   }, [hooks]);
   const selected = connections.find(item => item.id === connectionId);
+  function changeSource(update: () => void) {
+    generation.current++; update(); setWorkspace(''); setWorkspaces([]); setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false);
+  }
+  function changeWorkspace(value: string) {
+    generation.current++; setWorkspace(value); setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false);
+  }
+  async function findOrLoad() {
+    if (!selected) { setError('Choose an approved connection first.'); return; }
+    const repo = repository.trim();
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { setError('Enter the storage repository as owner/repository.'); return; }
+    const source = { connectionId: selected.id, installationId: selected.installationId, repository: repo };
+    if (workspace.trim()) { await load({ ...source, workspace: workspace.trim() }, true); return; }
+    const token = ++generation.current;
+    setBusy(true); setError('');
+    try {
+      const found = await hooks.modules.documents.discover(source);
+      if (generation.current !== token) return;
+      const names = found.filter(item => item.hasDocuments).map(item => item.id);
+      setWorkspaces(names);
+      if (!names.length) setError('No document workspaces found. Check the repository and connection access.');
+      else if (names.length === 1) { setWorkspace(names[0]); await load({ ...source, workspace: names[0] }, true); }
+    } catch (cause) { if (generation.current === token) setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { if (generation.current === token) setBusy(false); }
+  }
   return <ReviewWorkspaceView connections={connections} connectionId={connectionId} repository={repository} workspace={workspace}
+    workspaces={workspaces} waitingOnly={waitingOnly} setWaitingOnly={setWaitingOnly}
     scope={scope} listing={listing} opened={opened} busy={busy} error={error} service={hooks.modules.reviews}
-    actions={{ setConnectionId, setRepository, setWorkspace, load: () => selected && void load({ connectionId: selected.id, installationId: selected.installationId, repository: repository.trim(), workspace: workspace.trim() }, true),
+    actions={{ setConnectionId: value => changeSource(() => setConnectionId(value)), setRepository: value => changeSource(() => setRepository(value)), setWorkspace: changeWorkspace, load: () => void findOrLoad(),
       refresh: () => scope && void load(scope), updateListing: setListing }} />;
 }

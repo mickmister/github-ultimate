@@ -2,6 +2,7 @@ import type { AppHooksV1, WorkspaceScope } from '../src/app-hooks/contracts';
 import type { ReviewListing } from '../src/app-hooks/reviews';
 import { artifactResource, validateReviewArtifact, type ReviewPin, type ReviewRequest } from '../../src/review-protocol';
 import type { OpenReview } from '../../hosted/reviews';
+import type {ReviewWorkflowProgress} from '../../src/review-progress';
 
 export const reviewScope: WorkspaceScope = { connectionId: 'a6075abf-226e-4c88-977c-e11404e59f32', installationId: 1, repository: 'example/storage', workspace: 'reader-workspace' };
 const pin = (resource: string, letter: string): ReviewPin => ({ resource, version_kind: 'git-blob', version: letter.repeat(40), snapshot: '1'.repeat(40) });
@@ -11,7 +12,7 @@ const text = '# Reader plan\n\nThe full target document is pinned to this packet
 const before = '# Reader plan\n\nThe baseline had browser-only drafts.\n';
 const form = (id: string, title: string) => JSON.stringify({ format: 'standard', id, task_id: 'task-reader', title, goal: 'Choose the next steps for this implementation.', questions: [{ id: 'decision', type: 'choices', title: 'Next steps', description: 'The author suggests selecting one option. You can choose multiple.', choices: [{ id: 'keep', label: 'Keep this approach', description: 'Continue with the implementation shown in the pinned document.' }, { id: 'revise', label: 'Revise this approach', description: 'Use your notes to describe the changes you want.' }], choiceGroups: [{ id: 'suggested-choice', title: 'Single select question', mode: 'exactlyOne', choiceIds: ['keep', 'revise'] }] }, { id: 'additional_notes', type: 'textarea', title: 'Additional notes' }] });
 const documents = new Map([[target.version, text], [baseline.version, before], [formPin.version, form('reader_decisions', 'Reader decisions')], [secondPin.version, form('review_feedback', 'Review experience feedback')]]);
-export interface ReviewFixtureState { artifacts: ReviewListing['artifacts']; revision: number; failSecond?: boolean; missingBaseline?: boolean }
+export interface ReviewFixtureState { artifacts: ReviewListing['artifacts']; revision: number; failSecond?: boolean; missingBaseline?: boolean; workflow?:ReviewWorkflowProgress; workflowError?:boolean; nextCheckpoint?:boolean }
 export interface ReviewComparisonFixture { path: string; before: string; after: string }
 export const richComparison: ReviewComparisonFixture = {
   path: 'threads/task-reader/plan.md',
@@ -43,7 +44,8 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
   return { contractVersion: 1, modules: {
     documents: { version: 1, connect: async () => [{ id: reviewScope.connectionId, name: 'Fixture reviewer', installationId: 1, account: 'example' }], discover: async () => [{ id: reviewScope.workspace, hasDocuments: true }], open: async () => { throw new Error('Use review fixture transport.'); }, read: async () => '', dispose() {} },
     reviews: {
-      async list(_scope, requestId) { const current = await load(undefined, 'list', requestId); return { requests: [packet('reader-01', current.revision), packet('reader-02', 1)].filter(item => !requestId || item.request.request_id === requestId), artifacts: current.artifacts, reviewer: 'github:1', acknowledgements: [] }; },
+      async list(_scope, requestId) { const current = await load(undefined, 'list', requestId); const requests=[packet('reader-01', current.revision), packet('reader-02', 1)]; if(current.nextCheckpoint){const next=packet('reader-03',1);next.request.previous_request='reader-01';next.request.title='Next Goals checkpoint';requests.push(next);}return { requests: requests.filter(item => !requestId || item.request.request_id === requestId), artifacts: current.artifacts, reviewer: 'github:1', acknowledgements: [] }; },
+      async progress(){const current=await load(undefined,'progress');if(current.workflowError)throw Error('Actions unavailable');return current.workflow??{state:'unknown',checked_at:new Date().toISOString(),message:'Fixture workflow progress unavailable.'};},
       async open(_scope, pin) { await load(undefined, 'open', pin.resource.split('/')[1]); return packet(pin.resource.split('/')[1], pin.version === 'f'.repeat(40) ? 2 : 1); }, read,
       async current(_scope, resource) { return resource.endsWith('/config.md') ? { pin: pin(resource, '9'), text: '---\npipeline: full\nroute: [goals, questions, research, design, plan, implement]\n---\n' } : { pin: pin(resource, '8'), text: '---\nstatus: draft\nphase: design\n---\n' }; },
       async save(scope, value, expected) {
@@ -58,7 +60,7 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
         const version = [...new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(JSON.stringify(value))))].map(byte => byte.toString(16).padStart(2, '0')).join('');
         const saved = { value, pin: { resource, version_kind: 'git-blob' as const, version, snapshot: '2'.repeat(40) } };
         await store({ ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== resource), saved] });
-        return { ...saved.pin, reviewer: value.reviewer, ...(process && value.kind === 'review-response' ? { dispatch: { state: 'failed' as const, message: 'Missing installed-source Actions write route. Response is saved.' } } : {}) };
+        return { ...saved.pin, reviewer: value.reviewer, ...(process && value.kind === 'review-response' ? { dispatch: current.workflow?.dispatch??{ state: 'failed' as const, message: 'Missing installed-source Actions write route. Response is saved.' } } : {}) };
       },
     },
   } };

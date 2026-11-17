@@ -4,6 +4,7 @@ import { gitReadSchemas } from './git-reads';
 import { workspaceNavigationSchema } from './workspace-navigation';
 import { s3HostedSchemas } from './s3-protocol';
 import { reviewWriteSchema } from './review-protocol';
+import { reviewProgressSchema } from './review-progress';
 import { documentCacheSchema } from './document-cache';
 export { pageChannel, replyChannel } from './bridge-channels';
 
@@ -18,6 +19,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   ...gitReadSchemas,
   documentCacheSchema,
   reviewWriteSchema,
+  reviewProgressSchema,
   ...s3HostedSchemas,
   z.object({ operation: z.literal('kvSnapshot') }).strict(),
   z.object({ operation: z.literal('kvClear') }).strict(),

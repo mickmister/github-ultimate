@@ -33,12 +33,12 @@ export function responsesFor(review: OpenReview, artifacts: readonly StoredRevie
   // manifest blob seals revision_id and every member's immutable snapshot.
   return artifacts.filter(item => item.value.kind === 'review-response' && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version);
 }
-export function reviewStatus(review: OpenReview, artifacts: readonly StoredReviewArtifact[]) {
+export function reviewStatus(review: OpenReview, artifacts: readonly StoredReviewArtifact[], reviewer?: string) {
   if (review.request.status !== 'published') return review.request.status === 'draft' ? 'Draft' : 'Withdrawn';
-  const responses = responsesFor(review, artifacts);
+  const responses = responsesFor(review, artifacts).filter(item => !reviewer || item.value.reviewer === reviewer);
   const forms = review.request.members.filter(member => member.kind === 'form');
   if (responses.length && forms.every(member => responses.some(item => item.value.forms.some(form => form.member_id === member.id)))) return 'Responded';
   if (responses.length) return 'Partially responded';
-  if (artifacts.some(item => item.value.kind === 'review-draft' && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version)) return 'In review';
+  if (artifacts.some(item => item.value.kind === 'review-draft' && (!reviewer || item.value.reviewer === reviewer) && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version)) return 'In review';
   return 'Needs response';
 }

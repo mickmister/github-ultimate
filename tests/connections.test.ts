@@ -347,6 +347,29 @@ test('review writes recheck exact origin/subpath, installation, repository and a
   expect(calls.filter(call => ['POST', 'PATCH'].includes(call.init.method ?? '') && call.url.includes('/git/'))).toHaveLength(0);
   expect(() => broker.handleHosted(origin + '/app/', { ...request, path: 'documents/workspace/manifest.json' })).toThrow();
 });
+test('workflow progress is read-only, requires a retained same-reviewer response, and honors grants',async()=>{
+  const connection=await login(), origin='https://example.test';
+  await broker.handle({operation:'selectInstallation',id:connection.id,installationId:1});
+  await broker.handle({operation:'grantOrigin',id:connection.id,origin,subpath:'/app/'});
+  const request={operation:'reviewProgress',id:connection.id,installationId:1,repository:'mickmister/workspace-storage',workspace:'workspace-a',resource:'review-requests/request-1/responses/response-1.json',version:'a'.repeat(40)};
+  const record=(await store.get(connection.id))!;
+  record.reviewDeliveries={[JSON.stringify([request.repository,request.workspace,request.resource,request.version,'github:1'])]:{resource:request.resource,version:request.version,snapshot:'b'.repeat(40),reviewer:'github:1',dispatch:{state:'dispatched'}}};
+  await store.put(record);
+  apiOverride=url=>url.includes('/repositories?')?Response.json({repositories:[request.repository,'mickmister/gh-agentic-workflows'].map(full_name=>({full_name,private:true,default_branch:'main'}))}):url.includes('/actions/workflows/')?Response.json({workflow_runs:[{id:1,html_url:'https://github.com/mickmister/gh-agentic-workflows/actions/runs/1',event:'workflow_dispatch',head_branch:'vk/46e5-vd-multi-instanc',actor:{id:1},display_title:`QRSPI pilot · ${request.version} · 1`,status:'in_progress',conclusion:null}]}):undefined;
+  expect(await broker.handleHosted(origin+'/app/',request)).toMatchObject({state:'running',run:{id:1}});
+  const actions=()=>calls.filter(call=>call.url.includes('/actions/'));
+  const count=actions().length;
+  expect(await broker.handleHosted(origin+'/app/',{...request,version:'c'.repeat(40)})).toMatchObject({state:'unknown'});
+  expect(actions()).toHaveLength(count);
+  expect(actions().every(call=>!call.init.method||call.init.method==='GET')).toBe(true);
+  await expect(broker.handleHosted(origin+'/sibling/',request)).rejects.toThrow('no approved');
+  await expect(broker.handleHosted(origin+'/app/',{...request,installationId:2})).rejects.toThrow('installation');
+  permissions.actions='none';
+  await expect(broker.handleHosted(origin+'/app/',request)).rejects.toThrow('Actions read access');
+  expect(actions()).toHaveLength(count);
+  await broker.handle({operation:'revokeOrigin',id:connection.id,origin,subpath:'/app/'});
+  await expect(broker.handleHosted(origin+'/app/',request)).rejects.toThrow('no approved');
+});
 
 test('primary exhaustion persists across broker restart and blocks another App for the same user', async () => {
   const first = await login(), second = await login({ name: 'Another app', appId: 999, clientId: 'OtherClient' });

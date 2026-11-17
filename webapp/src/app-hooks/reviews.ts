@@ -6,6 +6,7 @@ import type { HostedConnection } from '../../../src/hosted-protocol';
 import type { WorkspaceScope } from './contracts';
 import { limitConcurrency } from '../../../hosted/concurrency';
 import { measure } from '../../../hosted/performance';
+import type { ReviewWorkflowProgress } from '../../../src/review-progress';
 
 export const PROCESS_REVIEW_UPDATE = 'This process review requires an updated credential broker. Update the browser extension or Alohak broker, then reload this page and submit again. No review was accepted by this attempt. Capability support does not grant workflow permission.';
 export function isLegacyProcessSchemaError(error: unknown): boolean {
@@ -26,6 +27,7 @@ export interface ReviewsModuleV1 {
   read(scope: WorkspaceScope, pin: ReviewPin): Promise<string>;
   current?(scope: WorkspaceScope, resource: string): Promise<{ pin: ReviewPin; text: string } | null>;
   save(scope: WorkspaceScope, value: ReviewArtifact, expected: string | null): Promise<ReviewReceipt>;
+  progress?(scope: WorkspaceScope, response: StoredReviewArtifact): Promise<ReviewWorkflowProgress>;
 }
 export function createHostedReviews(send: GitTransport = bridgeRequest): ReviewsModuleV1 {
   let support: Promise<boolean> | undefined;
@@ -83,6 +85,11 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
     listCached: (scope, requestId) => measure('reviews.list', () => list(scope, true, requestId), { targeted: Boolean(requestId), cached: true }),
     open: (scope, pin) => measure('reviews.open', () => reviews(scope).open(pin)),
     read: (scope, pin) => measure('reviews.read', () => reviews(scope).read(pin)),
+    async progress(scope, response) {
+      const support = await bridgeRequest<{capabilities:string[]}>({operation:'discover'});
+      if (!support.capabilities.includes('qrspiWorkflowProgress')) return {state:'unknown',checked_at:new Date().toISOString(), dispatch:response.dispatch, message:'This broker cannot read live workflow progress yet. Update the extension; use the Actions link for now.'};
+      return bridgeRequest<ReviewWorkflowProgress>({operation:'reviewProgress', id:scope.connectionId, installationId:scope.installationId, repository:scope.repository, workspace:scope.workspace, resource:response.pin.resource, version:response.pin.version});
+    },
     async current(scope, resource) {
       const reader = reviews(scope).reader;
       const found = (await reader.discover()).find(item => item.name === scope.workspace);

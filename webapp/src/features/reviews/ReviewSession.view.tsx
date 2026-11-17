@@ -5,6 +5,7 @@ import type { Answers } from '../../../../src/protocol';
 import type { WorkspaceScope } from '../../app-hooks/contracts';
 import type { ReviewListing, ReviewsModuleV1, StoredReviewArtifact } from '../../app-hooks/reviews';
 import { ReviewProcess } from './ReviewProcess';
+import { ReviewWorkflow } from './ReviewWorkflow';
 import { evidenceHref } from './ReviewProcess.view';
 import { ReviewMemberContent } from './ReviewMemberContent';
 import { reviewHref } from './ReviewWorkspace';
@@ -30,6 +31,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
     {review.request.status !== 'published' && <p>This packet is {review.request.status}; response submission is unavailable.</p>}
     {latest?.request.status === 'withdrawn' && review.request.status !== 'withdrawn' && <p role="status">This request has been withdrawn. Existing responses remain available.</p>}
   </header>
+    {review.request.process && responses.filter(item=>item.value.reviewer===listing.reviewer).map(response=><ReviewWorkflow key={response.value.id} scope={scope} review={review} response={response} service={service} />)}
     <ReviewProcess scope={scope} review={review} service={service} />
     <p className="muted" aria-live="polite">{downloading ? `Downloading review contents… ${downloaded + failed} of ${contents.size} finished.` : failed ? `Review contents downloaded with ${failed} unavailable resource(s).` : 'All review documents and forms downloaded.'}</p>
     {failed > 0 && <button type="button" onClick={actions.retryContents}>Retry unavailable review contents</button>}
@@ -38,7 +40,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
       <article className="review-content"><h2>{member.label}</h2><ReviewMemberContent key={member.id} scope={scope} review={review} member={member} contents={contents}
         answer={submitted.has(member.id) ? responses.flatMap(item => item.value.forms).find(form => form.member_id === member.id) : forms.find(form => form.member_id === member.id)} submitted={submitted.has(member.id)}
         onAnswer={(answers, intent) => actions.answer(member.id, answers, intent)} onSubmit={() => actions.submit(member.id)} busy={busy || !accepting}
-        onSaveDraft={actions.saveDraft} formStatus={{ notice, error, dirty }}
+         onSaveDraft={actions.saveDraft} formStatus={{ notice, error, dirty, workflowAfterSubmit:Boolean(review.request.process) }}
         reviewed={progress.includes(member.id)} onReviewed={checked => actions.progress(member.id, checked)} />
       </article></div>
     <footer className="review-submit"><p role="status">{dirty ? 'Unsaved changes. ' : ''}{notice}</p>{error && <p role="alert">{error}</p>}

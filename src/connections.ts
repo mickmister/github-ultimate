@@ -7,6 +7,7 @@ import type { WorkspaceNavigation } from './workspace-navigation';
 import { writeReview } from './review-writes';
 import { pilotReviewDispatch, type ReviewDispatchHost } from './review-dispatch';
 import type { ReviewReceipt, ReviewRequest } from './review-protocol';
+import { responseRun, type ReviewWorkflowProgress } from './review-progress';
 import { cacheSettingsSchema } from './cache-settings';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 import { copyCacheValue } from './workspace-cache';
@@ -107,7 +108,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
@@ -145,6 +146,28 @@ export class Connections {
           if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
         }
         return documentCache(this.persistentCache, scope, request, <T>(input: GitRead) => readGit(input, request.repository, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'conditional' : 'immutable')) as Promise<T>, isCurrent);
+      }
+      if (request.operation === 'reviewProgress') {
+        if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('Reconnect the original authenticated reviewer and installation to read workflow progress.');
+        const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
+        if (!repo) throw new ConnectionError('Storage repository access is unavailable.');
+        const key = JSON.stringify([repo.full_name.toLowerCase(), request.workspace, request.resource, request.version, `github:${record.user.id}`]);
+        const receipt = record.reviewDeliveries?.[key];
+        const checked_at = new Date(this.now()).toISOString();
+        if (!receipt) return {state:'unknown', checked_at, message:'No retained delivery receipt is available in this broker. The saved response is not evidence of workflow failure.'} satisfies ReviewWorkflowProgress;
+        const host = this.reviewDispatch;
+        const source = host.sourceConnectionId ? approved.find(item => item.id === host.sourceConnectionId) : record;
+        if (!source?.tokens || !source.user || source.user.id !== record.user.id || !source.installation) throw new ConnectionError('The same-reviewer source connection is required to read Actions progress.');
+        const installation = (await this.installations(source)).find(item => item.id === source.installation!.id);
+        const sourceRepo = (await this.repositories(source)).find(item => item.full_name.toLowerCase() === host.repository.toLowerCase());
+        if (!installation || !['read','write'].includes(installation.permissions.actions ?? '') || !sourceRepo) throw new ConnectionError('Actions read access is required on the trusted source repository.');
+        const runs: any[] = [];
+        for (let page = 1; page <= 5; page++) {
+          const listing = z.object({workflow_runs:z.array(z.unknown()).max(100)}).parse(await this.api(source, `/repos/${host.repository}/actions/workflows/${encodeURIComponent(host.workflow)}/runs?branch=${encodeURIComponent(host.ref)}&event=workflow_dispatch&per_page=100&page=${page}`, maxMetadataBytes, 'none'));
+          runs.push(...listing.workflow_runs);
+          if (listing.workflow_runs.length < 100) break;
+        }
+        return {...responseRun(runs, receipt.version, host.repository, host.ref, record.user.id), checked_at, dispatch:receipt.dispatch} satisfies ReviewWorkflowProgress;
       }
       if (request.operation === 'reviewWrite') {
         if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('The authenticated reviewer or installation changed. Reconnect before saving.');
