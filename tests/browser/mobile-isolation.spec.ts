@@ -4,7 +4,7 @@ import { resolve } from 'node:path';
 import { grantForEntry, MobileFixtureBroker, mobileBootstrap } from '../../src/mobile-protocol';
 
 const entry = 'https://pages.example/isolation/index.html';
-async function fixture(browser: Browser, options: { leakFrames?: boolean; delay?: boolean } = {}) {
+async function fixture(browser: Browser, options: { leakFrames?: boolean; delay?: boolean; discoveryGate?: Promise<void> } = {}) {
   const broker = new MobileFixtureBroker(); broker.approve(grantForEntry(entry));
   const context = await browser.newContext({ userAgent: 'Mozilla/5.0 Alohak/1' });
   await context.route(/https:\/\/(pages|other)\.example\//, async route => {
@@ -13,6 +13,7 @@ async function fixture(browser: Browser, options: { leakFrames?: boolean; delay?
     await route.fulfill({ path: resolve('hosted-dist', path), headers: { 'Access-Control-Allow-Origin': '*' }, contentType: path.endsWith('.js') ? 'text/javascript' : path.endsWith('.css') ? 'text/css' : 'text/html' });
   });
   await context.exposeBinding('__isolationFixtureRequest', async ({ frame, page }, raw: string) => {
+    if (JSON.parse(raw).method === 'alohak.discover') await options.discoveryGate;
     const isMainFrame = frame === page.mainFrame();
     if (!isMainFrame && options.leakFrames) return { jsonrpc: '2.0', id: JSON.parse(raw).id, result: { text: 'frame-probe' } };
     const value = await broker.handleAsync({ documentId: 'browser-mock-document', documentURL: entry, isMainFrame }, raw);
@@ -77,6 +78,38 @@ test('standalone web page never claims native isolation without a bridge', async
   });
   await page.goto(entry); await page.locator('#run').click();
   await expect(page.locator('#results')).toContainText('Native bridge missing');
+  await expect(page.locator('#check-status')).toContainText('Check stopped: Error: Native bridge missing');
+  await expect(page.locator('#run')).toBeEnabled();
   await page.locator('#report').click();
   expect(JSON.parse(await page.getByLabel('Isolation report').inputValue()).results[0].status).toBe('inconclusive');
+});
+
+test('pending discovery is visible beside the button and a missing reply ends with an actionable error', async ({ browser }) => {
+  let resume!: () => void;
+  const discoveryGate = new Promise<void>(resolve => { resume = resolve; });
+  const { context, page } = await fixture(browser, { discoveryGate });
+  try {
+    await page.locator('#run').click();
+    await expect(page.locator('#run')).toHaveText('Running automatic checks…');
+    await expect(page.locator('#run')).toBeDisabled();
+    await expect(page.locator('#check-status')).toContainText('discovering native capabilities');
+    await expect(page.locator('#revoke')).toBeDisabled();
+    await expect(page.locator('#check-status')).toContainText('Check stopped: Error: Native request timed out');
+    await expect(page.locator('#run')).toBeEnabled();
+    await expect(page.locator('#revoke')).toBeEnabled();
+    await expect(page.locator('#run')).toHaveText('Run automatic checks');
+  } finally { resume(); await context.close(); }
+});
+
+test('a failed test-script load cannot leave apparently working buttons', async ({ page }) => {
+  await page.route('https://pages.example/**', async route => {
+    const path = new URL(route.request().url()).pathname.slice(1);
+    if (path.endsWith('.js')) return route.abort();
+    return route.fulfill({ path: resolve('hosted-dist', path), contentType: path.endsWith('.css') ? 'text/css' : 'text/html' });
+  });
+  await page.goto(entry);
+  await expect(page.locator('#run')).toBeDisabled();
+  await expect(page.locator('#report')).toBeDisabled();
+  await expect(page.locator('#check-status')).toContainText('Loading test script');
+  await expect(page.locator('#check-status')).toContainText('native Reload');
 });
