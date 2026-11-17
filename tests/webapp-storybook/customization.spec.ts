@@ -68,7 +68,7 @@ test('built-in themes and individual settings share a draft and remain portable 
   await page.getByLabel('Customization JSON', { exact: true }).fill(JSON.stringify(draft));
   await expect(page.getByLabel('Line height', { exact: true })).toHaveValue('1.8');
   await page.getByRole('button', { name: 'Save customization locally', exact: true }).click();
-  expect(await page.evaluate(() => JSON.parse(window.uiCustomization.export()))).toEqual(draft);
+  await expect.poll(() => page.evaluate(() => JSON.parse(window.uiCustomization.export()))).toEqual(draft);
   expect(await page.locator('[data-ui="customization-panel"]').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
   await page.reload();
   await expect.poll(() => page.evaluate(() => window.uiCustomization?.get().name)).toBe('My forest');
