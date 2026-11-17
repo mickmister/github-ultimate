@@ -168,6 +168,18 @@ bundles without this metadata display `unavailable`.
 
 ## Focused document reading
 
+Opening a review immediately starts downloading every pinned document target,
+form definition and baseline, with up to four content reads at a time. Download
+progress appears above the review items. Once downloaded, switching items or
+comparison tabs reads directly from the session cache, without another network
+request or a loading flash. Shared exact pins are downloaded only once, and form
+validation for draft saving/submission reuses those pinned definitions.
+
+Downloads are tied to the current review and workspace/connection scope. One
+unavailable resource does not block the other items; **Retry unavailable review
+contents** retries failed downloads while retaining successful contents. Baseline
+failures still leave the full target document readable.
+
 In a review request, **Hide sidebar** removes the document/form navigation and
 expands the current item to the full container width. **Show sidebar** restores
 navigation. The current comparison tab, review progress and entered form answers

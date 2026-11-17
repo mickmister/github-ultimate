@@ -20,7 +20,7 @@ export const richComparison: ReviewComparisonFixture = {
 };
 export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
-  const load = async () => remote ? await (await fetch('/__review-fixture')).json() as ReviewFixtureState : state;
+  const load = async (resource?: ReviewPin) => remote ? await (await fetch('/__review-fixture', { headers: resource ? { 'X-Review-Resource': JSON.stringify(resource) } : undefined })).json() as ReviewFixtureState : state;
   const store = async (next: ReviewFixtureState) => { if (remote) await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) }); else state = next; };
   function packet(id: string, revision: number): OpenReview {
     const request: ReviewRequest = { kind: 'review-request', schema_version: 1, request_id: id, revision_id: `revision-${revision}`, workspace: reviewScope.workspace, bead_id: 'task-reader', related_beads: [], thread: 'threads/task-reader', title: id === 'reader-01' ? 'Reader follow-up' : 'Independent reader review', purpose: 'Review the pinned reader plan and two forms.', question: revision === 1 ? 'What should we do next?' : 'Updated question: which changes should we make?', status: 'published', change_kind: 'implemented', members: [
@@ -33,7 +33,7 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
   }
   const read = async (_scope: WorkspaceScope, pin: ReviewPin) => {
     if (pin.resource.endsWith('/config.md')) return '---\npipeline: full\nroute: [goals, questions, research, design, plan, implement]\n---\n';
-    if ((await load()).missingBaseline && pin.version === baseline.version) throw new Error('Historical baseline is unavailable.');
+    if ((await load(pin)).missingBaseline && pin.version === baseline.version) throw new Error('Historical baseline is unavailable.');
     if (comparison && pin.version === target.version) return comparison.after;
     if (comparison && pin.version === baseline.version) return comparison.before;
     const text = documents.get(pin.version);
