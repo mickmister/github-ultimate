@@ -220,8 +220,21 @@ The proof page offers **Open in app**, **Stay on web**, and an opt-in preference
 for a single automatic attempt on a future mobile visit. There is no repeated
 retry or installed-app detection; a tap may still be necessary. The automatic
 preference stores only a boolean. It is suppressed inside Alohak even
-before the bridge becomes ready. This pilot is on the proof page; integration
-of the handoff UI into the production webapp is a later milestone.
+before the bridge becomes ready.
+
+The production hosted `app/` now offers **Open in Alohak** above every route in
+mobile browsers, including review and revision-pinned document links from chat.
+It keeps the full physical deployment path, query and hash route, and updates
+when navigating inside the hosted app. The action is hidden inside Alohak and
+on ordinary desktop browsers. It uses an explicit tap, with a browser fallback
+message; there is no automatic redirect or installed-app detection.
+
+For first-time setup, install the preview and set the native HTTPS entry URL to
+the displayed `app/` deployment, then return to the browser link and tap the
+action. A deployment still configured for `isolation/` cannot open sibling
+`app/` routes; configure `app/` explicitly. Changing deployment resets its grants.
+The handoff grants no GitHub/storage access. Full end-to-end OS launch from chat
+and cold/warm app routing still need installed-device verification on each OS.
 
 Links look like:
 

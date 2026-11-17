@@ -1,0 +1,5 @@
+.mobile-handoff { margin: 12px; padding: 12px; border: 1px solid var(--line); border-radius: var(--ui-radius, 8px); background: var(--panel); display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.mobile-handoff-open { display: inline-flex; align-items: center; min-height: var(--ui-control-size, 44px); padding: 8px 16px; border: 1px solid var(--accent); border-radius: var(--ui-radius, 8px); background: var(--selected); font-weight: 600; }
+.mobile-handoff details, .mobile-handoff p { flex-basis: 100%; margin: 0; }
+.mobile-handoff summary { cursor: pointer; }
+.mobile-handoff code { display: block; overflow-wrap: anywhere; user-select: all; margin-block: 8px; }
