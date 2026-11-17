@@ -153,7 +153,7 @@ test('a failed preload leaves other items usable and can be retried independentl
   for (const letter of ['a', 'c', 'd']) expect(reads.filter(version => version === letter.repeat(40))).toHaveLength(1);
 });
 
-for (const width of [1280, 390]) {
+for (const width of [1920, 1280, 390]) {
   test(`review sidebar can be hidden without losing document mode or form answers at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });
     await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story');
@@ -187,12 +187,19 @@ for (const width of [1280, 390]) {
       await route.fulfill({ json: state });
     });
     await page.goto('/iframe.html?id=web-app-reviews--rich-changes&viewMode=story&remoteFixture=true');
+    const shell = (await page.locator('.review-workspace').boundingBox())!;
+    const padding = await page.locator('.review-workspace').evaluate(node => getComputedStyle(node).paddingLeft);
     await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
     await page.getByRole('button', { name: 'Changes', exact: true }).click();
     await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
     const zen = page.getByRole('dialog', { name: 'Reader plan — Zen mode', exact: true });
     await expect(zen.getByRole('heading', { name: 'Reader plan', level: 2, exact: true })).toBeFocused();
     expect(await zen.boundingBox()).toMatchObject({ x: 0, y: 0, width, height: 844 });
+    const reading = zen.locator('.review-zen-document-content');
+    expect((await reading.boundingBox())!.x).toBeCloseTo(shell.x);
+    expect((await reading.boundingBox())!.width).toBeCloseTo(shell.width);
+    expect(await reading.evaluate(node => getComputedStyle(node).paddingLeft)).toBe(padding);
+    if (width === 1920) expect(shell.x).toBeGreaterThan(100);
     expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
     await expect(page.getByRole('link', { name: 'Review inbox', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Show sidebar', exact: true })).toHaveCount(0);
