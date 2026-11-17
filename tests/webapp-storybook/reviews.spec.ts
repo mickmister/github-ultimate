@@ -474,6 +474,31 @@ test('partial form failure retains the successful response receipt', async ({ pa
   await expect(page.getByLabel('Submission receipts')).toContainText('1 forms');
   expect(state.artifacts.filter((item: any) => item.value.kind === 'review-response')).toHaveLength(1);
 });
+test('failed submission reload restores answers and exact pending response without auto-submit', async ({ page }) => {
+  let state: any = { artifacts: [], revision: 1, failSecond: true };
+  await page.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') state = route.request().postDataJSON();
+    await route.fulfill({ json: state });
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
+  await page.getByRole('button', { name: 'Review experience', exact: true }).click();
+  await page.getByText('Revise this approach', { exact: true }).click();
+  await finishForm(page);
+  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Second form transport unavailable');
+  const pending = await page.evaluate(() => JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find(key => key.startsWith('review-answer-recovery:'))!)!).pending.id);
+  expect(state.artifacts).toHaveLength(0);
+  state.failSecond = false;
+  await page.reload();
+  await page.getByRole('button', { name: 'Review experience', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Revise this approach', exact: true })).toBeChecked();
+  expect(state.artifacts).toHaveLength(0);
+  await finishForm(page);
+  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await expect(page.getByLabel('Submission receipts')).toContainText('1 forms');
+  expect(state.artifacts[0].value.id).toBe(pending);
+});
+
 test('full document stays readable when its pinned baseline is unavailable', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--unavailable-baseline&viewMode=story');
   await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible({ timeout: 30000 });

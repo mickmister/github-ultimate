@@ -8,7 +8,8 @@ import { reviewStatus, restoreReviewComments, storeReviewComments } from '../web
 import { reviewBeadMetadata } from '../src/review-beads';
 import { Connections, type ConnectionRecord } from '../src/connections';
 import { processMetadata } from '../hosted/review-process';
-import { createHostedReviews } from '../webapp/src/app-hooks/reviews';
+import { createHostedReviews, isLegacyProcessSchemaError } from '../webapp/src/app-hooks/reviews';
+import { bridgeRequest } from '../hosted/client';
 
 vi.mock('../hosted/client', () => ({ bridgeRequest: vi.fn(async (request: any) => request.operation === 'discover' ? { capabilities: [] } : [{ id: 'a6075abf-226e-4c88-977c-e11404e59f32', installation: { id: 1 }, user: { id: 1 } }]) }));
 
@@ -118,6 +119,49 @@ function processFixture() {
   return f;
 }
 
+test('mixed-version broker rejects process early, translates only the old schema failure, and preserves legacy writes', async () => {
+  const bridge = vi.mocked(bridgeRequest);
+  const oldError = JSON.stringify([{ code: 'unrecognized_keys', keys: ['process'], path: [], message: 'Unrecognized key: "process"' }]);
+  const f = processFixture();
+  // Reproduce the older strict request parser, without relaxing the authoritative schema.
+  const { z } = await import('zod');
+  expect(() => z.object(Object.fromEntries(Object.keys(f.request).filter(key => key !== 'process').map(key => [key, z.unknown()]))).strict().parse(f.request)).toThrow('process');
+  const writes: any[] = [];
+  let capabilities = ['reviewWrite'];
+  let failure = '';
+  bridge.mockImplementation(async (input: any) => {
+    if (input.operation === 'discover') return { capabilities } as any;
+    if (input.operation === 'reviewWrite') {
+      writes.push(input);
+      if (failure) throw new Error(failure);
+      const git = input.text.includes(f.value.request.version) ? f.git : legacy.git;
+      return await writeReview(input, 'github:1', git.read, git.mutate) as any;
+    }
+    return [] as any;
+  });
+  const legacy = fixture();
+  const selected = { connectionId: scope.id, ...scope };
+  try {
+    const service = createHostedReviews(f.git.read);
+    await expect(service.save(selected, f.value, null)).rejects.toThrow('Update the browser extension or Alohak broker');
+    expect(writes).toHaveLength(0);
+    expect(f.git.mutations).toHaveLength(0);
+    capabilities = ['reviewWrite', 'qrspiProcessReview'];
+    failure = oldError;
+    await expect(service.save(selected, f.value, null)).rejects.toThrow('reload this page');
+    failure = 'arbitrary validation failure';
+    await expect(service.save(selected, f.value, null)).rejects.toThrow(failure);
+    failure = '';
+    await expect(service.save(selected, f.value, null)).resolves.toHaveProperty('version');
+    capabilities = ['reviewWrite'];
+    await expect(createHostedReviews(legacy.git.read).save(selected, legacy.value, null)).resolves.toHaveProperty('version');
+    expect(isLegacyProcessSchemaError(new Error(oldError))).toBe(true);
+    for (const issues of [[{ code: 'unrecognized_keys', keys: ['process', 'other'], path: [] }], [{ code: 'unrecognized_keys', keys: ['process'], path: ['nested'] }], [{ code: 'invalid_type', keys: ['process'], path: [] }]]) expect(isLegacyProcessSchemaError(JSON.stringify(issues))).toBe(false);
+  } finally {
+    bridge.mockImplementation(async (input: any) => input.operation === 'discover' ? { capabilities: [] } as any : [{ id: scope.id, installation: { id: 1 }, user: { id: 1 } }] as any);
+  }
+});
+
 test('process delivery runs only after immutable response readback and retries without writing answers', async () => {
   const { git, request, value, input } = processFixture();
   const deliver = vi.fn(async (receipt: any, bound: ReviewRequest) => {
@@ -176,6 +220,7 @@ test.each(['allowed', 'missing-actions', 'missing-source', 'different-user', 'se
   }) as typeof fetch;
   const store = { all: async () => structuredClone([...records.values()]), get: async (id: string) => structuredClone(records.get(id)), put: async (r: ConnectionRecord) => { records.set(r.id, structuredClone(r)); }, remove: async (id: string) => { records.delete(id); } };
   const broker = new Connections(store, fetcher, undefined, undefined, undefined, undefined, { repository: 'mickmister/gh-agentic-workflows', workflow: 'qrspi-process.yml', ref: 'vk/46e5-vd-multi-instanc', ...(mode === 'separate-app' || mode === 'different-user' ? { sourceConnectionId: source.id } : {}) });
+  expect(await broker.handleHosted('https://review.test/', { operation: 'discover' })).toMatchObject({ capabilities: expect.arrayContaining(['reviewWrite', 'qrspiProcessReview']) });
   const first = await broker.handleHosted('https://review.test/', f.input()) as any;
   expect(first.dispatch.state).toBe(mode === 'network' ? 'unknown' : 'failed');
   const entries = f.git.trees.get(f.git.commits.get(f.git.head)!)!;

@@ -1,12 +1,13 @@
 import type { ReviewPacketProps } from './ReviewPacket';
 import type { createReviewContents, ReviewContents } from './review-contents';
 import { ReviewSession } from './ReviewSession';
+import { recoveryKey } from './recovery';
 import { ReviewMemberContent } from './ReviewMemberContent';
 
 export function ReviewPacketView({ scope, review, listing, service, refresh, updateListing, error, contentsCache, contents, selected, onSelect }: ReviewPacketProps & {
   contentsCache: ReturnType<typeof createReviewContents>; contents: ReviewContents; selected: string; onSelect(id: string): void;
 }) {
-  if (listing) return <ReviewSession scope={scope} review={review} listing={listing} service={service} refresh={refresh} updateListing={updateListing} contentsCache={contentsCache} contents={contents} initialSelected={selected} />;
+  if (listing) return <ReviewSession key={recoveryKey(scope, review, listing.reviewer)} scope={scope} review={review} listing={listing} service={service} refresh={refresh} updateListing={updateListing} contentsCache={contentsCache} contents={contents} initialSelected={selected} />;
   const member = review.request.members.find(item => item.id === selected)!;
   return <section aria-label="Pinned review preview">
     <header className="review-summary"><p>{review.request.purpose}</p><p><strong>Requested response:</strong> {review.request.question}</p>
