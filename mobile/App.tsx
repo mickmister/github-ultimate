@@ -10,6 +10,7 @@ import GitHubConnections from './GitHubConnections';
 import { github } from './github';
 import CacheSettings from './CacheSettings';
 import { MobileSettingsStore, type MobileSettings } from '../src/mobile-settings';
+import { MobileLifecycle } from '../src/mobile-lifecycle';
 
 export default function App() {
   const [input, setInput] = useState(String(Constants.expoConfig?.extra?.entryURL ?? ''));
@@ -29,14 +30,14 @@ export default function App() {
   const webView = useRef<AlohakWebViewHandle>(null);
   const viewKey = `${entry}:${reload}`;
   const currentViewKey = useRef(viewKey); currentViewKey.current = viewKey;
-  const foreground = useRef(AppState.currentState === 'active');
+  const lifecycle = useRef(new MobileLifecycle(broker, AppState.currentState === 'active')).current;
   const entryRef = useRef(entry); entryRef.current = entry;
   const pendingLink = useRef<string | undefined>(undefined);
   const lastLink = useRef<string | undefined>(undefined);
   const openLink = useRef((url: string) => {});
   function applySettings(value: MobileSettings) {
     const url = value.entryURL, grant = grantForEntry(url);
-    broker.invalidate(); broker.approve(value.fixtureApproved ? grant : undefined); broker.approveStorage(value.storageApproved ? grant : undefined);
+    lifecycle.reset(); broker.approve(value.fixtureApproved ? grant : undefined); broker.approveStorage(value.storageApproved ? grant : undefined);
     setInput(url); setEntry(url); entryRef.current = url; setRoute(url);
     setApproved(value.fixtureApproved); setStorageApproved(value.storageApproved);
     setBootstrap(''); setDocument(undefined); setError(''); setReload(n => n + 1);
@@ -56,19 +57,22 @@ export default function App() {
       const target = resolveAlohakLink(url, entryRef.current);
       if (lastLink.current === url) return;
       lastLink.current = url;
-      broker.invalidate(); setBootstrap(''); setRoute(target); setReload(n => n + 1); setError('');
+      lifecycle.reset(); setBootstrap(''); setRoute(target); setReload(n => n + 1); setError('');
     } catch (cause) { setError(String(cause)); }
   };
   useEffect(() => {
     void Linking.getInitialURL().then(url => { if (url) openLink.current(url); });
     const subscription = Linking.addEventListener('url', ({ url }) => openLink.current(url));
     const state = AppState.addEventListener('change', value => {
-      foreground.current = value === 'active';
-      if (value !== 'active') { broker.invalidate(); setBootstrap(''); }
-      else { lastLink.current = undefined; setReload(n => n + 1); }
+      const ready = lifecycle.stateChanged(value);
+      if (value !== 'active') setBootstrap('');
+      else {
+        lastLink.current = undefined;
+        if (ready) setBootstrap(JSON.stringify({ documentId: ready.documentId, script: mobileBootstrap(ready.documentId, Platform.OS === 'ios' ? 'ios' : 'android') }));
+      }
     });
-    return () => { subscription.remove(); state.remove(); broker.invalidate(); };
-  }, [broker]);
+    return () => { subscription.remove(); state.remove(); lifecycle.reset(); };
+  }, [lifecycle]);
   async function saveSettings(value: MobileSettings, loadDeployment = true) {
     setSettingsBusy(true);
     try {
@@ -95,9 +99,9 @@ export default function App() {
     void saveSettings({ entryURL: entry, fixtureApproved, storageApproved }, false);
   }
   function onDocument(event: DocumentEvent) {
-    broker.invalidate(); setBootstrap(''); setDocument(event);
-    if (event.state === 'ready' && foreground.current) {
-      broker.activate(event);
+    const ready = lifecycle.documentChanged(event);
+    setBootstrap(''); setDocument(event);
+    if (ready) {
       setBootstrap(JSON.stringify({ documentId: event.documentId, script: mobileBootstrap(event.documentId, Platform.OS === 'ios' ? 'ios' : 'android') }));
     }
     if (event.state === 'error') setError(event.message ?? 'WebView load failed.');
@@ -107,7 +111,7 @@ export default function App() {
     <View style={styles.toolbar}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
       <Button title="Back" disabled={navigation.key !== viewKey || !navigation.back} onPress={() => webView.current?.goBack()} />
       <Button title="Forward" disabled={navigation.key !== viewKey || !navigation.forward} onPress={() => webView.current?.goForward()} />
-      <Button title="Reload" disabled={!entry} onPress={() => { broker.invalidate(); setBootstrap(''); webView.current?.reload(); }} /></View>
+      <Button title="Reload" disabled={!entry} onPress={() => { lifecycle.reset(); setBootstrap(''); webView.current?.reload(); }} /></View>
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
       <Text accessibilityRole="header">Alohak</Text>
       <Text selectable>Mobile build commit: {String(Constants.expoConfig?.extra?.buildCommit ?? 'unavailable')}</Text>

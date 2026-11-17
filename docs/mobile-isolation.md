@@ -60,12 +60,19 @@ The page never computes an overall acceptance decision or changes feature flags.
   inconclusive. Revoking then regranting must not revive an old pending request.
 - Tap **Start delayed lifecycle marker**, record its old native document ID and
   unique marker, then use native Reload. Repeat separately for Back/Forward,
-  deployment switching/native view recreation and background/return. A replacement
+   deployment switching/native view recreation. A replacement
   page must have a fresh document ID and must not receive the old success reply.
   A harness page that observes a marker from another load records a **foreign
   lifecycle reply** failure. Lack of that failure alone is not proof: the new
   page may not have loaded its listener before an incorrectly routed reply.
-  Returning to the same live page without taking an action is not lifecycle proof.
+   Returning to the same live page without taking an action is not lifecycle proof.
+- Test background/return separately. Ordinary resume must keep the same native
+  document ID, page-load ID, form entries and in-memory report; it must not
+  deliberately reload. A pending lifecycle marker started before losing focus
+  must still be denied or time out, never return its old success after resume.
+  Fresh fixture calls must work again. A page actually replaced by navigation or
+  OS process loss must instead get a fresh identity. Record the installed update:
+  older bundles deliberately remounted on every active transition.
 - Repeat with process termination/relaunch. A process-local pending request cannot
   be resumed or implicitly replayed after restart. Native app settings should
   remain usable. Record exact actions and observed native IDs. The in-page report

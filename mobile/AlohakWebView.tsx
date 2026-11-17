@@ -2,8 +2,9 @@ import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef } fr
 import { WebView } from 'react-native-webview';
 import type { ViewProps } from 'react-native';
 import { nativeWebViewEvent } from '../src/mobile-webview';
+import type { MobileDocumentEvent } from '../src/mobile-lifecycle';
 
-export type DocumentEvent = { documentId: string; documentURL: string; state: 'loading' | 'ready' | 'error'; message?: string };
+export type DocumentEvent = MobileDocumentEvent;
 type MessageEvent = { documentId: string; documentURL: string; isMainFrame: boolean; data: string; replyId: string };
 export type AlohakWebViewHandle = { respond(replyId: string, data: string): Promise<void>; goBack(): void; goForward(): void; reload(): void };
 type Props = ViewProps & {
