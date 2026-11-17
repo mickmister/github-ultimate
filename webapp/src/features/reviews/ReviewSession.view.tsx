@@ -12,10 +12,10 @@ import { reviewHref } from './ReviewWorkspace';
 interface Props {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; latest?: OpenReview; service: ReviewsModuleV1;
   selected: string; forms: ReviewArtifact['forms']; progress: string[]; responses: StoredReviewArtifact[]; submitted: Set<string>;
-  busy: boolean; dirty: boolean; notice: string; error: string;
-  actions: { select(id: string): void; answer(id: string, answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; progress(id: string, checked: boolean): void; saveDraft(): void; submit(id?: string): void; retry(value: ReviewArtifact): void; refresh(): void };
+  busy: boolean; dirty: boolean; notice: string; error: string; sidebarOpen: boolean;
+  actions: { select(id: string): void; toggleSidebar(): void; answer(id: string, answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; progress(id: string, checked: boolean): void; saveDraft(): void; submit(id?: string): void; retry(value: ReviewArtifact): void; refresh(): void };
 }
-export function ReviewSessionView({ scope, review, listing, latest, service, selected, forms, progress, responses, submitted, busy, dirty, notice, error, actions }: Props) {
+export function ReviewSessionView({ scope, review, listing, latest, service, selected, forms, progress, responses, submitted, busy, dirty, notice, error, sidebarOpen, actions }: Props) {
   const member = review.request.members.find(member => member.id === selected)!;
   const accepting = review.request.status === 'published' && latest?.request.status !== 'withdrawn';
   return <section aria-label="Focused review session"><header className="review-summary"><p>{review.request.purpose}</p><p><strong>Requested response:</strong> {review.request.question}</p>
@@ -27,7 +27,8 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
     {latest?.request.status === 'withdrawn' && review.request.status !== 'withdrawn' && <p role="status">This request has been withdrawn. Existing responses remain available.</p>}
   </header>
     <ReviewProcess scope={scope} review={review} service={service} />
-    <div className="review-layout"><aside aria-label="Review items"><ol>{review.request.members.map(item => <li key={item.id}><button aria-current={selected === item.id ? 'step' : undefined} onClick={() => actions.select(item.id)}>{item.label}</button><span>{submitted.has(item.id) ? 'Submitted' : progress.includes(item.id) ? 'Reviewed' : item.kind}</span></li>)}</ol></aside>
+    <button type="button" aria-expanded={sidebarOpen} aria-controls="review-items" onClick={actions.toggleSidebar}>{sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>
+    <div className="review-layout" data-sidebar-open={sidebarOpen}><aside id="review-items" aria-label="Review items" hidden={!sidebarOpen}><ol>{review.request.members.map(item => <li key={item.id}><button aria-current={selected === item.id ? 'step' : undefined} onClick={() => actions.select(item.id)}>{item.label}</button><span>{submitted.has(item.id) ? 'Submitted' : progress.includes(item.id) ? 'Reviewed' : item.kind}</span></li>)}</ol></aside>
       <article className="review-content"><h2>{member.label}</h2><ReviewMemberContent key={member.id} scope={scope} review={review} member={member} service={service}
         answer={submitted.has(member.id) ? responses.flatMap(item => item.value.forms).find(form => form.member_id === member.id) : forms.find(form => form.member_id === member.id)} submitted={submitted.has(member.id)}
         onAnswer={(answers, intent) => actions.answer(member.id, answers, intent)} onSubmit={() => actions.submit(member.id)} busy={busy || !accepting}

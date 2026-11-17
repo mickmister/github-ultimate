@@ -166,6 +166,26 @@ independently of the hosted deployment URL. Builds resolve the checked-out sourc
 EAS source archives without Git use `EAS_BUILD_GIT_COMMIT_HASH`. Older mobile
 bundles without this metadata display `unavailable`.
 
+## Focused document reading
+
+In a review request, **Hide sidebar** removes the document/form navigation and
+expands the current item to the full container width. **Show sidebar** restores
+navigation. The current comparison tab, review progress and entered form answers
+are retained while toggling; this layout choice lasts for the open review session.
+
+Choose **Zen mode** on a document for full-viewport reading without the surrounding
+review summary, navigation or submission controls. **Full document**, **Changes**
+and **Baseline** remain available, including rich Markdown and read-only source
+comparisons. The selected comparison and review progress are preserved on exit.
+The document uses the available viewport width, with mobile safe-area padding.
+
+Select text in **Full document** to comment using the context menu or **Comment ⋯**
+button. Comment menus, the composer and the review's comment queue stay inside
+the modal, and **Save draft remotely** saves comments and review progress without
+leaving zen mode. A sticky **← Back** button or Escape returns to the review and
+restores focus to the entry button; Escape first dismisses an open comment menu
+or dialog. Background controls remain inert and page scrolling is restored on exit.
+
 ## Rich Markdown review changes
 
 For a pinned Markdown document with a baseline, **Changes** shows a unified,

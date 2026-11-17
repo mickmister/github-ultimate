@@ -29,6 +29,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const [forms, setForms] = useState<ReviewArtifact['forms']>(initial?.value.forms ?? []);
   const [progress, setProgress] = useState(initial?.value.progress ?? []);
   const [selected, setSelected] = useState(review.request.members[0].id);
+  const [sidebarOpen, setSidebarOpen] = useState(true);
   const [draftVersion, setDraftVersion] = useState<string | null>(initial?.pin.version ?? null);
   const [draftId] = useState(initial?.value.id ?? `draft-${crypto.randomUUID()}`);
   const [saved, setSaved] = useState('');
@@ -96,7 +97,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const latest = listing.requests.find(item => item.request.request_id === review.request.request_id);
   return <FeedbackProvider queue={queue} storageKey={`review:${scope.repository}:${scope.workspace}:${review.request.request_id}:${review.pin.version}`}>
     <ReviewSessionView scope={scope} review={review} listing={listing} latest={latest} service={service} selected={selected} forms={forms} progress={progress}
-      responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error}
-      actions={{ select: setSelected, answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), retry: value => void retry(value), refresh }} />
+      responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error} sidebarOpen={sidebarOpen}
+      actions={{ select: setSelected, toggleSidebar() { setSidebarOpen(open => !open); }, answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), retry: value => void retry(value), refresh }} />
   </FeedbackProvider>;
 }
