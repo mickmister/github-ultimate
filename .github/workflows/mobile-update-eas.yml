@@ -13,7 +13,7 @@ on:
         default: preview
         options: [development, preview, production]
       github_connections:
-        description: GitHub pilot (enable only after signed-device isolation acceptance)
+        description: Enable GitHub connections in this explicitly selected release
         type: choice
         default: '0'
         options: ['0', '1']
@@ -52,11 +52,4 @@ jobs:
           EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: ${{ inputs.github_connections || '0' }}
           EAS_RESULT_PATH: ${{ runner.temp }}/eas-update.json
           EXPO_NO_TELEMETRY: '1'
-        run: node scripts/eas-mobile.mjs
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
-        if: always()
-        with:
-          name: eas-update-${{ inputs.platform }}-${{ inputs.profile }}
-          path: ${{ runner.temp }}/eas-update.json
-          if-no-files-found: ignore
-          retention-days: 7
+        run: node --experimental-strip-types scripts/eas-mobile.ts

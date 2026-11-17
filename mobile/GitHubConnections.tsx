@@ -34,7 +34,7 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
   return <View style={styles.section}>
     <Text accessibilityRole="header">GitHub App connections</Text>
     <Text>Choose your own GitHub Apps. Tokens and device codes stay in native secure storage. Each connection needs a separate deployment grant.</Text>
-    {!githubEnabled && <Text>GitHub sign-in and page reads are disabled in this build pending device isolation acceptance.</Text>}
+    <Text>{githubEnabled ? 'GitHub sign-in and repository reads are enabled in this build.' : 'GitHub connections are disabled in this release. Apply the GitHub-enabled preview update to sign in.'}</Text>
     <TextInput accessibilityLabel="Connection name" placeholder="Connection name" value={name} onChangeText={setName} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App ID" placeholder="GitHub App ID" keyboardType="number-pad" value={appId} onChangeText={setAppId} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App client ID" placeholder="GitHub App client ID" autoCapitalize="none" autoCorrect={false} value={clientId} onChangeText={setClientId} style={styles.input} />

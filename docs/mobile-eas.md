@@ -30,9 +30,18 @@ the same project. Configure these repository settings:
 | `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions secret | Public HTTPS entry URL to prefill native settings; does not grant access |
 
 Dispatch input `github_connections` defaults to `0` and supplies the public
-`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` build/update flag. Choose `1` only after
-signed-device isolation acceptance. This replaces the former optional repository
-secret for that public flag and makes each release's setting explicit.
+`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` build/update flag. The user authorized `1`
+for mobile testing previews while outstanding isolation checks remain open
+(`task-3vt.39.6.16`). This replaces the former optional repository secret for that
+public flag and makes each release's setting explicit. The JS-only switch is
+normalized to its original disabled baseline only when calculating native
+compatibility; published manifests keep the selected true/false value.
+
+The TypeScript release helper prints compact platform/update/group/runtime/source
+references and the selected GitHub flag into the job summary and log. Raw EAS
+receipts remain ephemeral rather than being uploaded as Actions artifacts. Retain
+the compact references in the owning Bead/nugs release document; Expo owns the
+canonical build/update records.
 
 The runtime connection credentials remain device-local. `EXPO_TOKEN` is release
 authentication, not GitHub OAuth/S3 credentials or a managed runtime auth backend.
@@ -129,7 +138,7 @@ The previously compiled M1 binaries without `expo-updates` cannot receive this
 feature via OTA: install a new EAS-enabled binary first. Development clients
 normally use Metro/dev tooling; preview/release builds establish actual OTA
 download/application behavior. S3 remains unavailable on mobile; GitHub sign-in
-and read methods are separately gated pending device isolation acceptance.
+and repository reads are enabled by the explicitly selected release flag.
 
 ## Verification scope
 
