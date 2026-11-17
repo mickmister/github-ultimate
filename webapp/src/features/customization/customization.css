@@ -2,3 +2,13 @@
 .customization-panel summary { cursor: pointer; font-weight: 600; }
 .customization-panel textarea { width: 100%; min-height: 14rem; font: .875rem/1.5 monospace; background: var(--panel); color: var(--fg); border: 1px solid var(--line); }
 .customization-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-block: 1rem; }
+.customization-settings { min-width: 0; margin-block: 1rem; border: 0; padding: 0; }
+.customization-settings fieldset { min-width: 0; margin-block: 1rem; border: 1px solid var(--line); border-radius: var(--ui-radius, 8px); padding: .75rem; }
+.customization-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 19rem), 1fr)); gap: .75rem 1rem; }
+.customization-setting { min-width: 0; }
+.customization-token-input { display: flex; gap: .5rem; align-items: center; }
+.customization-token-input input[type=color] { flex: 0 0 44px; width: 44px; padding: 4px; }
+.customization-token-input input:not([type=color]) { flex: 1; min-width: 0; }
+.customization-token-input button { flex: 0 0 auto; }
+.customization-panel #ui-customization-css { min-height: 6rem; }
+.customization-advanced { margin-block: 1rem; }
