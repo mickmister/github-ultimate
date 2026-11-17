@@ -62,3 +62,18 @@ test('GitHub-enabled OTA config retains the enabled value even though fingerprin
   expect(hashed.extra.githubConnectionsEnabled).toBe(false);
   expect(config.extra?.githubConnectionsEnabled).toBe(true);
 });
+
+test('EAS profile fingerprint preserves the installed baseline across streamed release-flag changes', () => {
+  const config = createRequire(import.meta.url)('../mobile/fingerprint.config.js');
+  const baseline = { build: { base: { env: { EXPO_PROJECT_ID: 'project', EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' } }, preview: { distribution: 'internal' } } };
+  const enabled = structuredClone(baseline); enabled.build.base.env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS = '1';
+  const text = JSON.stringify(enabled, null, 2) + '\n';
+  const source = { type: 'file', filePath: 'eas.json' };
+  expect(config.fileHookTransform(source, Buffer.from(text.slice(0, 30)), false)).toBeNull();
+  expect(config.fileHookTransform(source, Buffer.from(text.slice(30)), false)).toBeNull();
+  expect(config.fileHookTransform(source, null, true)).toBe(JSON.stringify(baseline, null, 2) + '\n');
+  expect(enabled.build.base.env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS).toBe('1');
+  enabled.build.base.env.EXPO_PROJECT_ID = 'another-project';
+  config.fileHookTransform(source, JSON.stringify(enabled, null, 2) + '\n', false);
+  expect(config.fileHookTransform(source, null, true)).not.toBe(JSON.stringify(baseline, null, 2) + '\n');
+});
