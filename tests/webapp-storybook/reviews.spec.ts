@@ -5,6 +5,117 @@ async function finishForm(page: Page) {
   await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
 }
 
+for (const width of [1280, 390]) {
+  test(`review sidebar can be hidden without losing document mode or form answers at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story');
+    await page.getByRole('button', { name: 'Baseline', exact: true }).click();
+    const originalWidth = (await page.locator('.review-content').boundingBox())!.width;
+    await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
+    const show = page.getByRole('button', { name: 'Show sidebar', exact: true });
+    await expect(show).toHaveAttribute('aria-expanded', 'false');
+    await expect(page.getByRole('complementary', { name: 'Review items', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Baseline', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    const layout = (await page.locator('.review-layout').boundingBox())!;
+    const content = (await page.locator('.review-content').boundingBox())!;
+    expect(content.x).toBeCloseTo(layout.x);
+    expect(content.width).toBeCloseTo(layout.width);
+    if (width === 1280) expect(content.width).toBeGreaterThan(originalWidth + 200);
+    await show.click();
+    await expect(page.getByRole('button', { name: 'Hide sidebar', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+    await page.getByText('Keep this approach', { exact: true }).click();
+    await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeChecked();
+    await show.click();
+    await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeChecked();
+  });
+
+  test(`document zen mode keeps comparison, comments and remote drafts usable at ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    let state: any = { artifacts: [], revision: 1 };
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().method() === 'POST') state = route.request().postDataJSON();
+      await route.fulfill({ json: state });
+    });
+    await page.goto('/iframe.html?id=web-app-reviews--rich-changes&viewMode=story&remoteFixture=true');
+    await page.getByRole('button', { name: 'Hide sidebar', exact: true }).click();
+    await page.getByRole('button', { name: 'Changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    const zen = page.getByRole('dialog', { name: 'Reader plan — Zen mode', exact: true });
+    await expect(zen.getByRole('heading', { name: 'Reader plan', level: 2, exact: true })).toBeFocused();
+    expect(await zen.boundingBox()).toMatchObject({ x: 0, y: 0, width, height: 844 });
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('hidden');
+    await expect(page.getByRole('link', { name: 'Review inbox', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Show sidebar', exact: true })).toHaveCount(0);
+    await expect(zen.getByRole('button', { name: 'Changes', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(zen.locator('[data-change=added] strong')).toHaveText('remote drafts');
+    await zen.getByRole('button', { name: 'Baseline', exact: true }).click();
+    await expect(zen.locator('.markdown-preview strong')).toHaveText('local drafts');
+    await zen.getByRole('button', { name: 'Full document', exact: true }).click();
+    await zen.getByText('I have reviewed this item', { exact: true }).click();
+    const selection = zen.locator('.markdown-preview strong');
+    const openMenu = async () => {
+      await selection.evaluate(node => {
+        const range = document.createRange(); range.selectNodeContents(node);
+        const selected = getSelection()!; selected.removeAllRanges(); selected.addRange(range);
+      });
+      if (width === 390) await zen.getByRole('button', { name: 'Comment on Reader plan', exact: true }).click();
+      else await selection.click({ button: 'right' });
+    };
+    await openMenu();
+    await expect(zen.getByRole('menu')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(zen.getByRole('menu')).toHaveCount(0);
+    await expect(zen).toBeVisible();
+    await openMenu();
+    await zen.getByRole('menuitem', { name: 'Comment on Content', exact: true }).click();
+    const composer = zen.getByRole('dialog', { name: 'Comment on Content', exact: true });
+    await expect(composer.locator('blockquote')).toHaveText('remote drafts');
+    await composer.getByLabel('Your comment').fill('Keep this readable in document zen mode.');
+    await composer.getByRole('button', { name: 'Add to queue', exact: true }).click();
+    await zen.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+    const queue = zen.getByRole('dialog', { name: 'Queued comments', exact: true });
+    await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Keep this readable in document zen mode.');
+    await page.keyboard.press('Escape');
+    await expect(queue).toHaveCount(0);
+    await expect(zen).toBeVisible();
+    await zen.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect(zen.getByRole('status')).toContainText('Draft saved remotely');
+    const draft = state.artifacts.find((item: any) => item.value.kind === 'review-draft').value;
+    expect(draft.progress).toContain('plan');
+    expect(draft.comments[0]).toMatchObject({ member_id: 'plan', text: 'Keep this readable in document zen mode.', selection: { text: 'remote drafts', representation: 'rendered-markdown' } });
+    await zen.getByRole('button', { name: 'Changes', exact: true }).click();
+    await zen.evaluate(node => { node.scrollTop = node.scrollHeight; });
+    const back = zen.getByRole('button', { name: '← Back', exact: true });
+    expect((await back.boundingBox())!.y).toBeLessThan(30);
+    expect(await zen.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
+    await back.click();
+    await expect(zen).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Show sidebar', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Changes', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByRole('checkbox', { name: 'I have reviewed this item', exact: true })).toBeChecked();
+    expect(await page.evaluate(() => document.body.style.overflow)).toBe('');
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(zen).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+  });
+}
+
+test('source document comparisons also work in zen mode', async ({ page }) => {
+  await page.goto('/iframe.html?id=web-app-reviews--source-changes&viewMode=story');
+  await page.getByRole('button', { name: 'Changes', exact: true }).click();
+  await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+  const zen = page.getByRole('dialog', { name: 'Reader plan — Zen mode', exact: true });
+  await expect(zen.locator('.monaco-diff-editor')).toBeVisible();
+  await zen.getByRole('button', { name: 'Full document', exact: true }).click();
+  await expect(zen.locator('[data-editor-ready=true]')).toBeVisible();
+  await zen.getByRole('button', { name: '← Back', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+});
+
 test('performance capture is available from UI and console and exports local OTLP JSON', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story');
   await page.getByText('Performance diagnostics', { exact: true }).click();

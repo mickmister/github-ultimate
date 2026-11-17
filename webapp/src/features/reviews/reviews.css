@@ -5,6 +5,8 @@
 .review-inbox { padding: 0; list-style: none; display: grid; gap: 1rem; }
 .review-inbox > li, .review-summary, .review-submit { padding: 1rem; border: 1px solid var(--border, #8886); border-radius: .6rem; }
 .review-layout { display: grid; grid-template-columns: minmax(12rem, var(--ui-sidebar-width, 20rem)) minmax(0, 1fr); gap: var(--ui-spacing, 1rem); margin-block: 1rem; }
+.review-layout[data-sidebar-open=false] { grid-template-columns: minmax(0, 1fr); }
+.review-layout aside[hidden] { display: none; }
 .review-layout aside ol { padding-left: 1.2rem; position: sticky; top: 1rem; }
 .review-layout aside li { margin-block: .75rem; }
 .review-layout aside span { display: block; font-size: .85rem; opacity: .75; }
@@ -33,6 +35,7 @@ body:has(> .review-zen[open]) > :not(.review-zen) { visibility: hidden; }
 .review-zen-toolbar { position: sticky; top: 0; z-index: 1; padding: max(.5rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) .5rem max(.75rem, env(safe-area-inset-left)); background: var(--bg); }
 .review-zen .review-zen-back { color: var(--muted); background: transparent; border-color: transparent; font-weight: 400; }
 .review-zen-content { max-width: 90ch; margin-inline: auto; padding: 0 max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); overflow-wrap: anywhere; }
+.review-zen-document-content { max-width: none; }
 .review-zen .review-question-heading { scroll-margin-block-start: 5rem; }
 .review-form-actions { margin-block: 1rem; }
 .review-form-actions [role=status], .review-form-actions [role=alert] { margin-block: .75rem; }

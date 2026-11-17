@@ -6,6 +6,7 @@ import { MonacoDocument } from '../documents/MonacoDocument';
 import { isMarkdown } from '../documents/document-format';
 import { DocumentChanges } from './DocumentChanges';
 import { ReviewForm } from './ReviewForm';
+import { ReviewDocument } from './ReviewDocument';
 import { ReviewCheckbox } from './ReviewCheckbox.view';
 import { reviewTarget } from './model';
 import type { ReviewMemberContentProps } from './ReviewMemberContent';
@@ -18,7 +19,7 @@ export function ReviewMemberContentView({ scope, review, member, answer, submitt
   if (member.kind !== 'document') return null;
   const markdown = isMarkdown(member.target.resource);
   const target = reviewTarget(scope, review, member, markdown ? 'rendered-markdown' : 'source');
-  return <section aria-label="Pinned document review"><div className="review-progress">
+  return <ReviewDocument title={member.label} busy={busy} onSaveDraft={onSaveDraft} formStatus={formStatus}><section aria-label="Pinned document review"><div className="review-progress">
     <ReviewCheckbox label="I have reviewed this item" checked={reviewed} disabled={busy} descriptionId="review-progress-help" onChange={onReviewed} />
     <p id="review-progress-help" className="muted">Optional progress marker. Save a draft or submit to record it. Leaving it unchecked does not block submission or authorize code changes.</p>
   </div><div role="group" aria-label="Document comparison view"><button aria-pressed={mode === 'full'} onClick={() => setMode('full')}>Full document</button>
@@ -30,5 +31,5 @@ export function ReviewMemberContentView({ scope, review, member, answer, submitt
     {mode === 'full' && <AttachableContext target={target}><FeedbackAnnotations target={target}>
       {markdown ? <MarkdownDocument content={content} /> : <MonacoDocument path={member.target.resource} content={content} />}
     </FeedbackAnnotations></AttachableContext>}
-  </section>;
+  </section></ReviewDocument>;
 }
