@@ -81,18 +81,27 @@ it('clears only unchanged exported entries after clipboard success, retaining co
   queue.add('content-comment', 'Original', context);
   queue.add('feature-comment', 'Export and remove this', context);
   let copied = '', finish!: () => void;
-  const copy = queue.copyAndClear(text => { copied = text; return new Promise(resolve => { finish = resolve; }); });
+  const copy = queue.copyAndClear(text => { copied = text; return new Promise(resolve => { finish = resolve; }); }, 'content-comment');
   const first = queue.getSnapshot().items[0];
   queue.edit(first.id, 'Edited while copying');
   queue.add('feature-comment', 'Added while copying', context);
   finish(); await copy;
-  expect(queue.getSnapshot().items.map(item => item.comment)).toEqual(['Edited while copying', 'Added while copying']);
+  expect(queue.getSnapshot().items.map(item => item.comment)).toEqual(['Edited while copying', 'Export and remove this', 'Added while copying']);
   expect(copied).toContain('> selected words\n\nOriginal');
-  expect(copied).toContain('Feature: documents.markdown-renderer');
-  expect(copied).toContain('Export and remove this');
+  expect(copied).not.toContain('Feature: documents.markdown-renderer');
+  expect(copied).not.toContain('Export and remove this');
   expect(copied).not.toContain('Edited while copying');
   expect(copied).not.toContain('Added while copying');
   await queue.copyAndClear(async () => {});
+  expect(queue.getSnapshot().items).toHaveLength(3); // Mixed exports must not combine destinations.
+  await queue.copyAndClear(async text => {
+    expect(text).toContain('Destination workspace: UNKNOWN');
+    expect(text).toContain('reproduction context only');
+    expect(text).not.toContain('Edited while copying');
+  }, 'feature-comment');
+  expect(queue.getSnapshot().items.map(item => item.comment)).toEqual(['Edited while copying']);
+  expect(queue.getSnapshot().message).toContain('Not delivered');
+  await queue.copyAndClear(async () => {}, 'content-comment');
   expect(queue.getSnapshot().items).toEqual([]);
 });
 

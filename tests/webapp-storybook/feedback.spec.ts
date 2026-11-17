@@ -27,7 +27,7 @@ test('captures selected content, persists across reload, edits and copies a comp
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
   const review = page.getByRole('dialog', { name: 'Queued comments', exact: true });
   await review.getByLabel('Comment 1', { exact: true }).fill('Make the introduction more concrete.');
-  await review.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
+  await review.getByRole('button', { name: 'Copy Content & clear Content', exact: true }).click();
   await expect(review.getByText('No comments queued.', { exact: true })).toBeVisible();
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain('# planning/product-brief.md');
@@ -49,7 +49,7 @@ test('another application can explicitly opt into URLs with an isolated draft ke
   expect(await page.evaluate(() => sessionStorage.getItem('github-ultimate:feedback:v1'))).toBeNull();
   await page.reload();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
-  await page.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy Feature intake & clear Feature', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('No comments queued.');
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain(`Page: ${url}`);
@@ -72,7 +72,7 @@ test('nearest nested target owns the menu; ordinary Copy does not enqueue; faile
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Denied')) } }));
   const review = page.getByRole('dialog', { name: 'Queued comments', exact: true });
-  await review.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
+  await review.getByRole('button', { name: 'Copy Feature intake & clear Feature', exact: true }).click();
   await expect(review).toContainText('Your comments are still queued');
   await expect(review.getByLabel('Comment 1', { exact: true })).toHaveValue('Improve paragraph spacing.');
   await review.getByRole('button', { name: 'Remove comment 1', exact: true }).click();
@@ -92,7 +92,7 @@ test('source editor captures exact model selection and line ranges through its c
   await composer.getByLabel('Your comment').fill('Explain this setting.');
   await composer.getByRole('button', { name: 'Add to queue' }).click();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
-  await page.getByRole('button', { name: 'Copy review & clear', exact: true }).click();
+  await page.getByRole('button', { name: 'Copy Content & clear Content', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Queued comments', exact: true })).toContainText('No comments queued.');
   const copied = await page.evaluate(() => navigator.clipboard.readText());
   expect(copied).toContain('## 1 — lines 1–4');

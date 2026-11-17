@@ -4,7 +4,7 @@ import { validateReviewArtifact, type ReviewArtifact } from '../../../../src/rev
 import type { Answers } from '../../../../src/protocol';
 import type { WorkspaceScope } from '../../app-hooks/contracts';
 import type { ReviewListing, ReviewsModuleV1 } from '../../app-hooks/reviews';
-import { createFeedbackQueue } from '../feedback/queue';
+import { createFeedbackQueue, restoreFeedbackDraft } from '../feedback/queue';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { restoreReviewComments, responsesFor, storeReviewComments } from './model';
 import { ReviewSessionView } from './ReviewSession.view';
@@ -13,7 +13,18 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; service: ReviewsModuleV1; refresh(): void; updateListing: Dispatch<SetStateAction<ReviewListing | null>>;
 }) {
   const initial = useMemo(() => listing.artifacts.find(item => item.value.kind === 'review-draft' && item.value.reviewer === listing.reviewer && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version), []);
-  const [queue] = useState(() => createFeedbackQueue(restoreReviewComments(scope, review, initial?.value.comments ?? [])));
+  const [queue] = useState(() => {
+    const key = `review-feature-intake:${scope.repository}:${scope.workspace}:${listing.reviewer}`;
+    let features = [] as ReturnType<typeof restoreFeedbackDraft>;
+    try { features = restoreFeedbackDraft(sessionStorage.getItem(key)).filter(item => item.kind === 'feature-comment'); } catch { /* Tab storage unavailable. */ }
+    const restored = restoreReviewComments(scope, review, initial?.value.comments ?? []);
+    const intake = [...restored.filter(item => item.kind === 'feature-comment' && !features.some(local => local.id === item.id)), ...features];
+    if (intake.length) try { sessionStorage.setItem(key, JSON.stringify({ schemaVersion: 1, interactions: intake })); } catch { /* Keep the restored intake in memory. */ }
+    return createFeedbackQueue([...restored.filter(item => item.kind === 'content-comment'), ...intake], text => {
+      const restored = restoreFeedbackDraft(text).filter(item => item.kind === 'feature-comment');
+      sessionStorage.setItem(key, JSON.stringify({ schemaVersion: 1, interactions: restored }));
+    });
+  });
   const comments = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const [forms, setForms] = useState<ReviewArtifact['forms']>(initial?.value.forms ?? []);
   const [progress, setProgress] = useState(initial?.value.progress ?? []);
@@ -32,7 +43,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const body = {
     schema_version: 1 as const, transport: 'workspace-resources' as const,
     request: { id: review.request.request_id, version: review.pin.version, snapshot: review.pin.snapshot },
-    reviewer: listing.reviewer, forms, progress, comments: storeReviewComments(scope, review, comments.items),
+    reviewer: listing.reviewer, forms, progress, comments: storeReviewComments(scope, review, comments.items.filter(item => item.kind === 'content-comment')),
   };
   const fingerprint = JSON.stringify(body);
   const initialFingerprint = useRef(fingerprint);
@@ -52,6 +63,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
         const member = review.request.members.find(member => member.id === memberId);
         if (member?.kind === 'form') content.forms.push({ member_id: member.id, bead_id: member.bead_id, form_id: member.form_id, dsl: member.dsl, answers: {}, intent: 'discussion' });
       }
+      if (submit && !content.forms.length && !content.comments.length && !content.progress.length && comments.items.some(item => item.kind === 'feature-comment')) throw new Error('Feature feedback remains in separate app intake. Answer a content form or add a content comment before submitting this review.');
       if (submit && responses.length && !content.forms.length && !content.comments.length && responses.some(item => JSON.stringify(item.value.progress) === JSON.stringify(content.progress))) {
         setNotice('This feedback already has a saved response receipt.'); return;
       }
@@ -64,16 +76,27 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
       await validateReviewArtifact(review.request, value, pin => service.read(scope, pin));
       const receipt = await service.save(scope, value, submit ? null : draftVersion);
       if (!mounted.current) return;
-      updateListing(current => current ? { ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== receipt.resource), { value, pin: { resource: receipt.resource, version_kind: 'git-blob', version: receipt.version, snapshot: receipt.snapshot } }] } : current);
+      updateListing(current => current ? { ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== receipt.resource), { value, pin: { resource: receipt.resource, version_kind: 'git-blob', version: receipt.version, snapshot: receipt.snapshot }, dispatch: receipt.dispatch }] } : current);
       if (!submit) { setDraftVersion(receipt.version); setSaved(fingerprint); }
-      setNotice(submit ? 'Response saved remotely. Task notification is pending the agent intake receipt.' : 'Draft saved remotely. You can reopen this revision on another device.');
+      setNotice(submit ? `Response saved remotely. ${receipt.dispatch ? `Workflow delivery: ${receipt.dispatch.state}. ${receipt.dispatch.message ?? ''}` : 'Task notification is pending the agent intake receipt.'}` : 'Draft saved remotely. You can reopen this revision on another device.');
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { if (mounted.current) setBusy(false); }
+  }
+  async function retry(value: ReviewArtifact) {
+    if (busy) return;
+    setBusy(true); setError('');
+    try {
+      const receipt = await service.save(scope, value, null);
+      if (!mounted.current) return;
+      updateListing(current => current ? { ...current, artifacts: current.artifacts.map(item => item.value.id === value.id && item.pin.version === receipt.version ? { ...item, pin: { ...item.pin, snapshot: receipt.snapshot }, dispatch: receipt.dispatch } : item) } : current);
+      setNotice(`Response remains saved. Workflow delivery: ${receipt.dispatch?.state ?? 'unknown'}. ${receipt.dispatch?.message ?? ''}`);
+    } catch (cause) { if (mounted.current) setError(String(cause)); }
     finally { if (mounted.current) setBusy(false); }
   }
   const latest = listing.requests.find(item => item.request.request_id === review.request.request_id);
   return <FeedbackProvider queue={queue} storageKey={`review:${scope.repository}:${scope.workspace}:${review.request.request_id}:${review.pin.version}`}>
     <ReviewSessionView scope={scope} review={review} listing={listing} latest={latest} service={service} selected={selected} forms={forms} progress={progress}
       responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error}
-      actions={{ select: setSelected, answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), refresh }} />
+      actions={{ select: setSelected, answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), retry: value => void retry(value), refresh }} />
   </FeedbackProvider>;
 }

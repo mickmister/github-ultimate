@@ -6,6 +6,8 @@ import { writeReview } from '../src/review-writes';
 import { artifactResource, parseReviewRequest, reviewRequestSchema, validateReviewArtifact, type ReviewArtifact, type ReviewPin, type ReviewRequest } from '../src/review-protocol';
 import { reviewStatus, restoreReviewComments, storeReviewComments } from '../webapp/src/features/reviews/model';
 import { reviewBeadMetadata } from '../src/review-beads';
+import { Connections, type ConnectionRecord } from '../src/connections';
+import { processMetadata } from '../hosted/review-process';
 import { createHostedReviews } from '../webapp/src/app-hooks/reviews';
 
 vi.mock('../hosted/client', () => ({ bridgeRequest: vi.fn(async (request: any) => request.operation === 'discover' ? { capabilities: [] } : [{ id: 'a6075abf-226e-4c88-977c-e11404e59f32', installation: { id: 1 }, user: { id: 1 } }]) }));
@@ -93,6 +95,162 @@ function fixture() {
   const input = () => ({ ...scope, operation: 'reviewWrite' as const, text: JSON.stringify(value), expected: null });
   return { git, request, value, input, snapshot, requestVersion };
 }
+function processFixture() {
+  const f = fixture();
+  const configText = '---\npipeline: full\nroute: [goals, questions, research]\n---\n';
+  const configSnapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'threads/task-review/config.md': configText });
+  f.request.process = { kind: 'qrspi', id: 'pilot', workspace_ref: 'nugs://workspace/workspace-a', thread_id: f.request.thread, config: { resource: 'threads/task-review/config.md', version_kind: 'git-blob', version: f.git.blob(configText), snapshot: configSnapshot } };
+  const text = JSON.stringify(f.request);
+  f.value.request.version = f.git.blob(text);
+  f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
+  return f;
+}
+
+test('process delivery runs only after immutable response readback and retries without writing answers', async () => {
+  const { git, request, value, input } = processFixture();
+  const deliver = vi.fn(async (receipt: any, bound: ReviewRequest) => {
+    expect(bound.process).toEqual(request.process);
+    expect(JSON.parse(git.blobs.get(receipt.version)!)).toEqual(value);
+    expect(git.head).toBe(receipt.snapshot);
+    throw new Error('Actions unavailable');
+  });
+  const first = await writeReview(input(), 'github:1', git.read, git.mutate, deliver);
+  expect(first.dispatch).toMatchObject({ state: 'failed', message: 'Actions unavailable' });
+  expect(first.version).toBeTruthy();
+  const mutations = git.mutations.length;
+  const retry = await writeReview(input(), 'github:1', git.read, git.mutate, deliver);
+  expect(retry).toEqual(first);
+  expect(git.mutations).toHaveLength(mutations);
+  expect(deliver).toHaveBeenCalledTimes(2);
+  const { intent: _, ...rest } = value as Extract<ReviewArtifact, { kind: 'review-response' }>;
+  await writeReview({ ...input(), text: JSON.stringify({ ...rest, kind: 'review-draft', id: 'draft-process' }) }, 'github:1', git.read, git.mutate, deliver);
+  expect(deliver).toHaveBeenCalledTimes(2);
+});
+
+test('process binding rejects unknown config pins, mismatched threads and feature continuation', async () => {
+  const f = processFixture();
+  expect(() => reviewRequestSchema.parse({ ...f.request, process: { ...f.request.process, thread_id: 'threads/task-other' } })).toThrow('Process thread');
+  f.value.comments.push({ id: 'feature', member_id: 'doc', kind: 'feature-comment', text: 'Improve app' });
+  const deliver = vi.fn();
+  await expect(writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver)).rejects.toThrow('separate app intake');
+  expect(deliver).not.toHaveBeenCalled();
+  expect(f.git.mutations).toHaveLength(0);
+  f.value.comments = [];
+  f.request.process!.config.version = 'f'.repeat(40);
+  const text = JSON.stringify(f.request);
+  f.value.request.version = f.git.blob(text);
+  f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
+  await expect(writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver)).rejects.toThrow('unavailable');
+  expect(f.git.mutations).toHaveLength(0);
+});
+
+test.each(['allowed', 'missing-actions', 'missing-source', 'different-user', 'separate-app', 'network'])('authenticated broker dispatch route: %s', async mode => {
+  const f = processFixture();
+  const record: ConnectionRecord = { id: scope.id, name: 'Storage', appId: 7, clientId: 'client', user: { id: 1, login: 'reviewer' }, installation: { id: 1, account: 'owner' }, tokens: { accessToken: 'storage-token', expiresAt: Date.now() + 999999 }, hostedGrants: [{ origin: 'https://review.test', subpath: '/' }] };
+  const source: ConnectionRecord = { ...structuredClone(record), id: 'a6075abf-226e-4c88-977c-e11404e59f33', appId: 8, tokens: { accessToken: 'source-token', expiresAt: Date.now() + 999999 }, user: { id: mode === 'different-user' ? 2 : 1, login: 'source' } };
+  const records = new Map([[record.id, record], [source.id, source]]);
+  const dispatches: any[] = [];
+  let fail = true;
+  const fetcher = vi.fn(async (url: any, init: RequestInit = {}) => {
+    const path = String(url).replace('https://api.github.com', '');
+    const isSource = (init.headers as any)?.Authorization === 'Bearer source-token';
+    if (path.includes('/user/installations?')) return Response.json({ installations: [{ id: 1, app_id: isSource ? 8 : 7, account: { login: 'owner' }, permissions: { actions: mode === 'missing-actions' ? 'read' : 'write' } }] });
+    if (path.includes('/user/installations/1/repositories?')) return Response.json({ repositories: [{ full_name: scope.repository, private: true, default_branch: 'main' }, ...(mode === 'missing-source' || mode === 'separate-app' && !isSource ? [] : [{ full_name: 'mickmister/gh-agentic-workflows', private: false, default_branch: 'main' }])] });
+    if (path.endsWith('/dispatches')) { dispatches.push({ body: JSON.parse(String(init.body)), token: (init.headers as any).Authorization }); if (mode === 'network' && fail) throw new TypeError('Network disconnected; dispatch outcome unknown'); return fail ? Response.json({ message: 'unavailable' }, { status: 503 }) : new Response(null, { status: 204 }); }
+    const route = path.split('/git/')[1];
+    if (init.method === 'POST' || init.method === 'PATCH') return Response.json(await f.git.mutate(path, init.method, JSON.parse(String(init.body))));
+    const operation = route.startsWith('matching-refs/') ? 'gitRefs' : route.startsWith('commits/') ? 'gitCommit' : route.startsWith('trees/') ? 'gitTree' : 'gitBlob';
+    return Response.json(await f.git.read({ operation, prefix: route.slice('matching-refs/'.length), oid: route.split('/')[1]?.split('?')[0] } as any));
+  }) as typeof fetch;
+  const store = { all: async () => structuredClone([...records.values()]), get: async (id: string) => structuredClone(records.get(id)), put: async (r: ConnectionRecord) => { records.set(r.id, structuredClone(r)); }, remove: async (id: string) => { records.delete(id); } };
+  const broker = new Connections(store, fetcher, undefined, undefined, undefined, undefined, { repository: 'mickmister/gh-agentic-workflows', workflow: 'qrspi-process.yml', ref: 'vk/46e5-vd-multi-instanc', ...(mode === 'separate-app' || mode === 'different-user' ? { sourceConnectionId: source.id } : {}) });
+  const first = await broker.handleHosted('https://review.test/', f.input()) as any;
+  expect(first.dispatch.state).toBe(mode === 'network' ? 'unknown' : 'failed');
+  const entries = f.git.trees.get(f.git.commits.get(f.git.head)!)!;
+  f.git.snapshot({ ...Object.fromEntries(entries.map(entry => [entry.path.slice(10), f.git.blobs.get(entry.sha)!])), 'threads/task-review/unrelated.md': 'Unrelated publisher advanced Documents' });
+  expect(f.git.head).not.toBe(first.snapshot);
+  const count = f.git.mutations.length;
+  fail = false;
+  const second = await broker.handleHosted('https://review.test/', f.input()) as any;
+  expect(f.git.mutations).toHaveLength(count);
+  if (mode === 'allowed' || mode === 'separate-app' || mode === 'network') {
+    expect(second.dispatch.state).toBe('dispatched');
+    expect(second.snapshot).toBe(first.snapshot);
+    expect(dispatches).toHaveLength(2);
+    const exact = { resource: first.resource, version: first.version, snapshot: first.snapshot, reviewer: first.reviewer };
+    expect(dispatches[1].body).toEqual({ ref: 'vk/46e5-vd-multi-instanc', inputs: { workspace: scope.workspace, process: 'pilot', bead: 'task-review', response: JSON.stringify(exact) } });
+    expect(dispatches[1].token).toBe(mode === 'separate-app' ? 'Bearer source-token' : 'Bearer storage-token');
+  } else { expect(dispatches).toHaveLength(0); expect(second.dispatch.message).toMatch(/source|reviewer/i); }
+});
+
+test.each(['storage', 'token'].flatMap(wait => ['navigation', 'revokeOrigin', 'disconnect', 'selectInstallation'].map(change => ({ wait, change }))))('dispatch rechecks authority after deferred $wait during $change', async ({ wait, change }) => {
+  const f = processFixture();
+  let now = Date.now(), current = true, installationsChecked = false, dispatchReady = false;
+  let release!: () => void, reached!: () => void;
+  const paused = new Promise<void>(resolve => { reached = resolve; });
+  const resume = new Promise<void>(resolve => { release = resolve; });
+  const record: ConnectionRecord = { id: scope.id, name: 'Storage', appId: 7, clientId: 'client', user: { id: 1, login: 'reviewer' }, installation: { id: 1, account: 'owner' }, tokens: { accessToken: 'token', expiresAt: now + 999999, refreshToken: 'refresh', refreshExpiresAt: now + 9999999 }, hostedGrants: [{ origin: 'https://review.test', subpath: '/' }] };
+  let saved = structuredClone(record);
+  const dispatches: unknown[] = [];
+  const store = {
+    all: async () => {
+      if (dispatchReady && wait === 'storage') { dispatchReady = false; reached(); await resume; }
+      return [structuredClone(saved)];
+    },
+    get: async () => structuredClone(saved),
+    put: async (value: ConnectionRecord) => { saved = structuredClone(value); },
+    remove: async () => {},
+  };
+  const fetcher = vi.fn(async (url: any, init: RequestInit = {}) => {
+    const path = String(url).replace('https://api.github.com', '');
+    if (String(url).endsWith('/login/oauth/access_token')) {
+      expect(wait).toBe('token');
+      expect(dispatchReady).toBe(true);
+      dispatchReady = false; reached(); await resume;
+      return Response.json({ access_token: 'rotated', token_type: 'bearer', expires_in: 3600, refresh_token: 'rotated-refresh', refresh_token_expires_in: 86400 });
+    }
+    if (path.includes('/user/installations?')) {
+      installationsChecked = true;
+      return Response.json({ installations: [{ id: 1, app_id: 7, account: { login: 'owner' }, permissions: { actions: 'write' } }] });
+    }
+    if (path.includes('/user/installations/1/repositories?')) {
+      if (installationsChecked) {
+        dispatchReady = true;
+        if (wait === 'token') now += 1000000; // Expire only after source-route authorization.
+      }
+      return Response.json({ repositories: [{ full_name: scope.repository, private: true, default_branch: 'main' }, { full_name: 'mickmister/gh-agentic-workflows', private: false, default_branch: 'main' }] });
+    }
+    if (path.endsWith('/dispatches')) { dispatches.push(JSON.parse(String(init.body))); return new Response(null, { status: 204 }); }
+    if (init.method === 'POST' || init.method === 'PATCH') return Response.json(await f.git.mutate(path, init.method, JSON.parse(String(init.body))));
+    const route = path.split('/git/')[1];
+    const operation = route.startsWith('matching-refs/') ? 'gitRefs' : route.startsWith('commits/') ? 'gitCommit' : route.startsWith('trees/') ? 'gitTree' : 'gitBlob';
+    return Response.json(await f.git.read({ operation, prefix: route.slice('matching-refs/'.length), oid: route.split('/')[1]?.split('?')[0] } as any));
+  }) as typeof fetch;
+  const broker = new Connections(store, fetcher, () => now);
+  const result = broker.handleHosted('https://review.test/', f.input(), () => current);
+  const rejected = expect(result).rejects.toThrow('Document or connection access changed');
+  await paused; // Both the dispatchReview guard and route authorization have passed.
+  const pending = Object.values(saved.reviewDeliveries!)[0];
+  expect(pending.dispatch?.state).toBe('pending');
+  let changed: Promise<unknown> | undefined;
+  if (change === 'navigation') current = false;
+  else changed = broker.handle({ operation: change, id: scope.id, ...(change === 'revokeOrigin' ? { origin: 'https://review.test', subpath: '/' } : change === 'selectInstallation' ? { installationId: 1 } : {}) });
+  release();
+  await rejected;
+  await changed;
+  expect(dispatches).toHaveLength(0);
+  const receipt = Object.values(saved.reviewDeliveries!)[0];
+  expect(receipt).toMatchObject({ resource: pending.resource, version: pending.version, snapshot: pending.snapshot, reviewer: pending.reviewer, dispatch: { state: 'failed', message: expect.stringContaining('Response is saved') } });
+  expect(JSON.parse(f.git.blobs.get(receipt.version)!)).toEqual(f.value);
+  expect(f.git.trees.get(f.git.commits.get(receipt.snapshot)!)!).toContainEqual(expect.objectContaining({ path: `documents/${receipt.resource}`, sha: receipt.version }));
+});
+
+test('process presentation keeps missing metadata distinct from historical approval', () => {
+  expect(processMetadata('---\nstatus: approved\n---\n')).toBe('status: approved');
+  expect(processMetadata('# historical body')).toMatch(/missing.*unknown/);
+  expect(processMetadata('---\npipeline: full\nroute: [goals, research]\nstatus: draft\n---\n')).toContain('route: goals → research');
+});
+
 test('request contracts reject mutable pins, duplicate members and unsafe resource paths', () => {
   const { request } = fixture();
   expect(parseReviewRequest(JSON.stringify(request))).toEqual(request);

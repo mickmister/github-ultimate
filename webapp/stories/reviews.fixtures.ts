@@ -18,7 +18,7 @@ export const richComparison: ReviewComparisonFixture = {
   before: '# Reader plan\n\nKeep **local drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save in the browser\n- Reopen this tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Local | One tab |\n\n> This warning was removed.\n\n```ts\nconst storage = "local";\n```\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
   after: '# Reader plan\n\nKeep **remote drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save remotely\n- Reopen any tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Remote | Persistent |\n\n```ts\nconst storage = "remote";\n```\n\n## Added section\n\nRead the *updated* guidance. [Unsafe](javascript:alert(1))\n\n<script>window.markdownDiffInjected = true</script>\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
 };
-export function createReviewFixture({ remote = false, missingBaseline = false, comparison }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture } = {}): AppHooksV1 {
+export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
   const load = async () => remote ? await (await fetch('/__review-fixture')).json() as ReviewFixtureState : state;
   const store = async (next: ReviewFixtureState) => { if (remote) await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) }); else state = next; };
@@ -28,9 +28,11 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
       { id: 'reader', kind: 'form', label: 'Reader decisions', bead_id: 'task-reader', form_id: 'reader_decisions', dsl: formPin },
       { id: 'experience', kind: 'form', label: 'Review experience', bead_id: 'task-reader', form_id: 'review_feedback', dsl: secondPin },
     ] };
+    if (process) request.process = { kind: 'qrspi', id: 'hosted-pilot', workspace_ref: 'nugs://workspace/reader-workspace', thread_id: request.thread, config: pin('threads/task-reader/config.md', '9') };
     return { request, pin: { resource: `review-requests/${id}/request.json`, version_kind: 'git-blob', version: (revision === 1 ? 'e' : 'f').repeat(40), snapshot: '1'.repeat(40) } };
   }
   const read = async (_scope: WorkspaceScope, pin: ReviewPin) => {
+    if (pin.resource.endsWith('/config.md')) return '---\npipeline: full\nroute: [goals, questions, research, design, plan, implement]\n---\n';
     if ((await load()).missingBaseline && pin.version === baseline.version) throw new Error('Historical baseline is unavailable.');
     if (comparison && pin.version === target.version) return comparison.after;
     if (comparison && pin.version === baseline.version) return comparison.before;
@@ -43,6 +45,7 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
     reviews: {
       async list() { const current = await load(); return { requests: [packet('reader-01', current.revision), packet('reader-02', 1)], artifacts: current.artifacts, reviewer: 'github:1', acknowledgements: [] }; },
       async open(_scope, pin) { return packet(pin.resource.split('/')[1], pin.version === 'f'.repeat(40) ? 2 : 1); }, read,
+      async current(_scope, resource) { return resource.endsWith('/config.md') ? { pin: pin(resource, '9'), text: '---\npipeline: full\nroute: [goals, questions, research, design, plan, implement]\n---\n' } : { pin: pin(resource, '8'), text: '---\nstatus: draft\nphase: design\n---\n' }; },
       async save(scope, value, expected) {
         const current = await load();
         if (current.failSecond && value.kind === 'review-response' && value.forms.some(form => form.member_id === 'experience')) throw new Error('Second form transport unavailable. Your first form receipt is retained.');
@@ -50,12 +53,12 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
         await validateReviewArtifact(request, value, pin => read(scope, pin));
         const resource = artifactResource(value);
         const existing = current.artifacts.find(item => item.pin.resource === resource);
-        if (existing && JSON.stringify(existing.value) === JSON.stringify(value)) return { ...existing.pin, reviewer: value.reviewer };
+        if (existing && JSON.stringify(existing.value) === JSON.stringify(value)) return { ...existing.pin, reviewer: value.reviewer, ...(process ? { dispatch: { state: 'dispatched' as const, message: 'Dispatch accepted; start unknown.' } } : {}) };
         if ((existing?.pin.version ?? null) !== expected) throw new Error('Review save conflict. Reload the remote draft.');
         const version = [...new Uint8Array(await crypto.subtle.digest('SHA-1', new TextEncoder().encode(JSON.stringify(value))))].map(byte => byte.toString(16).padStart(2, '0')).join('');
         const saved = { value, pin: { resource, version_kind: 'git-blob' as const, version, snapshot: '2'.repeat(40) } };
         await store({ ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== resource), saved] });
-        return { ...saved.pin, reviewer: value.reviewer };
+        return { ...saved.pin, reviewer: value.reviewer, ...(process && value.kind === 'review-response' ? { dispatch: { state: 'failed' as const, message: 'Missing installed-source Actions write route. Response is saved.' } } : {}) };
       },
     },
   } };

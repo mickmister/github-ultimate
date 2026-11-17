@@ -7,13 +7,14 @@ import type { WorkspaceScope } from './contracts';
 import { limitConcurrency } from '../../../hosted/concurrency';
 import { measure } from '../../../hosted/performance';
 
-export interface StoredReviewArtifact { value: ReviewArtifact; pin: ReviewPin }
+export interface StoredReviewArtifact { value: ReviewArtifact; pin: ReviewPin; dispatch?: ReviewReceipt['dispatch'] }
 export interface ReviewListing { requests: OpenReview[]; artifacts: StoredReviewArtifact[]; reviewer: string; acknowledgements: string[] }
 export interface ReviewsModuleV1 {
   list(scope: WorkspaceScope, requestId?: string): Promise<ReviewListing>;
   listCached?(scope: WorkspaceScope, requestId?: string): Promise<ReviewListing>;
   open(scope: WorkspaceScope, pin: ReviewPin): Promise<OpenReview>;
   read(scope: WorkspaceScope, pin: ReviewPin): Promise<string>;
+  current?(scope: WorkspaceScope, resource: string): Promise<{ pin: ReviewPin; text: string } | null>;
   save(scope: WorkspaceScope, value: ReviewArtifact, expected: string | null): Promise<ReviewReceipt>;
 }
 export function createHostedReviews(send: GitTransport = bridgeRequest): ReviewsModuleV1 {
@@ -72,6 +73,14 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
     listCached: (scope, requestId) => measure('reviews.list', () => list(scope, true, requestId), { targeted: Boolean(requestId), cached: true }),
     open: (scope, pin) => measure('reviews.open', () => reviews(scope).open(pin)),
     read: (scope, pin) => measure('reviews.read', () => reviews(scope).read(pin)),
+    async current(scope, resource) {
+      const reader = reviews(scope).reader;
+      const found = (await reader.discover()).find(item => item.name === scope.workspace);
+      if (!found) throw new Error('Workspace is unavailable.');
+      const { snapshot } = await reader.open(found);
+      const entry = documents(snapshot).find(item => item.path === `documents/${resource}`);
+      return entry ? { pin: { resource, version_kind: 'git-blob', version: entry.sha, snapshot: snapshot.commit }, text: documentText(await reader.blob(entry)) } : null;
+    },
     async save(scope, value, expected) {
       const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
       if (!support.capabilities?.includes('reviewWrite')) throw new Error('Update the credential broker to save review drafts and responses.');
