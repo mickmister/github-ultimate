@@ -12,10 +12,10 @@ import { reviewTarget } from './model';
 import type { ReviewMemberContentProps } from './ReviewMemberContent';
 
 interface Props extends ReviewMemberContentProps { content: string | null; baseline: string | null; form: TaskForm | null; error: string; baselineError: string; mode: 'full' | 'baseline' | 'changes'; setMode(mode: 'full' | 'baseline' | 'changes'): void }
-export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, onAnswer, onSubmit, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode }: Props) {
+export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, preview, onAnswer, onSubmit, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode }: Props) {
   if (error) return <p role="alert">{error}</p>;
   if (content === null) return <p role="status">Loading {member.label}…</p>;
-  if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onSaveDraft={onSaveDraft} formStatus={formStatus} feedbackTarget={reviewTarget(scope, review, member, 'rendered-form')} />;
+  if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onSaveDraft={onSaveDraft} formStatus={formStatus} feedbackTarget={preview ? undefined : reviewTarget(scope, review, member, 'rendered-form')} />;
   if (member.kind !== 'document') return null;
   const markdown = isMarkdown(member.target.resource);
   const target = reviewTarget(scope, review, member, markdown ? 'rendered-markdown' : 'source');
@@ -28,8 +28,8 @@ export function ReviewMemberContentView({ scope, review, member, answer, submitt
     {mode !== 'full' && (baselineError ? <p role="alert">{baselineError}</p> : baseline === null ? <p role="status">Loading pinned baseline…</p> : mode === 'changes'
       ? <DocumentChanges path={member.target.resource} before={baseline} after={content} />
       : markdown ? <MarkdownDocument content={baseline} /> : <MonacoDocument path={member.baseline!.resource} content={baseline} />)}
-    {mode === 'full' && <AttachableContext target={target}><FeedbackAnnotations target={target}>
+    {mode === 'full' && (preview ? markdown ? <MarkdownDocument content={content} /> : <MonacoDocument path={member.target.resource} content={content} /> : <AttachableContext target={target}><FeedbackAnnotations target={target}>
       {markdown ? <MarkdownDocument content={content} /> : <MonacoDocument path={member.target.resource} content={content} />}
-    </FeedbackAnnotations></AttachableContext>}
+    </FeedbackAnnotations></AttachableContext>)}
   </section></ReviewDocument>;
 }

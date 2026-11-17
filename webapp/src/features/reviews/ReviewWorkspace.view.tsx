@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import type { OpenReview } from '../../../../hosted/reviews';
 import type { ConnectionDTO, WorkspaceScope } from '../../app-hooks/contracts';
 import type { ReviewListing, ReviewsModuleV1 } from '../../app-hooks/reviews';
-import { ReviewSession } from './ReviewSession';
+import { ReviewPacket } from './ReviewPacket';
 import { reviewHref } from './ReviewWorkspace';
 import { reviewStatus } from './model';
 import './reviews.css';
@@ -24,11 +24,11 @@ export function ReviewWorkspaceView({ connections, connectionId, repository, wor
       <label>Workspace<input value={workspace} onChange={event => actions.setWorkspace(event.target.value)} /></label>
       <button disabled={busy || !connectionId || !repository || !workspace}>Open review inbox</button>
     </form>}
-    {busy && <p role="status">Loading review requests…</p>}{error && <p role="alert">{error}</p>}
-    {scope && listing && service && (opened ? <ReviewSession key={`${scope.connectionId}:${scope.repository}:${scope.workspace}:${opened.pin.version}`} scope={scope} review={opened} listing={listing} service={service} refresh={actions.refresh} updateListing={actions.updateListing} />
-      : <section aria-label="Review inbox"><div className="section-heading"><h2>{scope.workspace}</h2><button disabled={busy} onClick={actions.refresh}>Refresh requests</button></div>
+    {busy && !opened && <p role="status">Loading review requests…</p>}{error && <p role="alert">{error}</p>}
+    {scope && service && opened && <ReviewPacket key={`${scope.connectionId}:${scope.installationId}:${scope.repository}:${scope.workspace}:${opened.pin.version}`} scope={scope} review={opened} listing={listing} service={service} refresh={actions.refresh} updateListing={actions.updateListing} error={error} />}
+    {scope && listing && !opened && <section aria-label="Review inbox"><div className="section-heading"><h2>{scope.workspace}</h2><button disabled={busy} onClick={actions.refresh}>Refresh requests</button></div>
         {!listing.requests.length && <p>No review requests have been published in this workspace.</p>}
         <ul className="review-inbox">{listing.requests.map(review => <li key={review.request.request_id}><h3><a href={reviewHref(scope, review)}>{review.request.title}</a></h3><p>{review.request.purpose}</p><p>{reviewStatus(review, listing.artifacts)} · {review.request.bead_id} · {review.request.members.length} items</p></li>)}</ul>
-      </section>)}
+      </section>}
   </main>;
 }

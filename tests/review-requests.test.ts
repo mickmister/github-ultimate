@@ -47,6 +47,18 @@ class GitFixture {
   };
 }
 const manifest = JSON.stringify({ schema_version: 1, workspace: scope.workspace, observed_at: '2026-11-12T00:00:00Z', purpose: 'Review requests' });
+test('exact review open reads its historical pin without discovering refs or fetching unrelated requests', async () => {
+  const { git, request, snapshot, requestVersion } = fixture();
+  git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/unrelated/request.json': 'unrelated-invalid-manifest' });
+  const calls: any[] = [];
+  const service = createHostedReviews((async (input: any) => { calls.push(input); return git.read(input); }) as GitTransport);
+  const pin: ReviewPin = { resource: 'review-requests/reader-01/request.json', version_kind: 'git-blob', version: requestVersion, snapshot };
+  expect(await service.open({ connectionId: scope.id, ...scope }, pin)).toEqual({ request, pin });
+  expect(calls.some(input => input.operation === 'gitRefs')).toBe(false);
+  expect(calls.filter(input => input.operation === 'gitCommit').map(input => input.oid)).toEqual([snapshot]);
+  const fetched = calls.filter(input => input.operation === 'gitBlob').map(input => git.blobs.get(input.oid));
+  expect(fetched).toEqual([manifest, JSON.stringify(request)]);
+});
 test('targeted review loading skips unrelated packets and foreign drafts, bounds concurrency and reuses pinned snapshots', async () => {
   const { git, request, value } = fixture();
   const files: Record<string, string> = {

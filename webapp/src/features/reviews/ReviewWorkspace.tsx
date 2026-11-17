@@ -38,23 +38,31 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
       const requestId = (initial ? location.requestId : opened?.request.request_id) ?? undefined;
       const pinned = initial && requestId && (location.version || location.snapshot)
         ? { resource: requestResource(requestId), version_kind: 'git-blob' as const, version: reviewOid.parse(location.version), snapshot: reviewOid.parse(location.snapshot) } : undefined;
-      const openedPending = pinned ? service.open(next, pinned) : Promise.resolve(null);
+      // A pinned detail link has everything needed to open the exact request.
+      // Show it and start member downloads before discovering current refs or
+      // restoring receipts. Those operations are not on the reading critical path.
+      if (pinned) {
+        const exact = await measure('reviews.openPinned', () => service.open(next, pinned));
+        if (generation.current !== token) return;
+        setScope(next); setOpened(exact);
+      }
       // Cache restoration must not delay the live path. A late cached result must
       // never overwrite live receipts or a draft the user has started editing.
       let liveFinished = false;
       if (!requestId) void service.listCached?.(next).then(cached => {
         if (cached && !liveFinished && generation.current === token) { setScope(next); setListing(cached); }
       }).catch(() => {});
-      const [found, pinnedReview] = await measure('reviews.load', () => Promise.all([service.list(next, requestId), openedPending]).finally(() => { liveFinished = true; }));
+      const found = await measure('reviews.load', () => service.list(next, requestId).finally(() => { liveFinished = true; }));
       let review: OpenReview | null = null;
       if (initial && location.requestId) {
-        if (pinned) review = pinnedReview;
-        else review = found.requests.find(item => item.request.request_id === location.requestId) ?? null;
-        if (!review) throw new Error('This review request was not found in the selected workspace.');
+        if (!pinned) {
+          review = found.requests.find(item => item.request.request_id === location.requestId) ?? null;
+          if (!review) throw new Error('This review request was not found in the selected workspace.');
+        }
       }
       if (generation.current !== token) return;
       setScope(next); setListing(found);
-      if (initial) setOpened(review);
+      if (initial && !pinned) setOpened(review);
     } catch (cause) {
       if (generation.current === token) {
         const message = cause instanceof Error ? cause.message : String(cause);

@@ -168,6 +168,19 @@ bundles without this metadata display `unavailable`.
 
 ## Focused document reading
 
+Pinned detail links (`#/reviews/<id>` with `version` and `snapshot`) open that
+exact historical request first, without waiting for current workspace discovery,
+drafts or response receipts. The pinned request path/workspace, snapshot membership
+and blob integrity are still verified. The page renders a readable preview and
+starts all member downloads immediately; saved-state loading targets only that
+request in the background, rather than loading the entire review inbox.
+
+Editing and commenting become available after saved answers and receipts are
+restored, so late metadata cannot overwrite newly entered answers. Preview
+downloads are reused when the editable session appears. If saved-state loading
+fails, the exact preview remains readable with a retry control. An unavailable
+exact pin reports an error instead of silently opening another revision.
+
 Opening a review immediately starts downloading every pinned document target,
 form definition and baseline, with up to four content reads at a time. Download
 progress appears above the review items. Once downloaded, switching items or

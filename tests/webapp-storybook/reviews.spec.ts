@@ -5,6 +5,92 @@ async function finishForm(page: Page) {
   await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
 }
 
+function pinnedReviewURL() {
+  const query = new URLSearchParams({ repository: 'example/storage', workspace: 'reader-workspace', version: 'e'.repeat(40), snapshot: '1'.repeat(40) });
+  return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
+}
+
+test('pinned deep links render and preload before targeted saved-state loading, then restore the remote draft', async ({ page }) => {
+  let state: any = { artifacts: [], revision: 1 };
+  let holdListing = false;
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  const calls: { operation: string; request?: string; resource?: string }[] = [];
+  await page.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') state = route.request().postDataJSON();
+    const headers = route.request().headers();
+    const operation = headers['x-review-operation'];
+    if (holdListing) {
+      calls.push({ operation, request: headers['x-review-request'], resource: headers['x-review-resource'] });
+      if (operation === 'list') await gate;
+    }
+    await route.fulfill({ json: state });
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
+  await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await page.getByText('Keep this approach', { exact: true }).click();
+  await page.getByRole('button', { name: 'Next question', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('Restore this draft after the fast pinned preview.');
+  await page.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+  await expect(page.getByRole('status')).toContainText('Draft saved remotely');
+  state.revision = 2;
+  holdListing = true;
+  await page.goto(pinnedReviewURL());
+  await expect(page.getByRole('heading', { name: 'Reader follow-up', exact: true })).toBeVisible();
+  const preview = page.getByRole('region', { name: 'Pinned review preview', exact: true });
+  await expect(preview.getByText('The full target document is pinned to this packet.')).toBeVisible();
+  await expect.poll(() => calls.filter(item => item.resource).length).toBe(4);
+  expect(calls[0]).toMatchObject({ operation: 'open', request: 'reader-01' });
+  expect(calls.filter(item => item.operation === 'list')).toEqual([{ operation: 'list', request: 'reader-01', resource: undefined }]);
+  await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Submit review feedback', exact: true })).toHaveCount(0);
+  release();
+  await expect(preview).toHaveCount(0);
+  await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeChecked();
+  await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeEnabled();
+  await page.getByRole('button', { name: 'Next question', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveValue('Restore this draft after the fast pinned preview.');
+  await expect(page.getByText('Updated packet available.')).toBeVisible();
+  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  expect(calls.filter(item => item.resource)).toHaveLength(4);
+});
+
+test('pinned request failure does not fall back to listing the inbox', async ({ page }) => {
+  const operations: string[] = [];
+  await page.route('**/__review-fixture', async route => {
+    const operation = route.request().headers()['x-review-operation']; operations.push(operation);
+    await route.fulfill({ status: 503, body: 'Exact request unavailable' });
+  });
+  await page.goto(pinnedReviewURL());
+  await expect(page.getByRole('alert')).toBeVisible({ timeout: 30000 });
+  expect(operations).toEqual(['open']);
+  await expect(page.getByRole('region', { name: 'Focused review session', exact: true })).toHaveCount(0);
+});
+
+test('a background saved-state failure retains the exact preview and retries without redownloading it', async ({ page }) => {
+  let failListing = true;
+  const operations: string[] = [];
+  let reads = 0;
+  await page.route('**/__review-fixture', async route => {
+    const headers = route.request().headers();
+    operations.push(headers['x-review-operation']);
+    if (headers['x-review-resource']) reads++;
+    if (failListing && headers['x-review-operation'] === 'list') return route.fulfill({ status: 503, body: 'Saved state temporarily unavailable' });
+    await route.fulfill({ json: { artifacts: [], revision: 1 } });
+  });
+  await page.goto(pinnedReviewURL());
+  await expect(page.getByRole('region', { name: 'Pinned review preview', exact: true })).toBeVisible();
+  await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible();
+  await expect.poll(() => reads).toBe(4);
+  failListing = false;
+  await page.getByRole('button', { name: 'Retry loading saved review state', exact: true }).click();
+  await expect(page.getByRole('region', { name: 'Focused review session', exact: true })).toBeVisible();
+  expect(operations.filter(operation => operation === 'open')).toHaveLength(1);
+  expect(operations.filter(operation => operation === 'list')).toHaveLength(2);
+  expect(reads).toBe(4);
+});
+
 test('opening a review downloads every member and baseline before navigation, then switches without more reads', async ({ page }) => {
   const reads: string[] = [];
   let release!: () => void;

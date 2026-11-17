@@ -10,6 +10,7 @@ import { reviewResourceKey, type ReviewContents } from './review-contents';
 export interface ReviewMemberContentProps {
   scope: WorkspaceScope; review: OpenReview; member: ReviewMember; contents: ReviewContents;
   answer?: ReviewArtifact['forms'][number]; submitted: boolean; busy: boolean;
+  preview?: boolean;
   reviewed: boolean; onReviewed(checked: boolean): void;
   onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void;
   onSaveDraft?(): void; formStatus?: ReviewFormProps['formStatus'];
