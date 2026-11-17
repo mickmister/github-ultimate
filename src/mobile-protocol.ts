@@ -65,6 +65,7 @@ export class MobileFixtureBroker {
   private storageGrant?: MobileGrant;
   private storage?: PageKVService;
   private fixtureEpoch = 0;
+  private documentEpoch = 0;
   private pendingFixtures = 0;
   constructor(store?: PageKVStore, private github?: MobileGitHub) {
     if (store) this.storage = new PageKVService(store, url => Boolean(this.storageGrant && matchesMobileGrant(this.storageGrant, url)));
@@ -80,6 +81,8 @@ export class MobileFixtureBroker {
     if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== 'fixture.delay') return this.handle(context, raw);
     const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
     const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
+    const epoch = this.documentEpoch;
+    const current = () => epoch === this.documentEpoch && this.isCurrent(context);
     if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive native RPC.');
     if (input.method === 'fixture.delay') {
       const denied = this.handle(context, JSON.stringify({ jsonrpc: '2.0', id, method: 'fixture.echo', params: { text: '' } })).error;
@@ -96,22 +99,22 @@ export class MobileFixtureBroker {
       } finally { this.pendingFixtures--; }
     }
     if (input.method === 'github.request') {
-      if (!this.github || !this.isCurrent(context)) return error('GitHub bridge or native document unavailable.');
-      try { return { jsonrpc: '2.0', id, result: await this.github.hosted(context.documentURL, input.params, () => this.isCurrent(context)) }; }
+      if (!this.github || !current()) return error('GitHub bridge or native document unavailable.');
+      try { return { jsonrpc: '2.0', id, result: await this.github.hosted(context.documentURL, input.params, current) }; }
       catch (cause) { return error(cause instanceof Error ? cause.message : 'GitHub request failed. Check the native connection and retry.'); }
     }
     const operation = ({ 'kv.snapshot': 'kvSnapshot', 'kv.set': 'kvSet', 'kv.remove': 'kvRemove', 'kv.clear': 'kvClear' } as Record<string, string>)[input.method];
-    if (!operation || !this.storage || !this.isCurrent(context)) return error('Storage method or native document unavailable.');
+    if (!operation || !this.storage || !current()) return error('Storage method or native document unavailable.');
     // Do not allow params to overwrite the broker-selected operation.
     if ('operation' in input.params) return error('Unexpected storage parameters.');
     try {
-      const result = await this.storage.request(context.documentURL, { ...input.params, operation }, () => this.isCurrent(context));
+      const result = await this.storage.request(context.documentURL, { ...input.params, operation }, current);
       return { jsonrpc: '2.0', id, result };
     } catch (cause) { return error(cause instanceof Error ? cause.message : 'Page storage failed.'); }
   }
   // Native callbacks supply document identity; payload fields never do.
-  activate(document: MobileDocument) { this.active = { ...document }; }
-  invalidate() { this.active = undefined; this.fixtureEpoch++; }
+  activate(document: MobileDocument) { this.documentEpoch++; this.active = { ...document }; }
+  invalidate() { this.active = undefined; this.fixtureEpoch++; this.documentEpoch++; }
   approve(grant?: MobileGrant) { this.fixtureEpoch++; this.grant = grant && { ...grant }; }
   handle(context: MobileDocument & { isMainFrame: boolean }, raw: string): MobileReply {
     let id: string | null = null;

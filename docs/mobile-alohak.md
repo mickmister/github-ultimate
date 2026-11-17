@@ -195,8 +195,11 @@ identity. This view uses native checks:
   calls at eight, times them out and discards stale generations. GitHub calls
   use the connection's own grants and recheck native context and revocation
   generation before/after work and before disclosing results.
-- Native settings cannot be opened/approved through page RPC. Backgrounding
-  invalidates the broker; foregrounding recreates the WebView. Reload is the
+- Native settings cannot be opened/approved through page RPC. Losing active focus
+  invalidates pending broker work, but ordinary foregrounding keeps the WebView
+  and page state alive. Only the latest native-ready document is reactivated;
+  a broker epoch prevents old storage/GitHub work from reviving even when the
+  document ID is unchanged. Deployment changes still replace the view. Reload is the
   recovery path for process failure. Native settings remain available if the
   remote page fails. Native back navigation, download/file-picker integration
   and full offline persistence are not claimed by M1.

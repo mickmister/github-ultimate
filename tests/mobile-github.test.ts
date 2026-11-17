@@ -113,13 +113,15 @@ describe('read-only native GitHub bridge', () => {
     release(); expect((await read).error?.message).toContain('changed'); await revoke;
     expect((await app.call({ operation: 'connections' })).error).toBeDefined();
   });
-  it('rejects queued reads after navigation and never sends their GitHub HTTP request', async () => {
+  it.each(['navigation', 'same-document resume'])('rejects queued reads after %s and never sends their GitHub HTTP request', async change => {
     const disk = storage(); await disk.store.put(record()); const app = github(disk.store);
     let release!: () => void, started!: () => void;
     const entered = new Promise<void>(resolve => { started = resolve; });
     app.before(async url => { if (url.endsWith('/oauth/access_token')) { started(); await new Promise<void>(resolve => { release = resolve; }); } });
     const refresh = app.host.settings({ operation: 'refresh', id }); await entered;
-    const read = app.call({ operation: 'repositories', id }); app.broker.invalidate(); release(); await refresh;
+    const read = app.call({ operation: 'repositories', id }); app.broker.invalidate();
+    if (change === 'same-document resume') app.broker.activate(context);
+    release(); await refresh;
     expect((await read).error?.message).toContain('changed');
     expect(app.calls.some(call => call.url.includes('/repositories?'))).toBe(false);
   });
