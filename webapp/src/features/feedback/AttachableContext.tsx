@@ -17,9 +17,14 @@ export function AttachableContext({ target, children, asChild = false, showButto
   const id = useId();
   const root = useRef<HTMLElement | null>(null);
   const pending = useRef<FeedbackSelection | null | undefined>(undefined);
+  useEffect(() => { if (root.current) return api.registerTarget(root.current, descriptor); }, [api.registerTarget, descriptor]);
   useEffect(() => { pending.current = undefined; }, [target.elementId, target.representation, descriptor.resource?.id, descriptor.resource?.repository, descriptor.resource?.workspace, descriptor.resource?.revision]);
   function open(event: MouseEvent<HTMLElement>) {
     if (!root.current || (event.target as Element).closest('[data-feedback-target]') !== root.current) return;
+    // Long press belongs to native text selection. Opening the Ark menu here
+    // steals focus before the user can finish adjusting the selection handles.
+    const pointer = (event.nativeEvent as PointerEvent).pointerType;
+    if (pointer === 'touch' || pointer === 'pen' || !pointer && window.matchMedia('(pointer: coarse)').matches) return;
     event.preventDefault(); event.stopPropagation();
     api.open(descriptor, root.current, root.current, { x: event.clientX, y: event.clientY });
   }

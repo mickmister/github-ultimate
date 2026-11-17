@@ -8,6 +8,7 @@
 .feedback-dock p { background: var(--panel, white); color: var(--fg, #19283d); border: 1px solid var(--line, #ccc); padding: 8px; font-size: .8rem; margin: 4px 0 0; overflow-wrap: anywhere; }
 body:has(.feedback-dock) { padding-bottom: 76px; }
 .feedback-menu-positioner { z-index: 100; }
+.feedback-selection-action { position: fixed; z-index: 99; width: 180px; max-width: calc(100vw - 16px); min-height: 44px; padding: 8px; font-size: .875rem; background: var(--feedback-panel, var(--panel, white)); color: var(--feedback-fg, var(--fg, #19283d)); border: 1px solid var(--line, #ccc); border-radius: var(--feedback-radius, 10px); box-shadow: 0 4px 20px #0003; }
 .feedback-menu-anchor { position: fixed; width: 0; height: 0; min-height: 0 !important; min-width: 0; padding: 0 !important; border: 0 !important; pointer-events: none; opacity: 0; }
 .feedback-menu { min-width: 210px; max-width: calc(100vw - 16px); background: var(--feedback-panel, var(--panel, white)); color: var(--feedback-fg, var(--fg, #19283d)); border: 1px solid var(--line, #ccc); border-radius: var(--feedback-radius, 10px); box-shadow: 0 8px 28px #0003; padding: 6px; outline: none; }
 .feedback-menu [role=menuitem] { padding: 10px 14px; min-height: 44px; border-radius: 6px; cursor: pointer; }

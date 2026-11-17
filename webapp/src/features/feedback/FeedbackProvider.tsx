@@ -3,10 +3,12 @@ import type { FeedbackCapture, FeedbackComment, FeedbackKind, FeedbackOptions, F
 import { createFeedbackQueue, feedbackStorageKey, restoreFeedbackDraft } from './queue';
 import { captureFeedbackSelection } from './selection';
 import { FeedbackShellView } from './FeedbackShell.view';
+import { useTouchFeedbackSelection } from './useTouchFeedbackSelection';
 
 interface FeedbackAPI {
   readonly items: readonly FeedbackComment[];
   setPortalContainer(container: HTMLElement | null): void;
+  registerTarget(root: HTMLElement, target: FeedbackTarget): () => void;
   edit(id: string, text: string): void;
   remove(id: string): void;
   open(target: FeedbackTarget, root: HTMLElement, origin: HTMLElement, point?: { x: number; y: number }, selection?: FeedbackSelection | null): void;
@@ -41,9 +43,11 @@ function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: {
   const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
   const origin = useRef<HTMLElement | null>(null);
   const commentRef = useRef<HTMLTextAreaElement | null>(null);
+  const touch = useTouchFeedbackSelection(!active && !composer && !review);
   const api: FeedbackAPI = {
-    items: state.items, edit: queue.edit, remove: queue.remove, setPortalContainer,
+    items: state.items, edit: queue.edit, remove: queue.remove, setPortalContainer, registerTarget: touch.registerTarget,
     open(target, root, trigger, point, selection) {
+      touch.dismiss();
       const rect = trigger.getBoundingClientRect();
       const viewport = root.ownerDocument.defaultView!;
       origin.current = trigger;
@@ -68,9 +72,14 @@ function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: {
     closeMenu();
   }
   return <FeedbackContext.Provider value={api}>
-    <FeedbackShellView active={active} composer={composer} review={review} state={state} notice={notice} commentRef={commentRef} portalContainer={portalContainer}
+    <FeedbackShellView active={active} composer={composer} review={review} state={state} notice={notice} commentRef={commentRef} portalContainer={portalContainer} selectionPoint={touch.selected?.point ?? null}
       actions={{
         closeMenu, select,
+        openSelection() {
+          const selected = touch.capture();
+          if (selected) api.open(selected.target, selected.root, selected.root, selected.point, selected.selection);
+          else touch.dismiss();
+        },
         openReview(element) { origin.current = element; setNotice(''); setReview(true); },
         closeDialog() { setComposer(null); setReview(false); origin.current?.focus(); },
         setComment(text) { setComposer(value => value ? { ...value, text } : null); },

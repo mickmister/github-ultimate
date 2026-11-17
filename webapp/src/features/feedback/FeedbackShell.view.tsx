@@ -16,13 +16,15 @@ interface Props {
   notice: string;
   commentRef: RefObject<HTMLTextAreaElement | null>;
   portalContainer: HTMLElement | null;
+  selectionPoint: { x: number; y: number } | null;
   actions: {
     closeMenu(): void; select(value: string): void; openReview(element: HTMLElement): void; closeDialog(): void;
     setComment(text: string): void; addComment(): void; edit(id: string, text: string): void;
     remove(id: string): void; copyAndClear(kind: FeedbackKind): void;
+    openSelection(): void;
   };
 }
-export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, portalContainer, actions }: Props) {
+export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, portalContainer, selectionPoint, actions }: Props) {
   const container = portalContainer ? { current: portalContainer } : undefined;
   return <>
     <Menu.Root aria-label="Comment actions" open={Boolean(active)} positioning={{ placement: 'bottom-start', strategy: 'fixed' }}
@@ -37,6 +39,8 @@ export function FeedbackShellView({ children, active, composer, review, state, n
         <Menu.Item value="feature-comment">Comment on Feature</Menu.Item>
       </Menu.Content></Menu.Positioner></Portal>
     </Menu.Root>
+    {selectionPoint && <Portal container={container}><button type="button" className="feedback-selection-action" data-feedback-control="true"
+      style={{ left: selectionPoint.x, top: selectionPoint.y }} onPointerDown={event => event.preventDefault()} onClick={actions.openSelection}>Comment on selection</button></Portal>}
     <Portal container={container}><div className="feedback-dock" data-feedback-control="true">
       <button type="button" onClick={event => actions.openReview(event.currentTarget)}>Comments · {state.items.length}</button>
       {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}
