@@ -22,6 +22,9 @@ const palette = {
   light: { background: '#f5f7fb', surface: '#fff', text: '#19283d', muted: '#53647b', border: '#d6deeb', accent: '#4e38bd', selected: '#f0edff', error: '#a01d32' },
   dark: { background: '#101724', surface: '#182233', text: '#e4ebf6', muted: '#aabbd1', border: '#35445c', accent: '#bdadff', selected: '#302a4e', error: '#ffabb9' },
 };
+export function resolvedCustomizationTokens(value: Customization, systemMode: 'light' | 'dark' = 'light') {
+  return { ...palette[value.mode === 'system' ? systemMode : value.mode], ...value.tokens };
+}
 const variables: Record<typeof tokenNames[number], string[]> = {
   background: ['--bg'], surface: ['--panel', '--surface'], text: ['--fg'], muted: ['--muted'], border: ['--line', '--border'], accent: ['--accent'], selected: ['--selected', '--accent-soft'], error: ['--error'],
   fontFamily: ['--ui-font-family'], fontSize: ['--ui-font-size'], lineHeight: ['--ui-line-height'], radius: ['--ui-radius'], spacing: ['--ui-spacing'], controlSize: ['--ui-control-size'], contentWidth: ['--ui-content-width'], sidebarWidth: ['--ui-sidebar-width'],

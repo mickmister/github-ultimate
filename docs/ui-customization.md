@@ -1,9 +1,18 @@
 # Device-local UI customization
 
-Open **Customize appearance** in the webapp. The first editor exposes the complete
-versioned configuration as JSON, including all tokens and arbitrary custom CSS.
-Preview does not save; cancel restores the saved configuration. Save, reset,
-export and file import use the same controller as the console API.
+Open **Customize appearance** in the webapp. Start with **System default**,
+**Daylight**, **Midnight**, **Forest**, or **Paper**, then adjust individual
+colors, typography, spacing, corner radius, control height and layout widths.
+Color settings have both hex pickers and text fields for other CSS colors.
+Each token's **Default** button removes its override. Custom CSS has its own
+editor. **Advanced JSON and console** exposes the same complete draft as JSON.
+
+Choosing a preset replaces the draft, including custom CSS. Individual controls
+and the JSON editor edit the same draft; they do not change the active theme
+until **Preview customization** or **Save customization locally**. Preview does
+not save; cancel restores the saved configuration. Save, reset, export and file
+import use the same controller as the console API. Export contains the active
+theme, including a current preview; preview or save draft edits before exporting.
 
 ```json
 {
