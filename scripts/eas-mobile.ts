@@ -3,19 +3,19 @@ import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 /** Explicit, allowlisted dispatch values; user text is never shell source. */
-export function releasePlan(env) {
+export function releasePlan(env: Record<string, string | undefined>) {
   const operation = env.EAS_OPERATION;
   const platform = env.EAS_PLATFORM;
   const profile = env.EAS_PROFILE;
-  if (!['build', 'update'].includes(operation)) throw new Error('Choose build or update.');
-  if (!['all', 'android', 'ios'].includes(platform)) throw new Error('Choose all, android or ios.');
-  if (!['development', 'preview', 'production'].includes(profile)) throw new Error('Choose development, preview or production.');
+  if (!operation || !['build', 'update'].includes(operation)) throw new Error('Choose build or update.');
+  if (!platform || !['all', 'android', 'ios'].includes(platform)) throw new Error('Choose all, android or ios.');
+  if (!profile || !['development', 'preview', 'production'].includes(profile)) throw new Error('Choose development, preview or production.');
   if (!env.EXPO_TOKEN) throw new Error('Configure the repository EXPO_TOKEN secret.');
   if (!/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(env.EXPO_PROJECT_ID ?? '')) throw new Error('Configure repository secret EXPO_PROJECT_ID with the Alohak project UUID.');
   if (!/^[\w-]+$/.test(env.EXPO_OWNER ?? '')) throw new Error('Configure repository secret EXPO_OWNER with the Expo account/organization name.');
   const entry = env.EXPO_PUBLIC_ALOHAK_URL ?? '';
   const githubConnections = env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS || '0';
-  if (!['0', '1'].includes(githubConnections)) throw new Error('EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS must be 0 or 1. Enable only after device isolation acceptance.');
+  if (!['0', '1'].includes(githubConnections)) throw new Error('EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS must be 0 or 1.');
   if (entry) {
     const url = new URL(entry);
     if (url.protocol !== 'https:' || url.username || url.password) throw new Error('EXPO_PUBLIC_ALOHAK_URL must be a public HTTPS entry URL, without credentials.');
@@ -29,11 +29,12 @@ export function releasePlan(env) {
     operation, platform, profile, args,
     // These are PUBLIC configuration, also uploaded in eas.json so the remote
     // build resolves the SAME project/entry as the dispatch runner. No tokens.
-    publicEnv: { EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER, EXPO_PUBLIC_ALOHAK_URL: entry, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: githubConnections },
+    publicEnv: { EXPO_PROJECT_ID: env.EXPO_PROJECT_ID!, EXPO_OWNER: env.EXPO_OWNER!, EXPO_PUBLIC_ALOHAK_URL: entry, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: githubConnections },
   };
 }
 
-export function configuredBuildProfiles(config, plan) {
+type EASConfig = { build: Record<string, { env?: Record<string, string>; channel?: string; environment?: string }> };
+export function configuredBuildProfiles(config: EASConfig, plan: ReturnType<typeof releasePlan>): EASConfig {
   // EAS rejects empty env values, including an unset optional deployment URL.
   const env = Object.fromEntries(Object.entries({ ...config.build.base.env, ...plan.publicEnv }).filter(([, value]) => value !== ''));
   return { ...config, build: { ...config.build, base: { ...config.build.base, env } } };
@@ -57,11 +58,14 @@ function main() {
     if (result.status !== 0) throw new Error(`EAS ${plan.operation} failed (exit ${result.status ?? 'unknown'}). See CLI diagnostics above.`);
     const receipt = JSON.parse(result.stdout);
     const project = `https://expo.dev/accounts/${plan.publicEnv.EXPO_OWNER}/projects/alohak`;
-    const records = Array.isArray(receipt) ? receipt : [receipt];
+    const records: { id?: string; platform?: string; group?: string; runtimeVersion?: string; gitCommitHash?: string }[] = Array.isArray(receipt) ? receipt : [receipt];
     const links = plan.operation === 'build'
       ? records.filter(item => typeof item.id === 'string' && /^[\w-]+$/.test(item.id)).map(item => `[${item.platform ?? 'Build'}](${project}/builds/${item.id})`)
       : records.filter(item => typeof item.group === 'string' && /^[\w-]+$/.test(item.group)).map(item => `[Update group](${project}/updates/${item.group})`);
-    const summary = `## EAS ${plan.operation}\n\nSource: \`${process.env.GITHUB_SHA ?? 'local'}\`\n\nPlatform: ${plan.platform} · Profile/channel: ${plan.profile}\n\n${[...new Set(links)].join(' · ') || `[Expo project](${project})`}\n`;
+    const references = records.map(item => ({ platform: item.platform, id: item.id, group: item.group, runtimeVersion: item.runtimeVersion, source: item.gitCommitHash ?? process.env.GITHUB_SHA, githubConnections: plan.publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS }));
+    // Compact public release references are enough to verify the Expo publication.
+    // Raw receipts stay ephemeral; agent workflows do not upload Actions artifacts.
+    const summary = `## EAS ${plan.operation}\n\nSource: \`${process.env.GITHUB_SHA ?? 'local'}\`\n\nPlatform: ${plan.platform} · Profile/channel: ${plan.profile} · GitHub connections: ${plan.publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS}\n\n${[...new Set(links)].join(' · ') || `[Expo project](${project})`}\n\nRelease references: ${JSON.stringify(references)}\n`;
     if (process.env.GITHUB_STEP_SUMMARY) appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
     console.log(summary);
   } finally { writeFileSync(path, original); }

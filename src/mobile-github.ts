@@ -9,7 +9,7 @@ export class MobileGitHub {
   private epoch = 0;
   constructor(private connections: Connections, private enabled: () => boolean) {}
   async settings(request: ConnectionRequest) {
-    if (!this.enabled() && !['list', 'disconnect', 'remove', 'revokeOrigin', 'cacheSettings', 'saveCacheSettings'].includes(request.operation)) throw new ConnectionError('GitHub connections are disabled in this build pending device isolation acceptance.');
+    if (!this.enabled() && !['list', 'disconnect', 'remove', 'revokeOrigin', 'cacheSettings', 'saveCacheSettings'].includes(request.operation)) throw new ConnectionError('GitHub connections are disabled in this release. Apply a GitHub-enabled preview update.');
     // Invalidate disclosure immediately, before an in-flight HTTP operation
     // releases the engine's serialized queue to a revoke/disconnect operation.
     if (['disconnect', 'remove', 'revokeOrigin', 'selectInstallation'].includes(request.operation)) this.epoch++;
@@ -17,7 +17,7 @@ export class MobileGitHub {
     catch (cause) { throw this.publicError(cause); }
   }
   async hosted(documentURL: string, input: unknown, current: () => boolean) {
-    if (!this.enabled()) throw new ConnectionError('GitHub connections are disabled in this build pending device isolation acceptance.');
+    if (!this.enabled()) throw new ConnectionError('GitHub connections are disabled in this release. Apply a GitHub-enabled preview update.');
     try {
       const request = hostedRequestSchema.parse(input);
       if (!reads.has(request.operation)) throw new ConnectionError('Only GitHub connection discovery and repository reads are available in Alohak.');

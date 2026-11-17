@@ -66,15 +66,18 @@ directory if approving the entire branch preview is too broad. Only trust
 scripts within the approved deployment. Same-origin path separation does not
 isolate hostile scripts/service workers from one another.
 
-## Native GitHub App connections (gated pilot)
+## Native GitHub App connections
 
-Keep `EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` unset or `0` until
-`task-3vt.39.6.3` passes. An explicitly enabled build/update uses `1`.
+The user explicitly authorized GitHub-enabled testing previews while remaining
+isolation testing continues (`task-3vt.39.6.16`). Publish those previews with
+`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS=1`; dispatch remains default-off unless
+explicitly selected. Incomplete isolation checks remain open under
+`task-3vt.39.6.3`, not falsely accepted or used to block this authorized testing release.
 Native settings still allow listing, disconnecting, removing and revoking
 existing connections when the feature is disabled. The flag is public release
 configuration, not an authorization secret or substitute for native checks.
 
-After acceptance, configure the hosted **`app/`** HTTPS URL as the deployment:
+Apply the GitHub-enabled update, then configure the hosted **`app/`** HTTPS URL as the deployment:
 
 1. In **GitHub App connections**, enter a connection name, public **GitHub App
    ID** and **client ID**, then **Add GitHub connection**. Users choose their
@@ -204,15 +207,18 @@ identity. This view uses native checks:
   remote page fails. Native back navigation, download/file-picker integration
   and full offline persistence are not claimed by M1.
 
-The displayed `extra.buildCommit` identifies the installed JS bundle/update, not
-its native API compatibility. The fingerprint hook excludes only that metadata
-field from Expo config hashing, preserving the earlier config bytes. All other
-configuration, native dependencies and explicit WebView patch bytes remain hashed.
+The displayed `extra.buildCommit` and JS-only `extra.githubConnectionsEnabled`
+switch do not change native APIs. Fingerprinting removes the display field and
+normalizes the switch to the original disabled baseline for native compatibility.
+The actual OTA manifest retains the selected switch value; the runtime broker
+still enforces it. All other configuration, native dependencies and explicit
+WebView patch bytes remain hashed.
 
 The UA marker suppresses handoff UI and selects the native transport before
 bridge initialization; it is not an authorization signal. Neither an injected nonce nor page-side checks
 replace the native trust boundary. Approved-page scripts can see everything
-their methods return. Do not enable real credentials until device acceptance.
+their methods return. GitHub-enabled testing and outstanding device-isolation
+evidence are tracked separately under the user's explicit release decision.
 
 ## Custom-scheme pilot
 

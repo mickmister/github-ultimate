@@ -2,7 +2,9 @@
 
 The published `isolation/index.html` page exercises the installed scoped native
 bridge without GitHub sign-in, tokens, network fetch authority or private data.
-Keep the release's `github_connections=0`. Device acceptance belongs to
+These checks need only the fixture grant, not a GitHub deployment grant. The user
+authorized GitHub-enabled previews while testing continues; a release flag of `1`
+does not accept outstanding isolation checks. Device acceptance belongs to
 `task-3vt.39.6.3`; a compiled app or green mocked browser test does not accept it.
 
 ## Setup on both platforms
