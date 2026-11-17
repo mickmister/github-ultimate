@@ -2,6 +2,7 @@ import { WorkspaceReader, documents, documentText, type GitTransport } from '../
 import { ReviewReader } from '../hosted/reviews';
 import { artifactResource, parseReviewArtifact, parseReviewRequest, requestResource, validateReviewArtifact, type ReviewReceipt, type ReviewRequest, type ReviewWrite } from './review-protocol';
 import { z } from 'zod';
+import { verifiedGitBlobBytes } from './git-blob';
 
 type Mutate = (path: string, method: 'POST' | 'PATCH', body: unknown) => Promise<unknown>;
 const oidResult = z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) });
@@ -13,7 +14,7 @@ export async function writeReview(request: ReviewWrite, reviewer: string, read: 
   const value = parseReviewArtifact(request.text);
   if (value.reviewer !== reviewer) throw new Error('The review artifact belongs to another authenticated reviewer.');
   if (value.kind === 'review-response' && request.expected !== null) throw new Error('Submitted responses are immutable create-only resources.');
-  const reader = new WorkspaceReader(read, request.id, request.repository, request.installationId, request.workspace);
+  const reader = new WorkspaceReader(read, request.id, request.repository, request.installationId, request.workspace, 'documents', verifiedGitBlobBytes);
   const found = (await reader.discover()).find(item => item.name === request.workspace);
   if (!found) throw new Error('Workspace is unavailable.');
   const head = await reader.open(found);
