@@ -210,6 +210,7 @@ identity. This view uses native checks:
 The displayed `extra.buildCommit` and JS-only `extra.githubConnectionsEnabled`
 switch do not change native APIs. Fingerprinting removes the display field and
 normalizes the switch to the original disabled baseline for native compatibility.
+The same switch in the generated EAS build profile is normalized for hashing too.
 The actual OTA manifest retains the selected switch value; the runtime broker
 still enforces it. All other configuration, native dependencies and explicit
 WebView patch bytes remain hashed.
