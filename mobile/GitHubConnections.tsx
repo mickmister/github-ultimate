@@ -34,12 +34,12 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
   return <View style={styles.section}>
     <Text accessibilityRole="header">GitHub App connections</Text>
     <Text>Choose your own GitHub Apps. Tokens and device codes stay in native secure storage. Each connection needs a separate deployment grant.</Text>
-    {!githubEnabled && <Text>GitHub sign-in and page reads are disabled in this build pending device isolation acceptance.</Text>}
+    <Text>{githubEnabled ? 'GitHub sign-in, repository reads, review drafts, submission and workflow progress are enabled in this build.' : 'GitHub connections are disabled in this release. Apply the GitHub-enabled preview update to sign in.'}</Text>
     <TextInput accessibilityLabel="Connection name" placeholder="Connection name" value={name} onChangeText={setName} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App ID" placeholder="GitHub App ID" keyboardType="number-pad" value={appId} onChangeText={setAppId} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App client ID" placeholder="GitHub App client ID" autoCapitalize="none" autoCorrect={false} value={clientId} onChangeText={setClientId} style={styles.input} />
     <Button title="Add GitHub connection" disabled={busy || !githubEnabled || !name.trim() || !/^\d+$/.test(appId) || !clientId.trim()} onPress={action({ operation: 'add', name: name.trim(), appId: Number(appId), clientId: clientId.trim() }, () => { setName(''); setAppId(''); setClientId(''); })} />
-    <Text>The App must enable device flow and expiring user tokens, and be installed on the repositories you want to read. No App private key or client secret is needed.</Text>
+    <Text>The App must enable device flow and expiring user tokens, and be installed on the repositories you use. Reading needs Contents read; saving drafts and responses needs Contents read and write. Workflow delivery needs Actions write on the trusted source repository. No App private key or client secret is needed.</Text>
     <Button title="Manage GitHub installations" onPress={() => { void Linking.openURL('https://github.com/settings/installations').catch(() => setError('Could not open the system browser.')); }} />
     {error ? <Text accessibilityRole="alert">{error}</Text> : null}
     {connections.length === 0 && <Text>No GitHub connections yet.</Text>}
@@ -61,7 +61,7 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
         {connection.installation && <>
           <Button title="List repositories" disabled={busy || !githubEnabled} onPress={action({ operation: 'repositories', id: connection.id }, value => setRepositories(current => ({ ...current, [connection.id]: value as Repository[] })))} />
           {repositories[connection.id] && <Text>{repositories[connection.id].length} repositories: {repositories[connection.id].slice(0, 20).map(repo => repo.full_name).join(', ')}</Text>}
-          {grant && <><Text>Approve current deployment: {grant.origin}{grant.subpath}</Text><Button title="Grant this deployment GitHub reads" disabled={busy || !githubEnabled} onPress={action({ operation: 'grantOrigin', id: connection.id, ...grant })} /></>}
+          {grant && <><Text>Approve current deployment: {grant.origin}{grant.subpath}. This allows repository reads and review draft/submission operations through this connection, within its installed permissions.</Text><Button title="Grant this deployment GitHub access" disabled={busy || !githubEnabled} onPress={action({ operation: 'grantOrigin', id: connection.id, ...grant })} /></>}
         </>}
         <Button title="Refresh credentials" disabled={busy || !githubEnabled} onPress={action({ operation: 'refresh', id: connection.id })} />
         {connection.expiresAt && <Text>Access token expires {new Date(connection.expiresAt).toLocaleString()}</Text>}

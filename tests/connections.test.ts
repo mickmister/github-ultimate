@@ -192,7 +192,9 @@ test('only installations belonging to the declared App can be selected; broad cl
   expect(installations).toHaveLength(1);
   await expect(broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 2 })).rejects.toThrow('not available');
   permissions.contents = 'write';
-  await expect(broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 })).rejects.toThrow('writes beyond Actions');
+  await expect(broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 })).resolves.toHaveProperty('installation.id', 1);
+  permissions.administration = 'write';
+  await expect(broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 })).rejects.toThrow('only for Contents and Actions');
 });
 test('private read is bound to selected installation, supports branch slashes, and uses only GET API requests', async () => {
   const connection = await login();
@@ -340,6 +342,8 @@ test('review writes recheck exact origin/subpath, installation, repository and a
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
   await broker.handle({ operation: 'grantOrigin', id: connection.id, origin, subpath: '/app/' });
   const request = { operation: 'reviewWrite', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', workspace: 'workspace-a', text: JSON.stringify({ kind: 'review-response', schema_version: 1, transport: 'workspace-resources', id: 'response-1', reviewer: 'github:999', request: { id: 'request-1', version: 'a'.repeat(40), snapshot: 'b'.repeat(40) }, intent: 'feedback', forms: [], comments: [], progress: [] }), expected: null };
+  await expect(broker.handleHosted(origin + '/app/', request)).rejects.toThrow('Contents: read and write');
+  permissions.contents = 'write';
   await expect(broker.handleHosted(origin + '/sibling/', request)).rejects.toThrow('no approved');
   await expect(broker.handleHosted(origin + '/app/', { ...request, installationId: 2 })).rejects.toThrow('installation changed');
   await expect(broker.handleHosted(origin + '/app/', { ...request, repository: 'another/private' })).rejects.toThrow('not available');

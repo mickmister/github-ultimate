@@ -10,6 +10,9 @@ import { Connections, type ConnectionRecord } from '../src/connections';
 import { processMetadata } from '../hosted/review-process';
 import { createHostedReviews, isLegacyProcessSchemaError } from '../webapp/src/app-hooks/reviews';
 import { bridgeRequest } from '../hosted/client';
+import { MobileGitHub } from '../src/mobile-github';
+import { MobileFixtureBroker } from '../src/mobile-protocol';
+import { mobileGitHubRequest } from '../src/mobile-github-client';
 
 vi.mock('../hosted/client', () => ({ bridgeRequest: vi.fn(async (request: any) => request.operation === 'discover' ? { capabilities: [] } : [{ id: 'a6075abf-226e-4c88-977c-e11404e59f32', installation: { id: 1 }, user: { id: 1 } }]) }));
 
@@ -119,6 +122,86 @@ function processFixture() {
   return f;
 }
 
+function mobileFixture() {
+  const f = processFixture();
+  const json = (value: unknown) => new Response(Buffer.from(JSON.stringify(value)), { headers: { 'Content-Type': 'application/json' } });
+  let record: ConnectionRecord = { id: scope.id, name: 'Storage', appId: 7, clientId: 'client', user: { id: 1, login: 'reviewer' }, installation: { id: 1, account: 'owner' }, tokens: { accessToken: 'native-secret', expiresAt: Date.now() + 999999 }, hostedGrants: [{ origin: 'https://review.test', subpath: '/app/' }] };
+  let responseVersion = '';
+  let beforeMutation: (() => Promise<void>) | undefined;
+  const dispatches: unknown[] = [], messages: string[] = [];
+  const store = { all: async () => [structuredClone(record)], get: async () => structuredClone(record), put: async (value: ConnectionRecord) => { record = structuredClone(value); }, remove: async () => {} };
+  const engine = new Connections(store, async (url, init = {}) => {
+    const path = String(url).replace('https://api.github.com', '');
+    if (path.includes('/user/installations?')) return json({ installations: [{ id: 1, app_id: 7, account: { login: 'owner' }, permissions: { contents: 'write', actions: 'write' } }] });
+    if (path.includes('/user/installations/1/repositories?')) return json({ repositories: [{ full_name: scope.repository, private: true, default_branch: 'main' }, { full_name: 'owner/source', private: true, default_branch: 'main' }] });
+    if (path.endsWith('/dispatches')) { dispatches.push(JSON.parse(String(init.body))); return new Response(null, { status: 204 }); }
+    if (path.includes('/runs?')) return json({ workflow_runs: [{ id: 42, html_url: 'https://github.com/owner/source/actions/runs/42', event: 'workflow_dispatch', head_branch: 'main', actor: { id: 1 }, display_title: `Review · ${responseVersion}`, status: 'completed', conclusion: 'success' }] });
+    if (init.method === 'POST' || init.method === 'PATCH') return json(await f.git.mutate(path, init.method, JSON.parse(String(init.body))));
+    const route = path.split('/git/')[1];
+    const operation = route.startsWith('matching-refs/') ? 'gitRefs' : route.startsWith('commits/') ? 'gitCommit' : route.startsWith('trees/') ? 'gitTree' : 'gitBlob';
+    return json(await f.git.read({ operation, prefix: route.slice('matching-refs/'.length), oid: route.split('/')[1]?.split('?')[0] } as any));
+  }, undefined, undefined, undefined, undefined, { repository: 'owner/source', workflow: 'review.yml', ref: 'main' });
+  // Pause in the storage await inside api(), after its caller's authority check.
+  const all = store.all;
+  store.all = async () => { if (beforeMutation && f.git.mutations.length === 1) { const pause = beforeMutation; beforeMutation = undefined; await pause(); } return all(); };
+  const host = new MobileGitHub(engine, () => true);
+  const broker = new MobileFixtureBroker(undefined, host);
+  const context = { documentId: 'review-document', documentURL: 'https://review.test/app/', isMainFrame: true };
+  broker.activate(context);
+  const client = { request: async (method: string, params: Record<string, unknown>) => {
+    const raw = JSON.stringify({ jsonrpc: '2.0', id: 'review_rpc', method, params }); messages.push(raw);
+    const reply = await broker.handleAsync(context, raw);
+    if (reply.error) throw new Error(reply.error.message);
+    return reply.result;
+  } };
+  return { ...f, host, broker, context, client, messages, dispatches, version: (value: string) => { responseVersion = value; }, pause: (value: () => Promise<void>) => { beforeMutation = value; } };
+}
+
+test('mobile bridge saves a large Unicode draft, submits an immutable response and reads exact workflow progress without browser crypto/codecs', async () => {
+  const f = mobileFixture();
+  // Initialize Node's lazy fetch implementation before removing browser codecs.
+  new Response(Buffer.from('{}'));
+  const uuid = crypto.randomUUID.bind(crypto);
+  vi.stubGlobal('crypto', { randomUUID: uuid });
+  vi.stubGlobal('TextEncoder', undefined); vi.stubGlobal('TextDecoder', undefined);
+  try {
+    f.value.comments = Array.from({ length: 5 }, (_, index) => ({ id: `large-${index}`, member_id: 'doc', kind: 'content-comment', text: '🧪\\"\n'.repeat(1500) }));
+    const { intent: _, ...draft } = f.value;
+    const saved: any = await mobileGitHubRequest(f.client, { ...f.input(), text: JSON.stringify({ ...draft, kind: 'review-draft', id: 'draft-mobile' }) }, 30000);
+    expect(saved.resource).toContain('/drafts/1/');
+    expect(JSON.parse(f.git.blobs.get(saved.version)!).comments).toEqual(f.value.comments);
+    expect(f.dispatches).toHaveLength(0);
+    const receipt: any = await mobileGitHubRequest(f.client, f.input(), 30000);
+    expect(receipt.dispatch.state).toBe('dispatched');
+    expect(JSON.parse(f.git.blobs.get(receipt.version)!)).toEqual(f.value);
+    expect(f.messages.filter(raw => JSON.parse(raw).params.phase === 'chunk').length).toBeGreaterThan(20);
+    expect(f.messages.every(raw => Buffer.byteLength(raw) <= 16 * 1024)).toBe(true);
+    expect(f.messages.join('')).not.toContain('native-secret');
+    f.version(receipt.version);
+    await expect(mobileGitHubRequest(f.client, { ...scope, operation: 'reviewProgress', resource: receipt.resource, version: receipt.version }, 30000)).resolves.toMatchObject({ state: 'completed', run: { id: 42, conclusion: 'success' } });
+    const count = f.git.mutations.length;
+    await mobileGitHubRequest(f.client, f.input(), 30000);
+    expect(f.git.mutations).toHaveLength(count);
+  } finally { vi.unstubAllGlobals(); }
+});
+
+test.each(['navigation', 'revoke'])('mobile review stops subsequent Git mutations when %s happens during async write preparation', async change => {
+  const f = mobileFixture();
+  let reached!: () => void, release!: () => void;
+  const entered = new Promise<void>(resolve => { reached = resolve; });
+  const resume = new Promise<void>(resolve => { release = resolve; });
+  f.pause(async () => { reached(); await resume; });
+  const writing = mobileGitHubRequest(f.client, f.input(), 30000);
+  await entered;
+  const revoke = change === 'revoke' ? f.host.settings({ operation: 'revokeOrigin', id: scope.id, origin: 'https://review.test', subpath: '/app/' }) : undefined;
+  if (change === 'navigation') { f.broker.invalidate(); f.broker.activate(f.context); }
+  release();
+  await expect(writing).rejects.toThrow('changed'); await revoke;
+  expect(f.git.mutations).toHaveLength(1);
+  expect(f.git.mutations[0].path).toMatch(/\/blobs$/);
+  expect(f.dispatches).toHaveLength(0);
+});
+
 test('mixed-version broker rejects process early, translates only the old schema failure, and preserves legacy writes', async () => {
   const bridge = vi.mocked(bridgeRequest);
   const oldError = JSON.stringify([{ code: 'unrecognized_keys', keys: ['process'], path: [], message: 'Unrecognized key: "process"' }]);
@@ -210,7 +293,7 @@ test.each(['allowed', 'missing-actions', 'missing-source', 'different-user', 'se
   const fetcher = vi.fn(async (url: any, init: RequestInit = {}) => {
     const path = String(url).replace('https://api.github.com', '');
     const isSource = (init.headers as any)?.Authorization === 'Bearer source-token';
-    if (path.includes('/user/installations?')) return Response.json({ installations: [{ id: 1, app_id: isSource ? 8 : 7, account: { login: 'owner' }, permissions: { actions: mode === 'missing-actions' ? 'read' : 'write' } }] });
+    if (path.includes('/user/installations?')) return Response.json({ installations: [{ id: 1, app_id: isSource ? 8 : 7, account: { login: 'owner' }, permissions: { contents: 'write', actions: mode === 'missing-actions' ? 'read' : 'write' } }] });
     if (path.includes('/user/installations/1/repositories?')) return Response.json({ repositories: [{ full_name: scope.repository, private: true, default_branch: 'main' }, ...(mode === 'missing-source' || mode === 'separate-app' && !isSource ? [] : [{ full_name: 'mickmister/gh-agentic-workflows', private: false, default_branch: 'main' }])] });
     if (path.endsWith('/dispatches')) { dispatches.push({ body: JSON.parse(String(init.body)), token: (init.headers as any).Authorization }); if (mode === 'network' && fail) throw new TypeError('Network disconnected; dispatch outcome unknown'); return fail ? Response.json({ message: 'unavailable' }, { status: 503 }) : new Response(null, { status: 204 }); }
     const route = path.split('/git/')[1];
@@ -267,8 +350,8 @@ test.each(['storage', 'token'].flatMap(wait => ['navigation', 'revokeOrigin', 'd
       return Response.json({ access_token: 'rotated', token_type: 'bearer', expires_in: 3600, refresh_token: 'rotated-refresh', refresh_token_expires_in: 86400 });
     }
     if (path.includes('/user/installations?')) {
-      installationsChecked = true;
-      return Response.json({ installations: [{ id: 1, app_id: 7, account: { login: 'owner' }, permissions: { actions: 'write' } }] });
+      installationsChecked = f.git.mutations.length > 0;
+      return Response.json({ installations: [{ id: 1, app_id: 7, account: { login: 'owner' }, permissions: { contents: 'write', actions: 'write' } }] });
     }
     if (path.includes('/user/installations/1/repositories?')) {
       if (installationsChecked) {

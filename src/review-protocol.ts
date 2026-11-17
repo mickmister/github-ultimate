@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { utf8Bytes } from './utf8';
 import { parseRecord, validateAnswers } from './protocol.ts';
 
 const key = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/);
@@ -56,11 +57,11 @@ export const reviewWriteSchema = z.object({
 }).strict();
 export type ReviewWrite = z.infer<typeof reviewWriteSchema>;
 export function parseReviewRequest(text: string) {
-  if (new TextEncoder().encode(text).length > 256000) throw new Error('Review request exceeds 256 KB.');
+  if (utf8Bytes(text) > 256000) throw new Error('Review request exceeds 256 KB.');
   return reviewRequestSchema.parse(JSON.parse(text));
 }
 export function parseReviewArtifact(text: string) {
-  if (new TextEncoder().encode(text).length > 256000) throw new Error('Review artifact exceeds 256 KB.');
+  if (utf8Bytes(text) > 256000) throw new Error('Review artifact exceeds 256 KB.');
   return reviewArtifactSchema.parse(JSON.parse(text));
 }
 export const requestResource = (id: string) => `review-requests/${key.parse(id)}/request.json`;

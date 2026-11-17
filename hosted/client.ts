@@ -3,7 +3,8 @@ import type { HostedRequest } from '../src/hosted-protocol';
 import { MobileClient } from '../src/mobile-client';
 import { measureOperation } from './performance-hooks';
 
-async function nativeRequest<T>(request: HostedRequest, timeoutMs: number): Promise<T> {
+type NativeRequest = <T>(client: MobileClient, request: HostedRequest, timeoutMs: number) => Promise<T>;
+async function nativeRequest<T>(request: HostedRequest, timeoutMs: number, send?: NativeRequest): Promise<T> {
   const started = Date.now();
   if (!window.alohakNative) await new Promise<void>((resolve, reject) => {
     const cleanup = () => { clearTimeout(timer); window.removeEventListener('alohak-native-ready', ready); };
@@ -13,18 +14,19 @@ async function nativeRequest<T>(request: HostedRequest, timeoutMs: number): Prom
     if (window.alohakNative) ready();
   });
   const client = new MobileClient();
-  try { return await client.request('github.request', request, Math.max(1, timeoutMs - (Date.now() - started))) as T; }
+  const remaining = Math.max(1, timeoutMs - (Date.now() - started));
+  try { return send ? await send<T>(client, request, remaining) : await client.request('github.request', request, remaining) as T; }
   finally { client.close(); }
 }
 
-export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000): Promise<T> {
-  return measureOperation(`bridge.${request.operation}`, () => sendBridge<T>(request, timeoutMs));
+export function bridgeRequest<T>(request: HostedRequest, timeoutMs = 30000, nativeTransport?: NativeRequest): Promise<T> {
+  return measureOperation(`bridge.${request.operation}`, () => sendBridge<T>(request, timeoutMs, nativeTransport));
 }
-function sendBridge<T>(request: HostedRequest, timeoutMs: number): Promise<T> {
+function sendBridge<T>(request: HostedRequest, timeoutMs: number, nativeTransport?: NativeRequest): Promise<T> {
   if (!window.isSecureContext) return Promise.reject(new Error('Open this page over HTTPS (or HTTP localhost for development).'));
   // A UA marker selects transport only, never authority. Await the native
   // bootstrap rather than accidentally trying the extension during page load.
-  if (window.alohakNative || /Alohak\/1/.test(navigator.userAgent)) return nativeRequest<T>(request, timeoutMs);
+  if (window.alohakNative || /Alohak\/1/.test(navigator.userAgent)) return nativeRequest<T>(request, timeoutMs, nativeTransport);
   const requestId = crypto.randomUUID();
   return new Promise((resolve, reject) => {
     const cleanup = () => { clearTimeout(timeout); window.removeEventListener('message', receive); };

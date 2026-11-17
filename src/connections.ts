@@ -171,12 +171,15 @@ export class Connections {
       }
       if (request.operation === 'reviewWrite') {
         if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('The authenticated reviewer or installation changed. Reconnect before saving.');
+        const installation = (await this.installations(record)).find(item => item.id === request.installationId);
+        if (installation?.permissions.contents !== 'write') throw new ConnectionError('Saving review drafts and responses requires Contents: read and write on this GitHub App installation. Approve the updated permissions and select the installation again.');
         const repo = (await this.repositories(record)).find(repo => repo.full_name.toLowerCase() === request.repository.toLowerCase());
         if (!repo) throw new ConnectionError('Repository is not available through the selected installation and user.');
+        const requireCurrent = () => { if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.'); };
         try {
           return await writeReview({ ...request, repository: repo.full_name }, `github:${record.user.id}`,
-            <T>(input: import('./git-reads').GitRead) => readGit(input, repo.full_name, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'none' : 'immutable')) as Promise<T>,
-            (path, method, body) => this.api(record, path, maxMetadataBytes, 'none', { method, body }),
+            <T>(input: import('./git-reads').GitRead) => { requireCurrent(); return readGit(input, repo.full_name, (path, limit) => { requireCurrent(); return this.api(record, path, limit, input.operation === 'gitRefs' ? 'none' : 'immutable'); }) as Promise<T>; },
+            (path, method, body) => { requireCurrent(); return this.api(record, path, maxMetadataBytes, 'none', { method, body, isCurrent }); },
             (receipt, review) => this.dispatchReview(record, approved, repo.full_name, receipt, review, isCurrent));
         } catch (error) { throw new ConnectionError(error instanceof Error ? error.message : 'Review save failed. Retry after reconnecting.'); }
       }
@@ -266,7 +269,7 @@ export class Connections {
       await this.api(source, `/repos/${host.repository}/actions/workflows/${encodeURIComponent(host.workflow)}/dispatches`, maxMetadataBytes, 'none', { method: 'POST', body: { ref: host.ref, inputs: { workspace: review.workspace, process: process.id, bead: review.bead_id, response: JSON.stringify(exact) } }, isCurrent });
       return await save({ ...exact, dispatch: { state: 'dispatched', target, attempted_at: new Date(this.now()).toISOString(), message: 'Dispatch accepted; workflow start and process progress are not yet known.' } });
     } catch (error) {
-      return save({ ...exact, dispatch: { state: attempted && (error instanceof ConnectionTransportError || !(error instanceof ConnectionError)) ? 'unknown' : 'failed', target, attempted_at: new Date(this.now()).toISOString(), message: error instanceof Error ? error.message : 'Delivery outcome unknown. Retry this saved response.' } });
+      return save({ ...exact, dispatch: { state: attempted && (error instanceof ConnectionTransportError || !(error instanceof ConnectionError)) ? 'unknown' : 'failed', target, attempted_at: new Date(this.now()).toISOString(), message: `Response is saved. ${error instanceof Error ? error.message : 'Delivery outcome unknown. Retry this saved response.'}` } });
     }
   }
 
@@ -384,8 +387,8 @@ export class Connections {
     const disk = z.object({ value: z.unknown(), etag: z.string().max(8192).optional() }).safeParse(persisted);
     const cached = cache === 'none' ? undefined : this.apiCache.get(key) ?? (disk.success && disk.data.value !== undefined ? disk.data : undefined);
     if (cache === 'immutable' && cached) return copyCacheValue(cached.value);
-    // Dispatch authority may expire during storage reads or token rotation above.
-    if (mutation?.isCurrent && !mutation.isCurrent()) throw new ConnectionError('Document or connection access changed. Response is saved; reconnect before retrying delivery.');
+    // Write authority may expire during storage reads or token rotation above.
+    if (mutation?.isCurrent && !mutation.isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly before retrying.');
     const response = await this.send(`https://api.github.com${path}`, {
       ...(mutation ? { method: mutation.method, body: JSON.stringify(mutation.body) } : {}),
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(mutation ? { 'Content-Type': 'application/json' } : {}), ...(cache === 'conditional' && cached?.etag ? { 'If-None-Match': cached.etag } : {}) },
@@ -555,8 +558,8 @@ export class Connections {
         const installation = (await this.installations(record)).find(i => i.id === request.installationId);
         if (!installation) throw new ConnectionError('Installation is not available through this App and user.');
         // Check actual approved permissions, not merely what the client claims.
-        if (Object.entries(installation.permissions).some(([key, value]) => value !== 'read' && value !== 'none' && !(key === 'actions' && value === 'write'))) {
-          throw new ConnectionError('This installation grants writes beyond Actions. Use the read-only client App, not the CI App.');
+        if (Object.entries(installation.permissions).some(([key, value]) => value !== 'read' && value !== 'none' && !(['actions', 'contents'].includes(key) && value === 'write'))) {
+          throw new ConnectionError('This client App supports write permissions only for Contents and Actions. Remove unrelated write permissions.');
         }
         this.apiCache.clearConnection(record.id);
         record.installation = { id: installation.id, account: installation.account.login };

@@ -7,9 +7,10 @@ extension retains its existing protocol and behavior.
 
 The shell implements `alohak.discover`, `fixture.echo` and independently
 approved `kv.snapshot/set/remove/clear` page-data operations. Optional native
-GitHub App device flow and private reads reuse the extension's connection
-engine. They are **disabled by default**, pending the signed-device isolation
-acceptance below. No managed auth backend is required. Eventual store
+GitHub App device flow, private reads and explicit review draft/submission operations
+reuse the extension's connection engine. The release switch defaults off; the user
+has authorized GitHub-enabled testing previews while isolation testing continues.
+No managed auth backend is required. Eventual store
 distribution is intended, with a personal device pilot first.
 
 ## Run on devices
@@ -66,28 +67,34 @@ directory if approving the entire branch preview is too broad. Only trust
 scripts within the approved deployment. Same-origin path separation does not
 isolate hostile scripts/service workers from one another.
 
-## Native GitHub App connections (gated pilot)
+## Native GitHub App connections
 
-Keep `EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` unset or `0` until
-`task-3vt.39.6.3` passes. An explicitly enabled build/update uses `1`.
+The user explicitly authorized GitHub-enabled testing previews while remaining
+isolation testing continues (`task-3vt.39.6.16`). Publish those previews with
+`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS=1`; dispatch remains default-off unless
+explicitly selected. Incomplete isolation checks remain open under
+`task-3vt.39.6.3`, not falsely accepted or used to block this authorized testing release.
 Native settings still allow listing, disconnecting, removing and revoking
 existing connections when the feature is disabled. The flag is public release
 configuration, not an authorization secret or substitute for native checks.
 
-After acceptance, configure the hosted **`app/`** HTTPS URL as the deployment:
+Apply the GitHub-enabled update, then configure the hosted **`app/`** HTTPS URL as the deployment:
 
 1. In **GitHub App connections**, enter a connection name, public **GitHub App
    ID** and **client ID**, then **Add GitHub connection**. Users choose their
    Apps; multiple named connections can use different Apps or the same App.
 2. Enable device flow and expiring user tokens on that App, install it on the
-   repositories to read, and use read-only repository permissions. The shared
-   engine rejects installations with write permissions beyond Actions.
+    repositories you use. Contents read permits browsing; Contents **read and write**
+    is required to save review drafts/responses. Workflow delivery requires Actions
+    write on the configured trusted source repository, and progress requires Actions
+    read there. The engine rejects unrelated write permissions. After changing App
+    permissions, approve the installation update and select it again in Alohak.
 3. Tap **Start GitHub sign-in**, then **Open GitHub verification**. Enter the
    displayed user code at GitHub in the system browser. Polling resumes while
    Alohak is in the foreground; **Check sign-in** retries explicitly after an
    error. No client secret or App private key is requested.
 4. **Load installations**, select the intended installation, optionally **List
-   repositories**, then **Grant this deployment GitHub reads** for that
+    repositories**, then **Grant this deployment GitHub access** for that
    connection. Repeat separately for other connections. Fixture/page-storage
    approvals do not grant GitHub access.
 5. Reload the hosted page, select the approved connection and private storage
@@ -96,10 +103,24 @@ After acceptance, configure the hosted **`app/`** HTTPS URL as the deployment:
    the native bootstrap and uses `github.request`; it does not fall back to an
    extension when native startup fails.
 
-Only connection discovery, repository/probe/Git reads and workspace navigation
-preferences are allowed through this transport. Review writes, S3, sign-in,
-grant changes, arbitrary fetch and token export are unavailable to page RPC.
+Connection discovery, repository/probe/Git reads, workspace navigation preferences,
+explicit review draft saves, immutable response submission and exactly correlated
+workflow progress are available through this transport. S3, sign-in, grant changes,
+arbitrary fetch and token export are unavailable to page RPC.
 Private document bytes are intentionally visible to approved deployment scripts.
+
+Review writes use the shared reviewer identity, pinned request/form validation,
+draft compare-and-swap, non-force Documents ref updates and verified readback.
+Only submitted process-bound responses dispatch workflows; drafts do not. Larger
+review payloads use `github.reviewTransfer` with strict review-only metadata,
+ordered 2,048-character chunks and a 256,000-byte artifact limit. Native ingress
+stays **16 KiB per message**. At most two transfers can wait for 60 seconds;
+navigation/document invalidation and connection revocation clear them. Authority
+is checked again before each Git mutation, including after storage/token awaits.
+Explicit remote draft saves are supported; automatic cross-device draft sync
+remains deferred. Automated fixtures cover the full native-broker draft/submit/
+progress path without WebCrypto or browser text codecs; signed-device review
+write acceptance remains a separate check.
 
 Connection metadata, installation choices and per-connection directory grants
 persist in AsyncStorage. Access/refresh tokens and pending device codes are
@@ -204,15 +225,19 @@ identity. This view uses native checks:
   remote page fails. Native back navigation, download/file-picker integration
   and full offline persistence are not claimed by M1.
 
-The displayed `extra.buildCommit` identifies the installed JS bundle/update, not
-its native API compatibility. The fingerprint hook excludes only that metadata
-field from Expo config hashing, preserving the earlier config bytes. All other
-configuration, native dependencies and explicit WebView patch bytes remain hashed.
+The displayed `extra.buildCommit` and JS-only `extra.githubConnectionsEnabled`
+switch do not change native APIs. Fingerprinting removes the display field and
+normalizes the switch to the original disabled baseline for native compatibility.
+The same switch in the generated EAS build profile is normalized for hashing too.
+The actual OTA manifest retains the selected switch value; the runtime broker
+still enforces it. All other configuration, native dependencies and explicit
+WebView patch bytes remain hashed.
 
 The UA marker suppresses handoff UI and selects the native transport before
 bridge initialization; it is not an authorization signal. Neither an injected nonce nor page-side checks
 replace the native trust boundary. Approved-page scripts can see everything
-their methods return. Do not enable real credentials until device acceptance.
+their methods return. GitHub-enabled testing and outstanding device-isolation
+evidence are tracked separately under the user's explicit release decision.
 
 ## Custom-scheme pilot
 
