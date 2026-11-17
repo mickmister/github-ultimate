@@ -17,8 +17,10 @@ export const reviewRequestSchema = z.object({
   thread: resource, title: z.string().min(1).max(1000), purpose: z.string().min(1).max(16000),
   question: z.string().min(1).max(16000), status: z.enum(['draft', 'published', 'withdrawn']),
   change_kind: z.enum(['proposal', 'implemented', 'mixed']), previous_request: key.optional(),
+  process: z.object({ kind: z.literal('qrspi'), id: key, workspace_ref: z.string().min(1).max(1000), thread_id: resource, config: reviewPinSchema }).strict().optional(),
   members: z.array(reviewMemberSchema).min(1).max(64),
 }).strict().superRefine((value, ctx) => {
+  if (value.process && value.process.thread_id !== value.thread) ctx.addIssue({ code: 'custom', message: 'Process thread must match the authoritative request thread' });
   if (value.thread !== `threads/${value.bead_id}` && !value.thread.startsWith(`threads/${value.bead_id}/`)) ctx.addIssue({ code: 'custom', message: 'Thread must belong to the owning Bead' });
   if (new Set(value.members.map(member => member.id)).size !== value.members.length) ctx.addIssue({ code: 'custom', message: 'Duplicate member ID' });
 });
@@ -46,7 +48,7 @@ export type ReviewRequest = z.infer<typeof reviewRequestSchema>;
 export type ReviewMember = z.infer<typeof reviewMemberSchema>;
 export type ReviewPin = z.infer<typeof reviewPinSchema>;
 export type ReviewArtifact = z.infer<typeof reviewArtifactSchema>;
-export interface ReviewReceipt { resource: string; version: string; snapshot: string; reviewer: string }
+export interface ReviewReceipt { resource: string; version: string; snapshot: string; reviewer: string; dispatch?: { state: 'pending' | 'dispatched' | 'failed' | 'unknown'; target?: string; message?: string; attempted_at?: string } }
 export const reviewWriteSchema = z.object({
   operation: z.literal('reviewWrite'), id: z.string().uuid(), installationId: z.number().int().positive(),
   repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), workspace: key,
@@ -72,6 +74,7 @@ export function samePin(a: ReviewPin, b: ReviewPin) {
 }
 export async function validateReviewArtifact(request: ReviewRequest, value: ReviewArtifact, read: (pin: ReviewPin) => Promise<string>) {
   if (value.request.id !== request.request_id || request.status !== 'published') throw new Error('Responses require the matching published request revision.');
+  if (value.kind === 'review-response' && value.comments.some(comment => comment.kind === 'feature-comment')) throw new Error('Feature feedback requires separate app intake; it cannot submit a content review or continue its process.');
   for (const field of [value.forms.map(form => form.member_id), value.progress, value.comments.map(comment => comment.id)]) {
     if (new Set(field).size !== field.length) throw new Error('Duplicate review item identity.');
   }

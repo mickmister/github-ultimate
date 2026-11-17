@@ -80,7 +80,7 @@ function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: {
           setComposer(null); setNotice(''); origin.current?.focus();
         },
         edit: queue.edit, remove: queue.remove,
-        copyAndClear() { setNotice(''); void queue.copyAndClear(text => navigator.clipboard.writeText(text)); },
+        copyAndClear(kind) { setNotice(''); void queue.copyAndClear(text => navigator.clipboard.writeText(text), kind); },
       }}>{children}</FeedbackShellView>
   </FeedbackContext.Provider>;
 }

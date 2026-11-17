@@ -5,6 +5,8 @@ import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import type { WorkspaceNavigation } from './workspace-navigation';
 import { writeReview } from './review-writes';
+import { pilotReviewDispatch, type ReviewDispatchHost } from './review-dispatch';
+import type { ReviewReceipt, ReviewRequest } from './review-protocol';
 import { cacheSettingsSchema } from './cache-settings';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 import { copyCacheValue } from './workspace-cache';
@@ -33,6 +35,7 @@ export type ConnectionRecord = {
   origins?: string[];
   hostedGrants?: HostedGrant[];
   recentNavigation?: { source: string; updatedAt: number; navigation: WorkspaceNavigation }[];
+  reviewDeliveries?: Record<string, ReviewReceipt>;
   apiCooldown?: ApiCooldown;
   cacheGeneration?: number;
 };
@@ -54,6 +57,7 @@ const repoSchema = z.object({ full_name: z.string(), private: z.boolean(), defau
 export type Installation = z.infer<typeof installationSchema>;
 export type Repository = z.infer<typeof repoSchema>;
 export class ConnectionError extends Error {}
+class ConnectionTransportError extends ConnectionError {}
 
 function publicConnection(record: ConnectionRecord) {
   const { id, name, appId, clientId, user, installation, tokens, pending } = record;
@@ -74,7 +78,7 @@ export class Connections {
   private apiCache = new ApiReadCache(96 * 1024 * 1024);
   private nativeReads = new BoundedReads(nativeReadConcurrency, nativeReadResponseBytes);
   private epoch = 0;
-  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache) {}
+  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache, private reviewDispatch: ReviewDispatchHost = pilotReviewDispatch) {}
 
   handle(input: unknown): Promise<unknown> {
     const request = requestSchema.parse(input);
@@ -149,7 +153,8 @@ export class Connections {
         try {
           return await writeReview({ ...request, repository: repo.full_name }, `github:${record.user.id}`,
             <T>(input: import('./git-reads').GitRead) => readGit(input, repo.full_name, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'none' : 'immutable')) as Promise<T>,
-            (path, method, body) => this.api(record, path, maxMetadataBytes, 'none', { method, body }));
+            (path, method, body) => this.api(record, path, maxMetadataBytes, 'none', { method, body }),
+            (receipt, review) => this.dispatchReview(record, approved, repo.full_name, receipt, review, isCurrent));
         } catch (error) { throw new ConnectionError(error instanceof Error ? error.message : 'Review save failed. Retry after reconnecting.'); }
       }
       if (gitReadSchema.safeParse(request).success) {
@@ -210,6 +215,36 @@ export class Connections {
     });
     this.tail = result;
     return result;
+  }
+
+  private async dispatchReview(storage: ConnectionRecord, approved: ConnectionRecord[], repositoryName: string, receipt: ReviewReceipt, review: ReviewRequest, isCurrent: () => boolean): Promise<ReviewReceipt> {
+    const host = this.reviewDispatch;
+    const key = JSON.stringify([repositoryName.toLowerCase(), review.workspace, receipt.resource, receipt.version, receipt.reviewer]);
+    const previous = storage.reviewDeliveries?.[key];
+    // Keep the first readback snapshot on same-response retries, even if Documents advanced.
+    const exact: ReviewReceipt = previous ? { resource: previous.resource, version: previous.version, snapshot: previous.snapshot, reviewer: previous.reviewer } : { resource: receipt.resource, version: receipt.version, snapshot: receipt.snapshot, reviewer: receipt.reviewer };
+    const target = `https://github.com/${host.repository}/actions/workflows/${host.workflow}`;
+    const save = async (result: ReviewReceipt) => {
+      storage.reviewDeliveries = { ...storage.reviewDeliveries, [key]: result };
+      await this.store.put(storage);
+      return result;
+    };
+    await save({ ...exact, dispatch: { state: 'pending', target, attempted_at: new Date(this.now()).toISOString() } });
+    let attempted = false;
+    try {
+      const source = host.sourceConnectionId ? approved.find(item => item.id === host.sourceConnectionId) : storage;
+      if (!source?.tokens || !source.user || source.user.id !== storage.user?.id || !source.installation) throw new ConnectionError('Missing trusted source-App connection for this authenticated reviewer. Response is saved.');
+      const installation = (await this.installations(source)).find(item => item.id === source.installation!.id);
+      const repository = (await this.repositories(source)).find(item => item.full_name.toLowerCase() === host.repository.toLowerCase());
+      if (!installation || installation.permissions.actions !== 'write' || !repository) throw new ConnectionError('Missing installed-source Actions write route. Storage and source may use different Apps; configure the trusted source connection. Response is saved.');
+      const process = review.process!;
+      if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Response is saved; reconnect before retrying delivery.');
+      attempted = true;
+      await this.api(source, `/repos/${host.repository}/actions/workflows/${encodeURIComponent(host.workflow)}/dispatches`, maxMetadataBytes, 'none', { method: 'POST', body: { ref: host.ref, inputs: { workspace: review.workspace, process: process.id, bead: review.bead_id, response: JSON.stringify(exact) } }, isCurrent });
+      return await save({ ...exact, dispatch: { state: 'dispatched', target, attempted_at: new Date(this.now()).toISOString(), message: 'Dispatch accepted; workflow start and process progress are not yet known.' } });
+    } catch (error) {
+      return save({ ...exact, dispatch: { state: attempted && (error instanceof ConnectionTransportError || !(error instanceof ConnectionError)) ? 'unknown' : 'failed', target, attempted_at: new Date(this.now()).toISOString(), message: error instanceof Error ? error.message : 'Delivery outcome unknown. Retry this saved response.' } });
+    }
   }
 
   private state<T>(work: () => Promise<T>): Promise<T> {
@@ -296,7 +331,7 @@ export class Connections {
   private async send(url: string, init: RequestInit) {
     let response: Response;
     try { response = await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: this.timeout(20000) }); }
-    catch { throw new ConnectionError('GitHub request failed or timed out. Retry when online.'); }
+    catch { throw new ConnectionTransportError('GitHub request failed or timed out. Retry when online.'); }
     return response;
   }
 
@@ -314,7 +349,7 @@ export class Connections {
     });
   }
 
-  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'conditional', mutation?: { method: 'POST' | 'PATCH'; body: unknown }): Promise<unknown> {
+  private async api(record: ConnectionRecord, path: string, maxBytes = maxMetadataBytes, cache: 'none' | 'conditional' | 'immutable' = 'conditional', mutation?: { method: 'POST' | 'PATCH'; body: unknown; isCurrent?: () => boolean }): Promise<unknown> {
     const records = await this.store.all();
     const related = records.filter(other => other.id === record.id || record.user && other.user?.id === record.user.id || other.apiCooldown?.scope === 'global');
     const until = Math.max(0, ...related.map(other => other.apiCooldown?.until ?? 0));
@@ -326,6 +361,8 @@ export class Connections {
     const disk = z.object({ value: z.unknown(), etag: z.string().max(8192).optional() }).safeParse(persisted);
     const cached = cache === 'none' ? undefined : this.apiCache.get(key) ?? (disk.success && disk.data.value !== undefined ? disk.data : undefined);
     if (cache === 'immutable' && cached) return copyCacheValue(cached.value);
+    // Dispatch authority may expire during storage reads or token rotation above.
+    if (mutation?.isCurrent && !mutation.isCurrent()) throw new ConnectionError('Document or connection access changed. Response is saved; reconnect before retrying delivery.');
     const response = await this.send(`https://api.github.com${path}`, {
       ...(mutation ? { method: mutation.method, body: JSON.stringify(mutation.body) } : {}),
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28', ...(mutation ? { 'Content-Type': 'application/json' } : {}), ...(cache === 'conditional' && cached?.etag ? { 'If-None-Match': cached.etag } : {}) },
@@ -349,6 +386,7 @@ export class Connections {
       if ([401, 403, 404].includes(response.status)) await this.retireCache(record);
       throw new ConnectionError(`GitHub returned HTTP ${response.status}. Check access, authorization and rate limits.`);
     }
+    if (mutation && response.status === 204) return null;
     let value: unknown;
     try { value = await boundedJSON(response, maxBytes); }
     catch { throw new ConnectionError('GitHub returned an unreadable response or exceeded the read limit.'); }

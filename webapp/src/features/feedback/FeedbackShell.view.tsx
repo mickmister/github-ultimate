@@ -1,3 +1,4 @@
+import { ark } from '@ark-ui/react/factory';
 import { Menu } from '@ark-ui/react/menu';
 import { Dialog } from '@ark-ui/react/dialog';
 import { Portal } from '@ark-ui/react/portal';
@@ -18,7 +19,7 @@ interface Props {
   actions: {
     closeMenu(): void; select(value: string): void; openReview(element: HTMLElement): void; closeDialog(): void;
     setComment(text: string): void; addComment(): void; edit(id: string, text: string): void;
-    remove(id: string): void; copyAndClear(): void;
+    remove(id: string): void; copyAndClear(kind: FeedbackKind): void;
   };
 }
 export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, portalContainer, actions }: Props) {
@@ -63,7 +64,8 @@ export function FeedbackShellView({ children, active, composer, review, state, n
               <label htmlFor={`feedback-comment-${item.id}`}>Comment {index + 1}</label><textarea id={`feedback-comment-${item.id}`} value={item.comment} rows={3} onChange={event => actions.edit(item.id, event.target.value)} />
               <button type="button" onClick={() => actions.remove(item.id)} aria-label={`Remove comment ${index + 1}`}>Remove</button>
             </li>)}</ol>
-            <button type="button" disabled={!state.items.length || state.exporting} onClick={actions.copyAndClear}>{state.exporting ? 'Copying…' : 'Copy review & clear'}</button>
+            <p>Content belongs to its exact reviewed resources. Feature feedback is app intake: destination workspace/thread unknown; viewed content is reproduction context only. Copying is not delivery.</p>
+            {(['content-comment', 'feature-comment'] as const).map(kind => <ark.button data-ui="feedback-category-export" key={kind} type="button" disabled={!state.items.some(item => item.kind === kind) || state.exporting} onClick={() => actions.copyAndClear(kind)}>{state.exporting ? 'Copying…' : kind === 'content-comment' ? 'Copy Content & clear Content' : 'Copy Feature intake & clear Feature'}</ark.button>)}
           </>}
           {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}
         </Dialog.Content>

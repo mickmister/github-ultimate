@@ -34,10 +34,11 @@ export function formatFeedbackReview(items: readonly FeedbackComment[]): string 
     scope.groups.set(key, group);
   }
 
-  const sections: string[] = [];
+  const featureOnly = items.length > 0 && items.every(item => item.kind === 'feature-comment');
+  const sections: string[] = featureOnly ? ['# App feature feedback intake\n\nDestination workspace: UNKNOWN\nDestination thread: UNKNOWN\nNot a content approval or process continuation. Resources below are reproduction context only.'] : [];
   for (const scope of scopes.values()) {
     const identity = [scope.repository && `Repository: ${scope.repository}`, scope.workspace && `Workspace: ${scope.workspace}`].filter(Boolean);
-    if (identity.length) sections.push(identity.join('\n'));
+    if (identity.length) sections.push((featureOnly ? 'Reproduction context (not destination):\n' : '') + identity.join('\n'));
     for (const group of scope.groups.values()) {
       const { target, pageUrl } = group[0].context;
       const resource = target.resource;

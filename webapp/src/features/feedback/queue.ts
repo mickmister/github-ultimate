@@ -56,16 +56,19 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
       update({ items: state.items.map(item => item.id === id ? { ...item, comment, version: item.version + 1 } : item), message: '' }, true);
     },
     remove(id: string) { update({ items: state.items.filter(item => item.id !== id), message: '' }, true); },
-    async copyAndClear(write: (text: string) => Promise<void>) {
+    async copyAndClear(write: (text: string) => Promise<void>, kind?: FeedbackKind) {
       if (state.exporting || !state.items.length) return;
-      const exported = [...state.items];
+      const categories = new Set(state.items.map(item => item.kind));
+      if (!kind && categories.size > 1) { update({ message: 'Export Content and Feature separately; they have different destinations.' }); return; }
+      const exported = state.items.filter(item => !kind || item.kind === kind);
+      if (!exported.length) return;
       const versions = new Map(exported.map(item => [item.id, item.version]));
       const review = formatFeedbackReview(exported);
       update({ exporting: true, message: '' });
       try {
         // Start clipboard writing directly in the user's click, before any other asynchronous work.
         await write(review);
-        update({ items: state.items.filter(item => versions.get(item.id) !== item.version), exporting: false, message: 'Review copied. Exported comments cleared.' }, true);
+        update({ items: state.items.filter(item => versions.get(item.id) !== item.version), exporting: false, message: kind === 'feature-comment' ? 'Feature intake copied; destination workspace/thread is unknown. Paste into app feedback discovery/intake. Not delivered and no content process continued.' : 'Content review copied. Exported content comments cleared.' }, true);
       } catch {
         update({ exporting: false, message: 'Clipboard copy failed. Your comments are still queued; retry from the Copy review & clear button.' });
       }
