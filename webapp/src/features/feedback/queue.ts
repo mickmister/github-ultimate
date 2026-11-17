@@ -33,7 +33,7 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
     state = { ...state, ...next };
     if (save) {
       try { persist(JSON.stringify({ schemaVersion: 1, interactions: state.items })); }
-      catch { state = { ...state, message: 'The tab draft could not be saved. Keep this page open until you copy your comments.' }; }
+      catch { state = { ...state, message: 'The local comment draft could not be saved. Keep this page open until you save or copy your comments.' }; }
     }
     listeners.forEach(listener => listener());
   }

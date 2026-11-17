@@ -51,7 +51,7 @@ export function FeedbackShellView({ children, active, composer, review, state, n
         <Dialog.Content className="feedback-dialog" data-feedback-control="true" aria-label={composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}>
           <header><Dialog.Title>{composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}</Dialog.Title>
             <button type="button" onClick={actions.closeDialog} aria-label="Close comments">Close</button></header>
-          <Dialog.Description>{composer ? 'Add your thought with the captured UI context and highlighted content.' : 'Review your thoughts, then copy a compact Markdown review to paste into agent chat. Drafts stay in this tab until copied.'}</Dialog.Description>
+          <Dialog.Description>{composer ? 'Add your thought with the captured UI context and highlighted content.' : 'Review your thoughts, then save the review response or copy a compact Markdown review to paste into agent chat. Review-request content comments are saved locally for that revision; app feedback stays in this tab until copied.'}</Dialog.Description>
           {composer ? <form onSubmit={event => { event.preventDefault(); actions.addComment(); }}>
             <p><strong>{composer.context.target.label}</strong><br />{composer.context.target.uiPath.join(' → ')}</p>
             <p className="feedback-context-detail">{composer.kind === 'content-comment' ? composer.context.target.resource?.path ?? composer.context.target.resource?.id : composer.context.target.featureId}</p>

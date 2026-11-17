@@ -20,6 +20,8 @@ interface Props {
 }
 export function ReviewSessionView({ scope, review, listing, latest, service, selected, forms, progress, responses, submitted, busy, dirty, notice, error, sidebarOpen, contents, actions }: Props) {
   const member = review.request.members.find(member => member.id === selected)!;
+  const formMembers = review.request.members.filter(item => item.kind === 'form');
+  const nextForm = formMembers[formMembers.findIndex(item => item.id === selected) + 1];
   const accepting = review.request.status === 'published' && latest?.request.status !== 'withdrawn';
   const downloaded = [...contents.values()].filter(item => item.status === 'ready').length;
   const failed = [...contents.values()].filter(item => item.status === 'error').length;
@@ -42,6 +44,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
         answer={submitted.has(member.id) ? responses.flatMap(item => item.value.forms).find(form => form.member_id === member.id) : forms.find(form => form.member_id === member.id)} submitted={submitted.has(member.id)}
         onAnswer={(answers, intent) => actions.answer(member.id, answers, intent)} onSubmit={() => actions.submit(member.id)} busy={busy || !accepting}
          onSaveDraft={actions.saveDraft} formStatus={{ notice, error, dirty, workflowAfterSubmit:Boolean(review.request.process) }}
+         onNextForm={nextForm ? () => actions.select(nextForm.id) : undefined} onSubmitReview={() => actions.submit()}
         reviewed={progress.includes(member.id)} onReviewed={checked => actions.progress(member.id, checked)} />
       </article></div>
     <footer className="review-submit"><p role="status">{dirty ? 'Unsaved changes. ' : ''}{notice}</p>{error && <p role="alert">{error}</p>}

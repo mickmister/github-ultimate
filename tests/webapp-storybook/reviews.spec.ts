@@ -10,6 +10,64 @@ function pinnedReviewURL() {
   return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
 }
 
+test('next form retains answers without submitting, and final form submits the full review with locally recovered comments', async ({ page }) => {
+  let state: any = { artifacts: [], revision: 1 };
+  await page.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') state = route.request().postDataJSON();
+    await route.fulfill({ json: state });
+  });
+  const url = '/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true';
+  await page.goto(url);
+  await page.getByText('The full target document is pinned to this packet.').click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Comment on Content', exact: true }).click();
+  const composer = page.getByRole('dialog', { name: 'Comment on Content', exact: true });
+  await composer.getByLabel('Your comment').fill('Recover this document comment without a remote draft.');
+  await composer.getByRole('button', { name: 'Add to queue', exact: true }).click();
+  expect(state.artifacts).toHaveLength(0);
+  // A new tab has no answer/session recovery; comments must come from local storage.
+  const fresh = await page.context().newPage();
+  await fresh.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') state = route.request().postDataJSON();
+    await route.fulfill({ json: state });
+  });
+  await fresh.goto(url);
+  await expect(fresh.getByRole('button', { name: 'Comments · 1', exact: true })).toBeVisible();
+  await fresh.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+  const queue = fresh.getByRole('dialog', { name: 'Queued comments', exact: true });
+  await queue.getByLabel('Comment 1', { exact: true }).fill('Edited locally before submitting.');
+  await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
+  await fresh.reload();
+  await fresh.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+  await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Edited locally before submitting.');
+  await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
+  await fresh.getByRole('link', { name: 'Review inbox', exact: true }).click();
+  await fresh.getByRole('link', { name: 'Independent reader review' }).click();
+  await expect(fresh.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await fresh.goto(url);
+  await fresh.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await fresh.getByText('Keep this approach', { exact: true }).click();
+  await finishForm(fresh);
+  await expect(fresh.getByRole('button', { name: 'Submit full review', exact: true })).toHaveCount(0);
+  await fresh.getByRole('button', { name: 'Go to next form', exact: true }).click();
+  expect(state.artifacts).toHaveLength(0);
+  await expect(fresh.locator('.review-form h3')).toHaveText('Review experience feedback');
+  await fresh.getByText('Revise this approach', { exact: true }).click();
+  await finishForm(fresh);
+  await expect(fresh.getByRole('button', { name: 'Go to next form', exact: true })).toHaveCount(0);
+  await expect(fresh.getByRole('button', { name: 'Submit just this form', exact: true })).toBeEnabled();
+  await fresh.getByRole('button', { name: 'Submit full review', exact: true }).click();
+  await expect(fresh.getByRole('status')).toContainText('Response saved remotely');
+  const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
+  expect(response.forms).toHaveLength(2);
+  expect(response.comments).toEqual([expect.objectContaining({ member_id: 'plan', text: 'Edited locally before submitting.' })]);
+  await fresh.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+  await queue.getByRole('button', { name: 'Remove comment 1', exact: true }).click();
+  await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
+  await fresh.reload();
+  await expect(fresh.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await fresh.close();
+});
+
 test('inbox setup discovers repository and workspace without a hidden required field', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--inbox&viewMode=story#/reviews');
   await expect(page.getByRole('combobox', {name:'Storage repository',exact:true})).toHaveValue('example/storage');
@@ -33,7 +91,7 @@ test('process submission explains correlated workflow progress and exposes the n
   await page.getByRole('button',{name:'Zen mode',exact:true}).click();
   await page.getByText('Keep this approach',{exact:true}).click();
   await finishForm(page);
-  await page.getByRole('button',{name:'Submit this form',exact:true}).click();
+  await page.getByRole('button',{name:'Submit just this form',exact:true}).click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   const panel=page.getByRole('region',{name:'Workflow after submission',exact:true});
   await expect(panel.getByText('Workflow is running',{exact:true})).toBeVisible();
@@ -375,7 +433,7 @@ for (const { zenMode, width } of [{ zenMode: false, width: 1280 }, { zenMode: tr
     await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Clarify the next steps in this form.');
     await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
     await finishForm(page);
-    await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+    await page.getByRole('button', { name: 'Submit just this form', exact: true }).click();
     await expect(page.getByRole('status').filter({ hasText: 'Response saved remotely' })).toBeVisible();
     const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
     expect(response.forms[0].answers.decision).toMatchObject({ keep: true, revise: true });
@@ -449,15 +507,15 @@ test('zen mode shows successful submission and transport failures without leavin
   await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
   await page.getByText('Keep this approach', { exact: true }).click();
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await page.getByRole('button', { name: 'Submit just this form', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('status')).toContainText('Response saved remotely');
-  await expect(page.getByRole('button', { name: 'Submit this form', exact: true })).toBeDisabled();
+  await expect(page.getByRole('button', { name: 'Submit just this form', exact: true })).toBeDisabled();
   await page.getByRole('button', { name: '← Back', exact: true }).click();
   await page.getByRole('button', { name: 'Review experience', exact: true }).click();
   await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
   await page.getByText('Revise this approach', { exact: true }).click();
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await page.getByRole('button', { name: 'Submit just this form', exact: true }).click();
   await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Second form transport unavailable');
   await page.getByRole('button', { name: 'Previous question', exact: true }).click();
   await page.getByRole('button', { name: 'Previous question', exact: true }).click();
@@ -488,7 +546,7 @@ test('remote draft survives a fresh page, two packets stay isolated, and update 
   await page.getByRole('button', { name: 'Check for updates and receipts' }).click();
   await expect(page.getByText('Updated packet available.')).toBeVisible();
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form' }).click();
+  await page.getByRole('button', { name: 'Submit just this form' }).click();
   await expect(page.getByLabel('Submission receipts')).toContainText('Response saved; task notification pending');
   expect(state.artifacts.find((item: any) => item.value.kind === 'review-response').value.request.version).toBe('e'.repeat(40));
   await page.getByRole('link', { name: 'Review inbox', exact: true }).click();
@@ -508,12 +566,12 @@ test('partial form failure retains the successful response receipt', async ({ pa
   await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
   await page.getByText('Keep this approach', { exact: true }).click();
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form' }).click();
+  await page.getByRole('button', { name: 'Submit just this form' }).click();
   await expect(page.getByLabel('Submission receipts')).toContainText('1 forms');
   await page.getByRole('button', { name: 'Review experience', exact: true }).click();
   await page.getByText('Revise this approach', { exact: true }).click();
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form' }).click();
+  await page.getByRole('button', { name: 'Submit just this form' }).click();
   await expect(page.getByRole('alert')).toContainText('Second form transport unavailable');
   await expect(page.getByLabel('Submission receipts')).toContainText('1 forms');
   expect(state.artifacts.filter((item: any) => item.value.kind === 'review-response')).toHaveLength(1);
@@ -528,7 +586,7 @@ test('failed submission reload restores answers and exact pending response witho
   await page.getByRole('button', { name: 'Review experience', exact: true }).click();
   await page.getByText('Revise this approach', { exact: true }).click();
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await page.getByRole('button', { name: 'Submit just this form', exact: true }).click();
   await expect(page.getByRole('alert')).toContainText('Second form transport unavailable');
   const pending = await page.evaluate(() => JSON.parse(sessionStorage.getItem(Object.keys(sessionStorage).find(key => key.startsWith('review-answer-recovery:'))!)!).pending.id);
   expect(state.artifacts).toHaveLength(0);
@@ -538,7 +596,7 @@ test('failed submission reload restores answers and exact pending response witho
   await expect(page.getByRole('checkbox', { name: 'Revise this approach', exact: true })).toBeChecked();
   expect(state.artifacts).toHaveLength(0);
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form', exact: true }).click();
+  await page.getByRole('button', { name: 'Submit just this form', exact: true }).click();
   await expect(page.getByLabel('Submission receipts')).toContainText('1 forms');
   expect(state.artifacts[0].value.id).toBe(pending);
 });
@@ -643,7 +701,7 @@ test('submitted answers take precedence over an older saved draft after reopen',
   await expect(page.getByRole('status')).toContainText('Draft saved remotely');
   await page.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('The submitted answer');
   await finishForm(page);
-  await page.getByRole('button', { name: 'Submit this form' }).click();
+  await page.getByRole('button', { name: 'Submit just this form' }).click();
   await expect(page.getByLabel('Submission receipts')).toContainText('Response saved; task notification pending');
   await page.reload();
   await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
