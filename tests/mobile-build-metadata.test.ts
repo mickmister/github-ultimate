@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from 'vitest';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 
 vi.mock('node:child_process', () => ({ execFileSync: vi.fn() }));
 beforeEach(() => { vi.resetModules(); vi.mocked(execFileSync).mockReset(); });
@@ -31,4 +32,21 @@ test('hosted app metadata also uses the actual checkout instead of a stale GITHU
   vi.stubEnv('GITHUB_SHA', 'b'.repeat(40));
   vi.mocked(execFileSync).mockReturnValue('a'.repeat(40) + '\n');
   expect((await import('../webapp/build-metadata')).uiBuild).toBe('a'.repeat(40));
+});
+
+test('runtime fingerprint ignores only display-only commit metadata, retaining the pre-metadata config bytes', () => {
+  const config = createRequire(import.meta.url)('../mobile/fingerprint.config.js');
+  const source = { type: 'contents', id: 'expoConfig' };
+  const baseline = JSON.stringify({ extra: { eas: { projectId: 'project' }, entryURL: 'https://example.test/', githubConnectionsEnabled: false }, plugins: ['expo-secure-store'] });
+  const withCommit = (commit: string) => JSON.stringify({ extra: { buildCommit: commit, ...JSON.parse(baseline).extra }, plugins: ['expo-secure-store'] });
+  expect(config.fileHookTransform(source, withCommit('a'.repeat(40)))).toBe(baseline);
+  expect(config.fileHookTransform(source, withCommit('b'.repeat(40)))).toBe(baseline);
+  expect(config.fileHookTransform(source, baseline)).toBe(baseline);
+  const changed = JSON.parse(withCommit('a'.repeat(40))); changed.extra.githubConnectionsEnabled = true;
+  expect(config.fileHookTransform(source, JSON.stringify(changed))).not.toBe(baseline);
+  changed.plugins.push('native-plugin');
+  expect(JSON.parse(config.fileHookTransform(source, JSON.stringify(changed))).plugins).toContain('native-plugin');
+  const patch = Buffer.from('native patch bytes');
+  expect(config.fileHookTransform({ type: 'file', filePath: '../patches/react-native-webview@13.15.0.patch' }, patch)).toBe(patch);
+  expect(config.extraSources).toContainEqual(expect.objectContaining({ filePath: '../patches/react-native-webview@13.15.0.patch' }));
 });

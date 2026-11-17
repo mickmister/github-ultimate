@@ -204,6 +204,11 @@ identity. This view uses native checks:
   remote page fails. Native back navigation, download/file-picker integration
   and full offline persistence are not claimed by M1.
 
+The displayed `extra.buildCommit` identifies the installed JS bundle/update, not
+its native API compatibility. The fingerprint hook excludes only that metadata
+field from Expo config hashing, preserving the earlier config bytes. All other
+configuration, native dependencies and explicit WebView patch bytes remain hashed.
+
 The UA marker suppresses handoff UI and selects the native transport before
 bridge initialization; it is not an authorization signal. Neither an injected nonce nor page-side checks
 replace the native trust boundary. Approved-page scripts can see everything
