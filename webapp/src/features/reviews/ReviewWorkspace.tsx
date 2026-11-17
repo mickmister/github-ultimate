@@ -6,6 +6,7 @@ import type { OpenReview } from '../../../../hosted/reviews';
 import { reviewOid, requestResource } from '../../../../src/review-protocol';
 import { ReviewWorkspaceView } from './ReviewWorkspace.view';
 import { installReviewPerf, measure } from '../../../../hosted/performance';
+import { useReviewStoragePicker } from './useReviewStoragePicker';
 
 export interface ReviewLocation { connection?: string; repository?: string; workspace?: string; version?: string; snapshot?: string; requestId?: string }
 export function parseReviewSearch(search: Record<string, unknown>): Omit<ReviewLocation, 'requestId'> {
@@ -20,8 +21,8 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
   const hooks = useMemo(() => appHooks ?? createHostedAppHooks(), [appHooks]);
   const [connections, setConnections] = useState<readonly ConnectionDTO[]>([]);
   const [connectionId, setConnectionId] = useState(location.connection ?? '');
-  const [repository, setRepository] = useState(location.repository ?? '');
-  const [workspace, setWorkspace] = useState(location.workspace ?? '');
+  const storage = useReviewStoragePicker(hooks.modules.documents, connections, connectionId, location);
+  const { repository, workspace } = storage;
   const [scope, setScope] = useState<WorkspaceScope | null>(null);
   const [listing, setListing] = useState<ReviewListing | null>(null);
   const [opened, setOpened] = useState<OpenReview | null>(null);
@@ -86,8 +87,9 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
     return () => { cancelled = true; generation.current++; hooks.modules.documents.dispose(); };
   }, [hooks]);
   const selected = connections.find(item => item.id === connectionId);
-  return <ReviewWorkspaceView connections={connections} connectionId={connectionId} repository={repository} workspace={workspace}
+  function resetSource() { generation.current++; setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false); }
+  return <ReviewWorkspaceView connections={connections} connectionId={connectionId} repository={repository} workspace={workspace} storage={storage}
     scope={scope} listing={listing} opened={opened} busy={busy} error={error} service={hooks.modules.reviews}
-    actions={{ setConnectionId, setRepository, setWorkspace, load: () => selected && void load({ connectionId: selected.id, installationId: selected.installationId, repository: repository.trim(), workspace: workspace.trim() }, true),
+    actions={{ setConnectionId(value) { resetSource(); storage.clearConnection(); setConnectionId(value); }, setRepository(value) { resetSource(); storage.chooseRepository(value); }, setWorkspace(value) { resetSource(); storage.chooseWorkspace(value); }, load: () => selected && void load({ connectionId: selected.id, installationId: selected.installationId, repository, workspace }, true),
       refresh: () => scope && void load(scope), updateListing: setListing }} />;
 }

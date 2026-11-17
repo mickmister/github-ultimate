@@ -9,6 +9,7 @@ import { evidenceHref } from './ReviewProcess.view';
 import { ReviewMemberContent } from './ReviewMemberContent';
 import { reviewHref } from './ReviewWorkspace';
 import type { ReviewContents } from './review-contents';
+import { submissionNotice } from './submission-notice';
 
 interface Props {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; latest?: OpenReview; service: ReviewsModuleV1;
@@ -42,6 +43,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
         reviewed={progress.includes(member.id)} onReviewed={checked => actions.progress(member.id, checked)} />
       </article></div>
     <footer className="review-submit"><p role="status">{dirty ? 'Unsaved changes. ' : ''}{notice}</p>{error && <p role="alert">{error}</p>}
+      <p>{submissionNotice(review.request)}</p>
       <button disabled={busy || !accepting} onClick={actions.saveDraft}>Save draft remotely</button><button disabled={busy || !accepting} onClick={() => actions.submit()}>Submit review feedback</button>
       <p>Answers are stored in workspace response artifacts. The task receives a pointer and summary.</p>
       <ul aria-label="Submission receipts">{responses.map(item => <li key={item.value.id}><strong>{item.value.id}</strong> · {item.value.forms.length} forms · {item.value.comments.length} comments<br /><code>{item.pin.resource}</code><br />
