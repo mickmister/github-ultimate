@@ -6,6 +6,7 @@ import type { OpenReview } from '../../../../hosted/reviews';
 import { reviewOid, requestResource } from '../../../../src/review-protocol';
 import { ReviewWorkspaceView } from './ReviewWorkspace.view';
 import { installReviewPerf, measure } from '../../../../hosted/performance';
+import { useReviewStoragePicker } from './useReviewStoragePicker';
 
 export interface ReviewLocation { connection?: string; repository?: string; workspace?: string; version?: string; snapshot?: string; requestId?: string }
 export function parseReviewSearch(search: Record<string, unknown>): Omit<ReviewLocation, 'requestId'> {
@@ -20,9 +21,8 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
   const hooks = useMemo(() => appHooks ?? createHostedAppHooks(), [appHooks]);
   const [connections, setConnections] = useState<readonly ConnectionDTO[]>([]);
   const [connectionId, setConnectionId] = useState(location.connection ?? '');
-  const [repository, setRepository] = useState(location.repository ?? '');
-  const [workspace, setWorkspace] = useState(location.workspace ?? '');
-  const [workspaces, setWorkspaces] = useState<readonly string[]>([]);
+  const storage = useReviewStoragePicker(hooks.modules.documents, connections, connectionId, location);
+  const { repository, workspace } = storage;
   const [waitingOnly, setWaitingOnly] = useState(true);
   const [scope, setScope] = useState<WorkspaceScope | null>(null);
   const [listing, setListing] = useState<ReviewListing | null>(null);
@@ -88,33 +88,10 @@ export function ReviewWorkspace({ appHooks, location = {} }: { appHooks?: AppHoo
     return () => { cancelled = true; generation.current++; hooks.modules.documents.dispose(); };
   }, [hooks]);
   const selected = connections.find(item => item.id === connectionId);
-  function changeSource(update: () => void) {
-    generation.current++; update(); setWorkspace(''); setWorkspaces([]); setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false);
-  }
-  function changeWorkspace(value: string) {
-    generation.current++; setWorkspace(value); setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false);
-  }
-  async function findOrLoad() {
-    if (!selected) { setError('Choose an approved connection first.'); return; }
-    const repo = repository.trim();
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo)) { setError('Enter the storage repository as owner/repository.'); return; }
-    const source = { connectionId: selected.id, installationId: selected.installationId, repository: repo };
-    if (workspace.trim()) { await load({ ...source, workspace: workspace.trim() }, true); return; }
-    const token = ++generation.current;
-    setBusy(true); setError('');
-    try {
-      const found = await hooks.modules.documents.discover(source);
-      if (generation.current !== token) return;
-      const names = found.filter(item => item.hasDocuments).map(item => item.id);
-      setWorkspaces(names);
-      if (!names.length) setError('No document workspaces found. Check the repository and connection access.');
-      else if (names.length === 1) { setWorkspace(names[0]); await load({ ...source, workspace: names[0] }, true); }
-    } catch (cause) { if (generation.current === token) setError(cause instanceof Error ? cause.message : String(cause)); }
-    finally { if (generation.current === token) setBusy(false); }
-  }
-  return <ReviewWorkspaceView connections={connections} connectionId={connectionId} repository={repository} workspace={workspace}
-    workspaces={workspaces} waitingOnly={waitingOnly} setWaitingOnly={setWaitingOnly}
+  function resetSource() { generation.current++; setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false); }
+  return <ReviewWorkspaceView connections={connections} connectionId={connectionId} repository={repository} workspace={workspace} storage={storage}
+    waitingOnly={waitingOnly} setWaitingOnly={setWaitingOnly}
     scope={scope} listing={listing} opened={opened} busy={busy} error={error} service={hooks.modules.reviews}
-    actions={{ setConnectionId: value => changeSource(() => setConnectionId(value)), setRepository: value => changeSource(() => setRepository(value)), setWorkspace: changeWorkspace, load: () => void findOrLoad(),
+    actions={{ setConnectionId(value) { resetSource(); storage.clearConnection(); setConnectionId(value); }, setRepository(value) { resetSource(); storage.chooseRepository(value); }, setWorkspace(value) { resetSource(); storage.chooseWorkspace(value); }, load: () => selected && void load({ connectionId: selected.id, installationId: selected.installationId, repository, workspace }, true),
       refresh: () => scope && void load(scope), updateListing: setListing }} />;
 }

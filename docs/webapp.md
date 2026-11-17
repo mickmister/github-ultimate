@@ -168,6 +168,22 @@ bundles without this metadata display `unavailable`.
 
 ## Focused document reading
 
+The review inbox guides source selection through **Approved connection**,
+**Storage repository**, and **Workspace** dropdowns. Repositories come from the
+selected connection's installation access; document workspaces are discovered in
+the chosen repository. A single available choice is selected automatically;
+multiple choices require selection. **Reload choices** retries discovery.
+Changing connection or repository clears dependent selections and stale results.
+Complete review deep links keep their explicit source and skip this discovery
+path, preserving fast pinned-detail startup. Hosts without repository discovery
+retain the manual repository field for compatibility.
+
+Submission screens explain whether the request is feedback-only or process-bound.
+A request without `process` saves responses without dispatching a GitHub workflow.
+A process-bound response attempts configured workflow delivery after durable save;
+there is currently no per-response workflow opt-out. Saving a remote draft does
+not dispatch a workflow.
+
 Pinned detail links (`#/reviews/<id>` with `version` and `snapshot`) open that
 exact historical request first, without waiting for current workspace discovery,
 drafts or response receipts. The pinned request path/workspace, snapshot membership

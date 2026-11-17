@@ -72,6 +72,10 @@ export function createHostedAppHooks(): AppHooksV1 {
         const found = await reader({ ...scope, workspace: '' }).discover();
         return found.map(workspace => ({ id: workspace.name, hasDocuments: Boolean(workspace.documents) }));
       },
+      async repositories(connectionId: string) {
+        const found = await bridgeRequest<{ full_name: string; private: boolean }[]>({ operation: 'repositories', id: connectionId });
+        return found.map(repo => ({ fullName: repo.full_name, private: repo.private }));
+      },
       open: (scope: WorkspaceScope) => open(scope),
       restore: (scope: WorkspaceScope) => open(scope, true),
       read: (snapshotId: string, documentId: string) => read(snapshotId, documentId, false),

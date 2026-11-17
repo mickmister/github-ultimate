@@ -10,11 +10,11 @@ function pinnedReviewURL() {
   return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
 }
 
-test('repository-only inbox setup discovers a workspace and opens it without a hidden required field', async ({ page }) => {
+test('inbox setup discovers repository and workspace without a hidden required field', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-reviews--inbox&viewMode=story#/reviews');
-  await page.getByRole('textbox', {name:'Storage repository', exact:true}).fill('example/storage');
-  await expect(page.getByRole('button', {name:'Find workspaces',exact:true})).toBeEnabled();
-  await page.getByRole('button', {name:'Find workspaces',exact:true}).click();
+  await expect(page.getByRole('combobox', {name:'Storage repository',exact:true})).toHaveValue('example/storage');
+  await expect(page.getByRole('combobox', {name:'Workspace',exact:true})).toHaveValue('reader-workspace');
+  await page.getByRole('button', {name:'Open review inbox',exact:true}).click();
   await expect(page.getByRole('region', {name:'Review inbox',exact:true})).toBeVisible();
   await expect(page.getByRole('combobox', {name:'Workspace',exact:true})).toHaveValue('reader-workspace');
   await expect(page.getByRole('checkbox', {name:'Only waiting for my response',exact:true})).toBeChecked();

@@ -11,6 +11,7 @@ export interface WorkspaceScope {
   readonly workspace: string;
 }
 export interface WorkspaceDTO { readonly id: string; readonly hasDocuments: boolean }
+export interface RepositoryDTO { readonly fullName: string; readonly private: boolean }
 export interface DocumentDTO { readonly id: string; readonly path: string; readonly size: number | null }
 export interface DocumentSnapshotDTO {
   readonly id: string;
@@ -22,6 +23,7 @@ export interface DocumentSnapshotDTO {
 export interface DocumentsModuleV1 {
   readonly version: 1;
   readonly connect: () => Promise<readonly ConnectionDTO[]>;
+  readonly repositories?: (connectionId: string) => Promise<readonly RepositoryDTO[]>;
   readonly discover: (scope: Omit<WorkspaceScope, 'workspace'>) => Promise<readonly WorkspaceDTO[]>;
   readonly open: (scope: WorkspaceScope) => Promise<DocumentSnapshotDTO>;
   readonly read: (snapshotId: string, documentId: string) => Promise<string>;

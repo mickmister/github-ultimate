@@ -12,8 +12,9 @@ export interface ReviewFormProps {
   onAnswer(answers: Answers, intent: 'discussion' | 'approved-next-steps'): void; onSubmit(): void;
   onSaveDraft?(): void; formStatus?: { notice: string; error: string; dirty: boolean; workflowAfterSubmit?:boolean };
   feedbackTarget?: FeedbackTarget;
+  submissionNotice?: string;
 }
-export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubmit, onSaveDraft, formStatus, feedbackTarget, step, heading, onStep, zen, onZen, dialog, zenButton }: ReviewFormProps & {
+export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubmit, onSaveDraft, formStatus, feedbackTarget, submissionNotice, step, heading, onStep, zen, onZen, dialog, zenButton }: ReviewFormProps & {
   step: number; heading: RefObject<HTMLHeadingElement | null>; onStep(step: number): void;
   zen: boolean; onZen(value: boolean): void; dialog: RefObject<HTMLDialogElement | null>; zenButton: RefObject<HTMLButtonElement | null>;
 }) {
@@ -34,6 +35,7 @@ export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubm
         </div>)}</div> : <label>{question.title}<textarea placeholder={question.placeholder} value={typeof answers[question.id] === 'string' ? answers[question.id] as string : ''} onChange={event => onAnswer({ ...answers, [question.id]: event.target.value }, intent)} /></label>}
         {question.id !== 'additional_notes' && <label>Additional context for {question.title}<textarea value={typeof answers[`${question.id}_more_info`] === 'string' ? answers[`${question.id}_more_info`] as string : ''} onChange={event => onAnswer({ ...answers, [`${question.id}_more_info`]: event.target.value }, intent)} /></label>}
       </section> : <>
+        {submissionNotice && <p>{submissionNotice}</p>}
       {!form.questions.some(question => question.id === 'additional_notes') && <label>Additional notes<textarea value={typeof answers.additional_notes === 'string' ? answers.additional_notes : ''} onChange={event => onAnswer({ ...answers, additional_notes: event.target.value }, intent)} /></label>}
       <label>Next instruction<textarea value={typeof answers.next_instruction === 'string' ? answers.next_instruction : ''} onChange={event => onAnswer({ ...answers, next_instruction: event.target.value }, intent)} /></label>
       {form.allowCodeFileChanges !== false && <div>{form.allowCodeFileChanges?.description && <p>{form.allowCodeFileChanges.description}</p>}<ReviewCheckbox disabled={submitted || busy} checked={intent === 'approved-next-steps'} onChange={checked => onAnswer(answers, checked ? 'approved-next-steps' : 'discussion')} label={form.allowCodeFileChanges?.label ?? form.allowCodeFileChanges?.allowLabel ?? 'Allow code-file changes for these next steps'} /></div>}

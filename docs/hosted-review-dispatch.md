@@ -24,10 +24,11 @@ Production deployment requires an updated installed broker and hosted webapp. No
 
 The inbox is workspace-scoped. A link can provide both `repository` and `workspace`
 at `#/reviews?repository=owner%2Fstorage&workspace=workspace-handle`; the user still
-needs an approved broker connection. With just a repository, **Find workspaces**
-discovers accessible document workspaces. A single result opens automatically;
-multiple results are offered in the Workspace field. Missing connections and
-empty discovery have explicit guidance instead of an unexplained disabled button.
+needs an approved broker connection. Repository/workspace discovery uses the
+integration branch's storage picker: a single available choice is selected
+automatically, and multiple results are offered in dropdowns. Select Open review
+inbox when ready. Missing connections and empty discovery have explicit guidance
+instead of an unexplained disabled button; Reload choices retries discovery.
 
 The default **Only waiting for my response** filter includes published requests
 not fully answered by the authenticated reviewer at their current request revision.

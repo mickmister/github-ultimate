@@ -19,7 +19,7 @@ export const richComparison: ReviewComparisonFixture = {
   before: '# Reader plan\n\nKeep **local drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save in the browser\n- Reopen this tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Local | One tab |\n\n> This warning was removed.\n\n```ts\nconst storage = "local";\n```\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
   after: '# Reader plan\n\nKeep **remote drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save remotely\n- Reopen any tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Remote | Persistent |\n\n```ts\nconst storage = "remote";\n```\n\n## Added section\n\nRead the *updated* guidance. [Unsafe](javascript:alert(1))\n\n<script>window.markdownDiffInjected = true</script>\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
 };
-export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean } = {}): AppHooksV1 {
+export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false, picker = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
   const load = async (resource?: ReviewPin, operation = 'state', requestId?: string) => remote ? await (await fetch('/__review-fixture', { headers: { 'X-Review-Operation': operation, ...(requestId ? { 'X-Review-Request': requestId } : {}), ...(resource ? { 'X-Review-Resource': JSON.stringify(resource) } : {}) } })).json() as ReviewFixtureState : state;
   const store = async (next: ReviewFixtureState) => { if (remote) await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) }); else state = next; };
@@ -42,7 +42,11 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
     return text;
   };
   return { contractVersion: 1, modules: {
-    documents: { version: 1, connect: async () => [{ id: reviewScope.connectionId, name: 'Fixture reviewer', installationId: 1, account: 'example' }], discover: async () => [{ id: reviewScope.workspace, hasDocuments: true }], open: async () => { throw new Error('Use review fixture transport.'); }, read: async () => '', dispose() {} },
+    documents: { version: 1,
+      connect: async () => [{ id: reviewScope.connectionId, name: 'Fixture reviewer', installationId: 1, account: 'example' }, ...(picker ? [{ id: 'b6075abf-226e-4c88-977c-e11404e59f32', name: 'Second reviewer', installationId: 2, account: 'second' }] : [])],
+      repositories: async connectionId => picker ? (await fetch('/__review-picker-fixture', { headers: { 'X-Picker-Operation': 'repositories', 'X-Picker-Connection': connectionId } })).json() : [{ fullName: reviewScope.repository, private: true }],
+      discover: async scope => picker ? (await fetch('/__review-picker-fixture', { headers: { 'X-Picker-Operation': 'workspaces', 'X-Picker-Connection': scope.connectionId, 'X-Picker-Repository': scope.repository } })).json() : [{ id: reviewScope.workspace, hasDocuments: true }],
+      open: async () => { throw new Error('Use review fixture transport.'); }, read: async () => '', dispose() {} },
     reviews: {
       async list(_scope, requestId) { const current = await load(undefined, 'list', requestId); const requests=[packet('reader-01', current.revision), packet('reader-02', 1)]; if(current.nextCheckpoint){const next=packet('reader-03',1);next.request.previous_request='reader-01';next.request.title='Next Goals checkpoint';requests.push(next);}return { requests: requests.filter(item => !requestId || item.request.request_id === requestId), artifacts: current.artifacts, reviewer: 'github:1', acknowledgements: [] }; },
       async progress(){const current=await load(undefined,'progress');if(current.workflowError)throw Error('Actions unavailable');return current.workflow??{state:'unknown',checked_at:new Date().toISOString(),message:'Fixture workflow progress unavailable.'};},
