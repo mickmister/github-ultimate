@@ -5,6 +5,68 @@ async function finishForm(page: Page) {
   await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
 }
 
+test('opening a review downloads every member and baseline before navigation, then switches without more reads', async ({ page }) => {
+  const reads: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>(resolve => { release = resolve; });
+  let blockNewReads = false;
+  await page.route('**/__review-fixture', async route => {
+    const pin = route.request().headers()['x-review-resource'];
+    if (pin) {
+      reads.push(JSON.parse(pin).version);
+      if (blockNewReads) return route.abort();
+      await gate;
+    }
+    await route.fulfill({ json: { artifacts: [], revision: 1 } });
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
+  await expect.poll(() => reads.length, { timeout: 30000 }).toBe(4);
+  expect(new Set(reads)).toEqual(new Set(['a', 'b', 'c', 'd'].map(letter => letter.repeat(40))));
+  release();
+  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  blockNewReads = true;
+  for (let pass = 0; pass < 2; pass++) {
+    await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+    await expect(page.locator('.review-form h3')).toHaveText('Reader decisions');
+    await expect(page.getByText(/^Loading Reader decisions/)).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review experience', exact: true }).click();
+    await expect(page.locator('.review-form h3')).toHaveText('Review experience feedback');
+    await page.getByRole('button', { name: 'Reader plan', exact: true }).click();
+    await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible();
+    await page.getByRole('button', { name: 'Baseline', exact: true }).click();
+    await expect(page.getByText('The baseline had browser-only drafts.')).toBeVisible();
+    await page.getByRole('button', { name: 'Changes', exact: true }).click();
+    await expect(page.locator('[data-change=added]')).toContainText('Remote drafts survive reopening.');
+  }
+  expect(reads).toHaveLength(4);
+});
+
+test('a failed preload leaves other items usable and can be retried independently', async ({ page }) => {
+  const reads: string[] = [];
+  let failBaseline = true;
+  await page.route('**/__review-fixture', async route => {
+    const header = route.request().headers()['x-review-resource'];
+    if (header) {
+      const pin = JSON.parse(header); reads.push(pin.version);
+      if (failBaseline && pin.version === 'b'.repeat(40)) return route.fulfill({ status: 503, body: 'Unavailable' });
+    }
+    await route.fulfill({ json: { artifacts: [], revision: 1 } });
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
+  await expect(page.getByRole('button', { name: 'Retry unavailable review contents', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await expect(page.locator('.review-form h3')).toHaveText('Reader decisions');
+  await page.getByRole('button', { name: 'Reader plan', exact: true }).click();
+  await page.getByRole('button', { name: 'Baseline', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Pinned baseline unavailable');
+  failBaseline = false;
+  await page.getByRole('button', { name: 'Retry unavailable review contents', exact: true }).click();
+  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  await expect(page.getByText('The baseline had browser-only drafts.')).toBeVisible();
+  expect(reads.filter(version => version === 'b'.repeat(40))).toHaveLength(2);
+  for (const letter of ['a', 'c', 'd']) expect(reads.filter(version => version === letter.repeat(40))).toHaveLength(1);
+});
+
 for (const width of [1280, 390]) {
   test(`review sidebar can be hidden without losing document mode or form answers at ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 844 });

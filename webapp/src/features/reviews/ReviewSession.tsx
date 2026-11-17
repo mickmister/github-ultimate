@@ -8,10 +8,14 @@ import { createFeedbackQueue, restoreFeedbackDraft } from '../feedback/queue';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { restoreReviewComments, responsesFor, storeReviewComments } from './model';
 import { ReviewSessionView } from './ReviewSession.view';
+import { createReviewContents } from './review-contents';
 
 export function ReviewSession({ scope, review, listing, service, refresh, updateListing }: {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; service: ReviewsModuleV1; refresh(): void; updateListing: Dispatch<SetStateAction<ReviewListing | null>>;
 }) {
+  const contentsCache = useMemo(() => createReviewContents(scope, review, service), [scope.connectionId, scope.installationId, scope.repository, scope.workspace, review, service]);
+  const contents = useSyncExternalStore(contentsCache.subscribe, contentsCache.getSnapshot, contentsCache.getSnapshot);
+  useEffect(() => { void contentsCache.preload(); }, [contentsCache]);
   const initial = useMemo(() => listing.artifacts.find(item => item.value.kind === 'review-draft' && item.value.reviewer === listing.reviewer && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version), []);
   const [queue] = useState(() => {
     const key = `review-feature-intake:${scope.repository}:${scope.workspace}:${listing.reviewer}`;
@@ -74,7 +78,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
         : { ...content, kind: 'review-draft', id: draftId } };
       const value = pending.current.value;
       if (memberId && !value.forms.length) throw new Error('Enter an answer before submitting this form.');
-      await validateReviewArtifact(review.request, value, pin => service.read(scope, pin));
+      await validateReviewArtifact(review.request, value, contentsCache.read);
       const receipt = await service.save(scope, value, submit ? null : draftVersion);
       if (!mounted.current) return;
       updateListing(current => current ? { ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== receipt.resource), { value, pin: { resource: receipt.resource, version_kind: 'git-blob', version: receipt.version, snapshot: receipt.snapshot }, dispatch: receipt.dispatch }] } : current);
@@ -97,7 +101,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const latest = listing.requests.find(item => item.request.request_id === review.request.request_id);
   return <FeedbackProvider queue={queue} storageKey={`review:${scope.repository}:${scope.workspace}:${review.request.request_id}:${review.pin.version}`}>
     <ReviewSessionView scope={scope} review={review} listing={listing} latest={latest} service={service} selected={selected} forms={forms} progress={progress}
-      responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error} sidebarOpen={sidebarOpen}
-      actions={{ select: setSelected, toggleSidebar() { setSidebarOpen(open => !open); }, answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), retry: value => void retry(value), refresh }} />
+      responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error} sidebarOpen={sidebarOpen} contents={contents}
+      actions={{ select: setSelected, toggleSidebar() { setSidebarOpen(open => !open); }, retryContents: () => void contentsCache.retryFailed(), answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), retry: value => void retry(value), refresh }} />
   </FeedbackProvider>;
 }
