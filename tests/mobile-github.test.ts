@@ -84,8 +84,8 @@ describe('native GitHub credential persistence', () => {
   });
 });
 
-describe('read-only native GitHub bridge', () => {
-  it('keeps GitHub approval independent and rejects page settings, writes, forged scopes and subframes', async () => {
+describe('scoped native GitHub bridge', () => {
+  it('keeps GitHub approval independent and rejects page settings, arbitrary operations, forged scopes and subframes', async () => {
     const disk = storage(); await disk.store.put({ ...record(), hostedGrants: [] });
     const app = github(disk.store); app.broker.approve(grantForEntry(entry)); app.broker.approveStorage(grantForEntry(entry));
     expect((await app.call({ operation: 'connections' })).error?.message).toContain('no approved connections');
@@ -94,7 +94,7 @@ describe('read-only native GitHub bridge', () => {
     expect(connections.result).toMatchObject([{ id, name: 'My chosen App' }]);
     expect(JSON.stringify(connections)).not.toMatch(/ghu_|ghr_/);
     const discovery = await app.call({ operation: 'discover' });
-    expect(discovery.result).not.toHaveProperty('capabilities', expect.arrayContaining(['reviewWrite']));
+    expect(discovery.result).toHaveProperty('capabilities', expect.arrayContaining(['reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'mobileReviewTransfer']));
     for (const request of [{ operation: 'start', id }, { operation: 'grantOrigin', id, origin: 'https://evil.example' }, { operation: 's3Connections' }, { operation: 'connections', origin: 'https://evil.example' }]) expect((await app.call(request)).error).toBeDefined();
     expect((await app.call({ operation: 'connections' }, { ...context, isMainFrame: false })).error).toBeDefined();
     const other = { ...context, documentURL: 'https://pages.example/sibling/index.html' }; app.broker.activate(other);

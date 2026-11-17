@@ -2,6 +2,7 @@
 // Fixture/storage grants are independent of optional native GitHub connections.
 import { pageKVBytes, PageKVService, type PageKVStore } from './page-kv';
 import type { MobileGitHub } from './mobile-github';
+import { mobileReviewTransferMethod } from './mobile-transfer-protocol';
 export const mobileProtocol = 1;
 export const alohakScheme = 'alohak';
 export const maxMobileMessageBytes = 16 * 1024;
@@ -78,7 +79,7 @@ export class MobileFixtureBroker {
     if (pageKVBytes(raw) > maxMobileMessageBytes) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Message exceeds 16 KiB.' } };
     let input: Record<string, unknown>;
     try { input = JSON.parse(raw); } catch { return this.handle(context, raw); }
-    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== 'fixture.delay') return this.handle(context, raw);
+    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== mobileReviewTransferMethod && input.method !== 'fixture.delay') return this.handle(context, raw);
     const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
     const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
     const epoch = this.documentEpoch;
@@ -98,9 +99,9 @@ export class MobileFixtureBroker {
         return this.handle(context, JSON.stringify({ jsonrpc: '2.0', id, method: 'fixture.echo', params: { text } }));
       } finally { this.pendingFixtures--; }
     }
-    if (input.method === 'github.request') {
+    if (input.method === 'github.request' || input.method === mobileReviewTransferMethod) {
       if (!this.github || !current()) return error('GitHub bridge or native document unavailable.');
-      try { return { jsonrpc: '2.0', id, result: await this.github.hosted(context.documentURL, input.params, current) }; }
+      try { return { jsonrpc: '2.0', id, result: input.method === mobileReviewTransferMethod ? await this.github.transfer(context.documentURL, input.params, current) : await this.github.hosted(context.documentURL, input.params, current) }; }
       catch (cause) { return error(cause instanceof Error ? cause.message : 'GitHub request failed. Check the native connection and retry.'); }
     }
     const operation = ({ 'kv.snapshot': 'kvSnapshot', 'kv.set': 'kvSet', 'kv.remove': 'kvRemove', 'kv.clear': 'kvClear' } as Record<string, string>)[input.method];
@@ -113,8 +114,8 @@ export class MobileFixtureBroker {
     } catch (cause) { return error(cause instanceof Error ? cause.message : 'Page storage failed.'); }
   }
   // Native callbacks supply document identity; payload fields never do.
-  activate(document: MobileDocument) { this.documentEpoch++; this.active = { ...document }; }
-  invalidate() { this.active = undefined; this.fixtureEpoch++; this.documentEpoch++; }
+  activate(document: MobileDocument) { this.github?.cancelTransfers(); this.documentEpoch++; this.active = { ...document }; }
+  invalidate() { this.github?.cancelTransfers(); this.active = undefined; this.fixtureEpoch++; this.documentEpoch++; }
   approve(grant?: MobileGrant) { this.fixtureEpoch++; this.grant = grant && { ...grant }; }
   handle(context: MobileDocument & { isMainFrame: boolean }, raw: string): MobileReply {
     let id: string | null = null;

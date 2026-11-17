@@ -1,4 +1,5 @@
 import { bridgeRequest } from '../../../hosted/client';
+import { mobileGitHubRequest } from '../../../src/mobile-github-client';
 import { WorkspaceReader, documents, documentText, type GitTransport } from '../../../hosted/workspaces';
 import { ReviewReader, type OpenReview } from '../../../hosted/reviews';
 import { artifactResource, parseReviewArtifact, requestResource, type ReviewArtifact, type ReviewPin, type ReviewReceipt } from '../../../src/review-protocol';
@@ -106,7 +107,7 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
       const processBound = Boolean(pinned.request.process);
       if (processBound && !support.capabilities?.includes('qrspiProcessReview')) throw new Error(PROCESS_REVIEW_UPDATE);
       try {
-        return await bridgeRequest<ReviewReceipt>({ operation: 'reviewWrite', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, text: JSON.stringify(value), expected }, 120000);
+        return await bridgeRequest<ReviewReceipt>({ operation: 'reviewWrite', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, text: JSON.stringify(value), expected }, 120000, mobileGitHubRequest);
       } catch (error) {
         if (processBound && isLegacyProcessSchemaError(error)) throw new Error(PROCESS_REVIEW_UPDATE);
         throw error;

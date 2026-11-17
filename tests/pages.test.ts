@@ -75,8 +75,10 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   expect(app).not.toContain('<main');
   expect(await readdir('hosted-dist/app')).not.toContain('server');
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.map'))).toBe(false);
-  // Keep the original app's size boundary separate from the new React bundle.
-  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation')).toBeLessThan(64 * 1024);
+  // Keep legacy pages separate from the React app. The 2 KiB allowance covers
+  // portable text decoding and native transport selection, not review schemas,
+  // transfer assembly or portable hashing (which stay out of this bundle).
+  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation')).toBeLessThan(66 * 1024);
   expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);
 }, 120000);
 
