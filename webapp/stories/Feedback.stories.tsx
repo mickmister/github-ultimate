@@ -23,3 +23,7 @@ function FeedbackExample({ includePageUrl = false }: { includePageUrl?: boolean 
 export const NestedTargets: Story = { render: () => <FeedbackExample /> };
 export const UrlOptIn: Story = { render: () => <FeedbackExample includePageUrl /> };
 export const InlineComments: Story = { render: () => <FeedbackExample />, parameters: { docs: { description: { story: 'Select a passage and add a content or feature comment. Queued comments highlight the passage and appear beside it; edit or delete from either the document or the queue.' } } } };
+export const InputSelections: Story = { render: () => <FeedbackProvider><AttachableContext target={documentFeedbackTarget(readyModel, mockSnapshot.documents[0], 'documents.form', 'rendered-text')}>
+  <label>Example answer<textarea defaultValue="abc selected value xyz" /></label>
+  <label>Password<input type="password" defaultValue="not-feedback" /></label>
+</AttachableContext></FeedbackProvider> };

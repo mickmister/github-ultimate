@@ -168,6 +168,16 @@ bundles without this metadata display `unavailable`.
 
 ## Focused document reading
 
+On touch devices, highlighting text in a commentable document or form shows a
+floating **Comment on selection** action after selection settles. Tap it to open
+the shared **Copy**, **Comment on Content**, and **Comment on Feature** menu with
+the captured text. The action stays within the visible viewport and works inside
+document/form zen mode. Native selection handles remain usable; changing or
+clearing the highlight updates or hides the action. Selected textarea/input text
+is supported, while password selections are excluded. Mobile browsers retain
+their native long-press menu; this web action appears alongside it. Desktop mouse
+selection continues to use right-click or the existing explicit comment controls.
+
 The review inbox guides source selection through **Approved connection**,
 **Storage repository**, and **Workspace** dropdowns. Repositories come from the
 selected connection's installation access; document workspaces are discovered in
