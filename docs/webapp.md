@@ -202,7 +202,8 @@ Choose **Zen mode** on a document for full-viewport reading without the surround
 review summary, navigation or submission controls. **Full document**, **Changes**
 and **Baseline** remain available, including rich Markdown and read-only source
 comparisons. The selected comparison and review progress are preserved on exit.
-The document uses the available viewport width, with mobile safe-area padding.
+The document fills the normal centered browsing container, retaining wide-screen
+margins and the configured content-width/spacing tokens, with mobile safe-area padding.
 
 Select text in **Full document** to comment using the context menu or **Comment ⋯**
 button. Comment menus, the composer and the review's comment queue stay inside

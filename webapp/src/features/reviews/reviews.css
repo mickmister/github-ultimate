@@ -35,7 +35,7 @@ body:has(> .review-zen[open]) > :not(.review-zen) { visibility: hidden; }
 .review-zen-toolbar { position: sticky; top: 0; z-index: 1; padding: max(.5rem, env(safe-area-inset-top)) max(.75rem, env(safe-area-inset-right)) .5rem max(.75rem, env(safe-area-inset-left)); background: var(--bg); }
 .review-zen .review-zen-back { color: var(--muted); background: transparent; border-color: transparent; font-weight: 400; }
 .review-zen-content { max-width: 90ch; margin-inline: auto; padding: 0 max(1rem, env(safe-area-inset-right)) max(1rem, env(safe-area-inset-bottom)) max(1rem, env(safe-area-inset-left)); overflow-wrap: anywhere; }
-.review-zen-document-content { max-width: none; }
+.review-zen-document-content { max-width: var(--ui-content-width, 1500px); padding-inline: max(var(--ui-spacing, clamp(16px, 3vw, 40px)), env(safe-area-inset-left)) max(var(--ui-spacing, clamp(16px, 3vw, 40px)), env(safe-area-inset-right)); }
 .review-zen .review-question-heading { scroll-margin-block-start: 5rem; }
 .review-form-actions { margin-block: 1rem; }
 .review-form-actions [role=status], .review-form-actions [role=alert] { margin-block: .75rem; }
