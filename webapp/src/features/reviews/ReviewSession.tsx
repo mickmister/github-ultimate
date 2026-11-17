@@ -8,14 +8,12 @@ import { createFeedbackQueue, restoreFeedbackDraft } from '../feedback/queue';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { restoreReviewComments, responsesFor, storeReviewComments } from './model';
 import { ReviewSessionView } from './ReviewSession.view';
-import { createReviewContents } from './review-contents';
+import type { createReviewContents, ReviewContents } from './review-contents';
 
-export function ReviewSession({ scope, review, listing, service, refresh, updateListing }: {
+export function ReviewSession({ scope, review, listing, service, refresh, updateListing, contentsCache, contents, initialSelected }: {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; service: ReviewsModuleV1; refresh(): void; updateListing: Dispatch<SetStateAction<ReviewListing | null>>;
+  contentsCache: ReturnType<typeof createReviewContents>; contents: ReviewContents; initialSelected: string;
 }) {
-  const contentsCache = useMemo(() => createReviewContents(scope, review, service), [scope.connectionId, scope.installationId, scope.repository, scope.workspace, review, service]);
-  const contents = useSyncExternalStore(contentsCache.subscribe, contentsCache.getSnapshot, contentsCache.getSnapshot);
-  useEffect(() => { void contentsCache.preload(); }, [contentsCache]);
   const initial = useMemo(() => listing.artifacts.find(item => item.value.kind === 'review-draft' && item.value.reviewer === listing.reviewer && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version), []);
   const [queue] = useState(() => {
     const key = `review-feature-intake:${scope.repository}:${scope.workspace}:${listing.reviewer}`;
@@ -32,7 +30,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const comments = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
   const [forms, setForms] = useState<ReviewArtifact['forms']>(initial?.value.forms ?? []);
   const [progress, setProgress] = useState(initial?.value.progress ?? []);
-  const [selected, setSelected] = useState(review.request.members[0].id);
+  const [selected, setSelected] = useState(initialSelected);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [draftVersion, setDraftVersion] = useState<string | null>(initial?.pin.version ?? null);
   const [draftId] = useState(initial?.value.id ?? `draft-${crypto.randomUUID()}`);

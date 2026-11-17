@@ -20,7 +20,7 @@ export const richComparison: ReviewComparisonFixture = {
 };
 export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
-  const load = async (resource?: ReviewPin) => remote ? await (await fetch('/__review-fixture', { headers: resource ? { 'X-Review-Resource': JSON.stringify(resource) } : undefined })).json() as ReviewFixtureState : state;
+  const load = async (resource?: ReviewPin, operation = 'state', requestId?: string) => remote ? await (await fetch('/__review-fixture', { headers: { 'X-Review-Operation': operation, ...(requestId ? { 'X-Review-Request': requestId } : {}), ...(resource ? { 'X-Review-Resource': JSON.stringify(resource) } : {}) } })).json() as ReviewFixtureState : state;
   const store = async (next: ReviewFixtureState) => { if (remote) await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) }); else state = next; };
   function packet(id: string, revision: number): OpenReview {
     const request: ReviewRequest = { kind: 'review-request', schema_version: 1, request_id: id, revision_id: `revision-${revision}`, workspace: reviewScope.workspace, bead_id: 'task-reader', related_beads: [], thread: 'threads/task-reader', title: id === 'reader-01' ? 'Reader follow-up' : 'Independent reader review', purpose: 'Review the pinned reader plan and two forms.', question: revision === 1 ? 'What should we do next?' : 'Updated question: which changes should we make?', status: 'published', change_kind: 'implemented', members: [
@@ -43,8 +43,8 @@ export function createReviewFixture({ remote = false, missingBaseline = false, c
   return { contractVersion: 1, modules: {
     documents: { version: 1, connect: async () => [{ id: reviewScope.connectionId, name: 'Fixture reviewer', installationId: 1, account: 'example' }], discover: async () => [{ id: reviewScope.workspace, hasDocuments: true }], open: async () => { throw new Error('Use review fixture transport.'); }, read: async () => '', dispose() {} },
     reviews: {
-      async list() { const current = await load(); return { requests: [packet('reader-01', current.revision), packet('reader-02', 1)], artifacts: current.artifacts, reviewer: 'github:1', acknowledgements: [] }; },
-      async open(_scope, pin) { return packet(pin.resource.split('/')[1], pin.version === 'f'.repeat(40) ? 2 : 1); }, read,
+      async list(_scope, requestId) { const current = await load(undefined, 'list', requestId); return { requests: [packet('reader-01', current.revision), packet('reader-02', 1)].filter(item => !requestId || item.request.request_id === requestId), artifacts: current.artifacts, reviewer: 'github:1', acknowledgements: [] }; },
+      async open(_scope, pin) { await load(undefined, 'open', pin.resource.split('/')[1]); return packet(pin.resource.split('/')[1], pin.version === 'f'.repeat(40) ? 2 : 1); }, read,
       async current(_scope, resource) { return resource.endsWith('/config.md') ? { pin: pin(resource, '9'), text: '---\npipeline: full\nroute: [goals, questions, research, design, plan, implement]\n---\n' } : { pin: pin(resource, '8'), text: '---\nstatus: draft\nphase: design\n---\n' }; },
       async save(scope, value, expected) {
         const current = await load();
