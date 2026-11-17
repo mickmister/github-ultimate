@@ -9,9 +9,11 @@ const results: Result[] = [];
 const field = (id: string) => document.getElementById(id) as HTMLInputElement;
 const loadId = crypto.randomUUID(), startedAt = new Date().toISOString();
 let running = false;
+function progress(detail: string) { document.getElementById('check-status')!.textContent = detail; }
 function record(name: string, status: Result['status'], detail: string) {
   results.push({ name, status, detail });
   document.getElementById('results')!.textContent = JSON.stringify(results, null, 2);
+  progress(`${name}: ${status}. ${detail}`);
 }
 function ready() { document.getElementById('native-status')!.textContent = window.alohakNative ? `Native document ${window.alohakNative.documentId}; page load ${loadId}` : 'No native bootstrap yet. Open this page in Alohak.'; }
 window.addEventListener('alohak-native-ready', ready); ready();
@@ -32,6 +34,7 @@ function negative(name: string, reply: ProbeReply, allowAbsent = false) {
   record(name, reply.outcome === 'result' ? 'fail' : reply.outcome === 'denied' || allowAbsent && reply.outcome === 'absent' ? 'pass' : 'inconclusive', reply.detail);
 }
 async function frameProbe(name: string, configure: (frame: HTMLIFrameElement, nonce: string) => void) {
+  progress(`Checking ${name}… A missing frame reply can take five seconds and is inconclusive.`);
   const frame = document.createElement('iframe'), nonce = crypto.randomUUID(); frame.title = name;
   const reply = await new Promise<ProbeReply>(resolve => {
     const finish = (value: ProbeReply) => { clearTimeout(timer); window.removeEventListener('message', receive); resolve(value); };
@@ -48,6 +51,7 @@ async function frameProbe(name: string, configure: (frame: HTMLIFrameElement, no
 }
 async function automatic() {
   if (!window.alohakNative) throw new Error('Native bridge missing; no native test was run.');
+  progress('Running automatic checks: discovering native capabilities…');
   const discovery = await rpc('alohak.discover', { protocolVersion: 1 }) as { capabilities?: string[] };
   record('approved main-frame control', textMatches(await rpc('fixture.echo', { text: 'control' }), 'control') ? 'pass' : 'fail', 'Approved top-level echo must work before negative probes.');
   const delayed = discovery.capabilities?.includes('fixture.delay');
@@ -83,8 +87,13 @@ async function automatic() {
     ['malformed JSON', '{'],
     ['batch request', '[]'],
     ['forged envelope authority', JSON.stringify({ jsonrpc: '2.0', id: `forged_${crypto.randomUUID()}`, method: 'fixture.echo', params: { text: 'forged' }, documentURL: original })],
-  ]) negative(name!, await rawProbe(raw!));
+  ]) {
+    progress(`Checking ${name}…`);
+    negative(name!, await rawProbe(raw!));
+  }
+  progress('Checking oversized inbound message…');
   negative('oversized inbound message', await rawProbe('x'.repeat(17000)));
+  progress('Checking binary inbound message…');
   negative('binary inbound message', await rawProbe(new Uint8Array([1, 2, 3]).buffer));
   const stock = (window as unknown as { ReactNativeWebView?: { postMessage(value: string): void } }).ReactNativeWebView;
   record('stock ReactNativeWebView endpoint', stock ? 'inconclusive' : 'pass', stock ? 'Unexpected stock endpoint is present; inspect native configuration before acceptance.' : 'Stock endpoint absent in scoped mode.');
@@ -92,6 +101,7 @@ async function automatic() {
   record('remaining device observations', 'inconclusive', 'Unapproved top-level History promotion, popup/redirect and native lifecycle races require the runbook observations; automatic checks do not accept these.');
 }
 async function delayed(name: string, revoke: boolean) {
+  document.getElementById('marker')!.textContent = 'Discovering native capabilities… Wait for the pending marker before acting.';
   const capability = await rpc('alohak.discover', { protocolVersion: 1 }) as { capabilities?: string[] };
   if (!capability.capabilities?.includes('fixture.delay')) throw new Error('Update Alohak first: fixture.delay is unavailable.');
   const marker = `${loadId}_${crypto.randomUUID()}`;
@@ -105,12 +115,32 @@ async function delayed(name: string, revoke: boolean) {
   }
   document.getElementById('marker')!.textContent = 'Delayed check ended; see report.';
 }
+const actionButtons = ['run', 'revoke', 'pending'].map(id => document.getElementById(id) as HTMLButtonElement);
 for (const [id, action] of [['run', automatic], ['revoke', () => delayed('in-flight fixture revocation', true)], ['pending', () => delayed('lifecycle marker', false)]] as const) {
-  document.getElementById(id)!.addEventListener('click', () => {
+  const button = document.getElementById(id) as HTMLButtonElement;
+  button.addEventListener('click', () => {
     if (running) return; running = true;
-    void action().catch(error => record(id, 'inconclusive', String(error))).finally(() => { running = false; });
+    const label = button.textContent, firstResult = results.length;
+    button.textContent = id === 'run' ? 'Running automatic checks…' : 'Check running…';
+    actionButtons.forEach(item => { item.disabled = true; });
+    progress('Starting check…');
+    void action().then(() => {
+      const current = results.slice(firstResult);
+      const counts = (['pass', 'fail', 'inconclusive'] as const).map(status => `${current.filter(result => result.status === status).length} ${status}`).join(', ');
+      progress(`Check finished: ${counts}. Details are below the report. These outcomes do not replace the remaining manual checks.`);
+    }).catch(error => {
+      record(id, 'inconclusive', String(error));
+      progress(`Check stopped: ${String(error)} No completed isolation result; see details below the report.`);
+      if (id !== 'run') document.getElementById('marker')!.textContent = `Delayed check stopped: ${String(error)}`;
+    }).finally(() => {
+      running = false; button.textContent = label;
+      actionButtons.forEach(item => { item.disabled = false; });
+    });
   });
 }
 document.getElementById('report')!.addEventListener('click', () => {
   (document.getElementById('output') as HTMLTextAreaElement).value = JSON.stringify({ schemaVersion: 1, hostedBuild: __HOSTED_BUILD__, installedBuild: field('installed').value, device: field('device').value, userAgent: navigator.userAgent, startedAt, loadId, nativeDocumentId: window.alohakNative?.documentId, results, observations: (document.getElementById('observations') as HTMLTextAreaElement).value, acceptance: 'Device evidence only; no automatic overall acceptance or credential enablement.' }, null, 2);
 });
+actionButtons.forEach(button => { button.disabled = false; });
+(document.getElementById('report') as HTMLButtonElement).disabled = false;
+progress('Ready. Automatic checks can take up to a minute; progress and errors will appear here.');
