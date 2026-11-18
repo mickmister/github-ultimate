@@ -10,6 +10,65 @@ function pinnedReviewURL() {
   return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
 }
 
+for (const fullReview of [false, true]) {
+  test(`choice notes and multiple suggested-single selections survive remote drafts and ${fullReview ? 'full-review' : 'form-only'} submission`, async ({ page }) => {
+    let state: any = { artifacts: [], revision: 1 };
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().method() === 'POST') state = route.request().postDataJSON();
+      await route.fulfill({ json: state });
+    });
+    const url = '/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true';
+    const member = fullReview ? 'experience' : 'reader';
+    const formButton = fullReview ? 'Review experience' : 'Reader decisions';
+    await page.goto(url);
+    if (fullReview) {
+      await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+      await page.getByText('Keep this approach', { exact: true }).click();
+    }
+    await page.getByRole('button', { name: formButton, exact: true }).click();
+    const keep = page.locator('[data-ui="review-choice"]').filter({ has: page.getByRole('checkbox', { name: 'Keep this approach', exact: true }) });
+    await expect(keep.getByRole('heading', { name: 'Pros', exact: true })).toBeVisible();
+    await expect(keep.getByRole('heading', { name: 'Cons', exact: true })).toBeVisible();
+    await expect(keep.getByText('Retains the verified behavior', { exact: true })).toBeVisible();
+    const revise = page.locator('[data-ui="review-choice"]').filter({ has: page.getByRole('checkbox', { name: 'Revise this approach', exact: true }) });
+    await expect(revise.getByRole('heading', { name: 'Pros', exact: true })).toHaveCount(0);
+    await page.getByText('Add note about Keep this approach', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Notes for Keep this approach', exact: true }).fill('Keep the tested behavior.');
+    // Notes on an unselected alternative must not silently select it.
+    await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).not.toBeChecked();
+    await page.getByText('Keep this approach', { exact: true }).click();
+    await page.getByText('Revise this approach', { exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeChecked();
+    await page.getByText('Add note about Revise this approach', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Notes for Revise this approach', exact: true }).fill('Improve the navigation too.');
+    await page.getByText('Add note about Other', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Notes for Other', exact: true }).fill('Consider a hybrid.');
+    await page.getByRole('textbox', { name: 'Additional context for Next steps', exact: true }).fill('Combine these options.');
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Notes for Keep this approach', exact: true })).toHaveValue('Keep the tested behavior.');
+    await page.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect.poll(() => state.artifacts.filter((item: any) => item.value.kind === 'review-draft').length).toBe(1);
+    // Remove browser recovery so this exercises actual remote draft hydration.
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    await page.goto(url);
+    await page.getByRole('button', { name: formButton, exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: 'Keep this approach', exact: true })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Revise this approach', exact: true })).toBeChecked();
+    await expect(page.getByRole('checkbox', { name: 'Other', exact: true })).not.toBeChecked();
+    await expect(page.getByRole('textbox', { name: 'Notes for Revise this approach', exact: true })).toHaveValue('Improve the navigation too.');
+    await expect(page.getByRole('textbox', { name: 'Notes for Other', exact: true })).toHaveValue('Consider a hybrid.');
+    await finishForm(page);
+    await page.getByRole('button', { name: fullReview ? 'Submit full review' : 'Submit just this form', exact: true }).click();
+    await expect.poll(() => state.artifacts.filter((item: any) => item.value.kind === 'review-response').length).toBe(1);
+    const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
+    expect(response.forms.find((form: any) => form.member_id === member).answers).toMatchObject({
+      decision: { keep: true, revise: true }, decision_keep_more_info: 'Keep the tested behavior.',
+      decision_revise_more_info: 'Improve the navigation too.', decision_other_more_info: 'Consider a hybrid.',
+      decision_more_info: 'Combine these options.',
+    });
+  });
+}
+
 test('next form retains answers without submitting, and final form submits the full review with locally recovered comments', async ({ page }) => {
   let state: any = { artifacts: [], revision: 1 };
   await page.route('**/__review-fixture', async route => {
@@ -398,7 +457,9 @@ for (const { zenMode, width } of [{ zenMode: false, width: 1280 }, { zenMode: tr
     await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
     await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
     if (zenMode) await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
-    await expect(page.getByText(/^Notes for /)).toHaveCount(0);
+    await expect(page.getByRole('textbox', { name: 'Notes for Keep this approach', exact: true })).toHaveCount(0);
+    await page.getByText('Add note about Keep this approach', { exact: true }).click();
+    await page.getByRole('textbox', { name: 'Notes for Keep this approach', exact: true }).fill('Keep the tested scope.');
     await page.getByText('Keep this approach', { exact: true }).click();
     await page.getByText('Revise this approach', { exact: true }).click();
     for (const name of ['Keep this approach', 'Revise this approach']) await expect(page.getByRole('checkbox', { name, exact: true })).toBeChecked();
@@ -424,11 +485,13 @@ for (const { zenMode, width } of [{ zenMode: false, width: 1280 }, { zenMode: tr
     await expect(page.getByRole('status').filter({ hasText: 'Draft saved remotely' })).toBeVisible();
     const draft = state.artifacts.find((item: any) => item.value.kind === 'review-draft').value;
     expect(draft.forms[0].answers.decision).toMatchObject({ keep: true, revise: true });
+    expect(draft.forms[0].answers.decision_keep_more_info).toBe('Keep the tested scope.');
     expect(draft.comments[0]).toMatchObject({ member_id: 'reader', text: 'Clarify the next steps in this form.', selection: { text: 'Continue with the implementation shown in the pinned document.', representation: 'rendered-form' } });
     await page.reload();
     await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
     if (zenMode) await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
     for (const name of ['Keep this approach', 'Revise this approach']) await expect(page.getByRole('checkbox', { name, exact: true })).toBeChecked();
+    await expect(page.getByRole('textbox', { name: 'Notes for Keep this approach', exact: true })).toHaveValue('Keep the tested scope.');
     await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
     await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Clarify the next steps in this form.');
     await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
@@ -437,6 +500,7 @@ for (const { zenMode, width } of [{ zenMode: false, width: 1280 }, { zenMode: tr
     await expect(page.getByRole('status').filter({ hasText: 'Response saved remotely' })).toBeVisible();
     const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
     expect(response.forms[0].answers.decision).toMatchObject({ keep: true, revise: true });
+    expect(response.forms[0].answers.decision_keep_more_info).toBe('Keep the tested scope.');
     expect(response.comments).toEqual(draft.comments);
   });
 }
