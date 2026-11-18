@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { utf8Bytes } from './utf8';
+import { utf8Bytes } from './utf8.ts';
 import { parseRecord, validateAnswers } from './protocol.ts';
 
 const key = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/);
@@ -19,6 +19,7 @@ export const reviewRequestSchema = z.object({
   question: z.string().min(1).max(16000), status: z.enum(['draft', 'published', 'withdrawn']),
   change_kind: z.enum(['proposal', 'implemented', 'mixed']), previous_request: key.optional(),
   process: z.object({ kind: z.literal('qrspi'), id: key, workspace_ref: z.string().min(1).max(1000), thread_id: resource, config: reviewPinSchema }).strict().optional(),
+  response_effect: z.object({ kind: z.literal('vk-session'), workspace_id: z.string().uuid(), session_id: z.string().uuid() }).strict().optional(),
   members: z.array(reviewMemberSchema).min(1).max(64),
 }).strict().superRefine((value, ctx) => {
   if (value.process && value.process.thread_id !== value.thread) ctx.addIssue({ code: 'custom', message: 'Process thread must match the authoritative request thread' });
@@ -49,7 +50,7 @@ export type ReviewRequest = z.infer<typeof reviewRequestSchema>;
 export type ReviewMember = z.infer<typeof reviewMemberSchema>;
 export type ReviewPin = z.infer<typeof reviewPinSchema>;
 export type ReviewArtifact = z.infer<typeof reviewArtifactSchema>;
-export interface ReviewReceipt { resource: string; version: string; snapshot: string; reviewer: string; dispatch?: { state: 'pending' | 'dispatched' | 'failed' | 'unknown'; target?: string; message?: string; attempted_at?: string } }
+export interface ReviewReceipt { resource: string; version: string; snapshot: string; reviewer: string; dispatch?: { kind?: 'vk'; state: 'pending' | 'dispatched' | 'failed' | 'unknown'; target?: string; message?: string; attempted_at?: string; process_id?: string; queued?: boolean } }
 export const reviewWriteSchema = z.object({
   operation: z.literal('reviewWrite'), id: z.string().uuid(), installationId: z.number().int().positive(),
   repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), workspace: key,

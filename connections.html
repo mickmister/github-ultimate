@@ -43,4 +43,15 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <p>Device-local limits apply to persisted reads. Documents and Dolt have separate workspace counts and share the total capacity. Old workspace data is evicted first; authoritative remote data and authored drafts are retained.</p>
 <form id="workspace-cache-settings"><label><input name="cacheDolt" type="checkbox">Persist Dolt reads</label><button>Save cache settings</button></form>
 <p id="workspace-cache-status" role="status"></p></section>
+<section id="vd-section" aria-labelledby="vd-heading"><h2 id="vd-heading">VD / Vibe Kanban connections</h2>
+<p>Configure the VD API origin and headers used to notify the originating session after a review response is saved. Test performs only GET /api/workspaces. Credentials stay in the extension broker. Queue conflicts retain the saved response for retry.</p>
+<form id="vd-add"><h3>Add or edit VD connection</h3>
+<label>VD connection name<input name="name" required maxlength="80"></label>
+<label>VD origin<input name="origin" required type="url" placeholder="https://vd.example.com"></label>
+<label>Storage repository<input name="repository" required placeholder="owner/workspace-storage"></label>
+<label>Nugs workspace handle<input name="workspace" required placeholder="vk-my-workspace"></label>
+<label>VK workspace UUID<input name="workspaceId" required></label>
+<div id="vd-headers"></div><div id="vd-header-actions"></div>
+<button type="submit">Save VD connection</button><div id="vd-actions"></div></form>
+<p id="vd-status" role="status" aria-live="polite"></p><div id="vd-connections"></div></section>
 <script src="connections-page.js"></script></body></html>

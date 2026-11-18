@@ -9,6 +9,7 @@ import { AsyncPageKVStore } from '../src/page-kv';
 import GitHubConnections from './GitHubConnections';
 import { github } from './github';
 import CacheSettings from './CacheSettings';
+import VdConnections from './VdConnections';
 import { MobileSettingsStore, type MobileSettings } from '../src/mobile-settings';
 import { MobileLifecycle } from '../src/mobile-lifecycle';
 
@@ -125,6 +126,7 @@ export default function App() {
         <View style={styles.toolbar}><Switch accessibilityLabel="Approve page storage" disabled={settingsBusy} value={storageApproved} onValueChange={value => permission(approved, value)} /><Text>Approve page storage</Text></View></>}
       <Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text>
       <GitHubConnections grant={grant} />
+      <VdConnections grant={grant} />
       <CacheSettings />
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}

@@ -14,6 +14,7 @@ import { copyCacheValue } from './workspace-cache';
 import { BoundedReads } from './bounded-reads';
 import { nativeReadConcurrency, nativeReadResponseBytes } from './git-read-limits';
 import { documentCache, reviewCachePinsKey } from './document-cache';
+import type { VdConnections } from './vd-connections';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -79,7 +80,7 @@ export class Connections {
   private apiCache = new ApiReadCache(96 * 1024 * 1024);
   private nativeReads = new BoundedReads(nativeReadConcurrency, nativeReadResponseBytes);
   private epoch = 0;
-  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache, private reviewDispatch: ReviewDispatchHost = pilotReviewDispatch) {}
+  constructor(private store: ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private now = () => Date.now(), private newId = () => crypto.randomUUID() as string, private timeout = (ms: number) => AbortSignal.timeout(ms), private persistentCache?: WorkspaceCache, private reviewDispatch: ReviewDispatchHost = pilotReviewDispatch, private vd?: VdConnections) {}
 
   handle(input: unknown): Promise<unknown> {
     const request = requestSchema.parse(input);
@@ -110,6 +111,7 @@ export class Connections {
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
       if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
+      if (request.operation === 'vdConnections') return this.vd?.publicConnections(documentURL) ?? [];
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
         for (const record of records) {
@@ -180,7 +182,9 @@ export class Connections {
           return await writeReview({ ...request, repository: repo.full_name }, `github:${record.user.id}`,
             <T>(input: import('./git-reads').GitRead) => { requireCurrent(); return readGit(input, repo.full_name, (path, limit) => { requireCurrent(); return this.api(record, path, limit, input.operation === 'gitRefs' ? 'none' : 'immutable'); }) as Promise<T>; },
             (path, method, body) => { requireCurrent(); return this.api(record, path, maxMetadataBytes, 'none', { method, body, isCurrent }); },
-            (receipt, review) => this.dispatchReview(record, approved, repo.full_name, receipt, review, isCurrent));
+            (receipt, review) => review.process ? this.dispatchReview(record, approved, repo.full_name, receipt, review, isCurrent)
+              : this.vd ? this.vd.deliver(documentURL, repo.full_name, receipt, review, isCurrent)
+                : Promise.resolve({ ...receipt, dispatch: { kind: 'vk' as const, state: 'pending' as const, message: 'Response saved. Update the extension/native host and configure a VD connection to notify VK.' } }));
         } catch (error) { throw new ConnectionError(error instanceof Error ? error.message : 'Review save failed. Retry after reconnecting.'); }
       }
       if (gitReadSchema.safeParse(request).success) {

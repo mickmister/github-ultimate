@@ -100,7 +100,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
       if (!mounted.current) return;
       updateListing(current => current ? { ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== receipt.resource), { value, pin: { resource: receipt.resource, version_kind: 'git-blob', version: receipt.version, snapshot: receipt.snapshot }, dispatch: receipt.dispatch }] } : current);
       if (!submit) { setDraftVersion(receipt.version); setSaved(fingerprint); }
-      setNotice(submit ? `Response saved remotely. ${receipt.dispatch ? `Workflow delivery: ${receipt.dispatch.state}. ${receipt.dispatch.message ?? ''}` : 'Task notification is pending the agent intake receipt.'}` : 'Draft saved remotely. You can reopen this revision on another device.');
+      setNotice(submit ? `Response saved remotely. ${receipt.dispatch ? `${receipt.dispatch.kind === 'vk' ? 'VK notification' : 'Workflow delivery'}: ${receipt.dispatch.state}. ${receipt.dispatch.message ?? ''}` : 'Task notification is pending the agent intake receipt.'}` : 'Draft saved remotely. You can reopen this revision on another device.');
     } catch (cause) { if (mounted.current) setError(cause instanceof Error ? cause.message : String(cause)); }
     finally { if (mounted.current) setBusy(false); }
   }
@@ -111,7 +111,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
       const receipt = await service.save(scope, value, null);
       if (!mounted.current) return;
       updateListing(current => current ? { ...current, artifacts: current.artifacts.map(item => item.value.id === value.id && item.pin.version === receipt.version ? { ...item, pin: { ...item.pin, snapshot: receipt.snapshot }, dispatch: receipt.dispatch } : item) } : current);
-      setNotice(`Response remains saved. Workflow delivery: ${receipt.dispatch?.state ?? 'unknown'}. ${receipt.dispatch?.message ?? ''}`);
+      setNotice(`Response remains saved. ${receipt.dispatch?.kind === 'vk' ? 'VK notification' : 'Workflow delivery'}: ${receipt.dispatch?.state ?? 'unknown'}. ${receipt.dispatch?.message ?? ''}`);
     } catch (cause) { if (mounted.current) setError(String(cause)); }
     finally { if (mounted.current) setBusy(false); }
   }
