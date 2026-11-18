@@ -7,7 +7,7 @@ import { saveFilter } from './preferences';
 
 export type BeadsBoardProps = { results: BeadsResult[]; workspace: string; initialDensity?: 'compact' | 'comfortable'; preferencesScope?: string };
 export function BeadsBoard({ results, workspace, initialDensity = 'compact', preferencesScope }: BeadsBoardProps) {
-  const { preferences, ready: preferencesReady, saving: preferencesSaving, error: preferencesError, update } = useBoardPreferences(preferencesScope, initialDensity);
+  const { preferences, ready: preferencesReady, saving: preferencesSaving, error: preferencesError, update, dismissError } = useBoardPreferences(preferencesScope, initialDensity);
   const { filters, density, views, selectedView } = preferences;
   const [selectedId, setSelectedId] = useState(''), [filtersOpen, setFiltersOpen] = useState(false), [filterName, setFilterName] = useState('');
   const [dark, setDark] = useState(false);
@@ -55,5 +55,6 @@ export function BeadsBoard({ results, workspace, initialDensity = 'compact', pre
     saveFilter: () => update(current => saveFilter(current, filterName)),
     selectView(name) { update(current => { const view = current.views.find(view => view.name === name); return view ? { ...current, filters: { ...view.filters }, selectedView: name } : { ...current, filters: { ...initialBoardFilters }, selectedView: '' }; }); setFilterName(name); },
     deleteView() { update(current => ({ ...current, views: current.views.filter(view => view.name !== current.selectedView), selectedView: '' })); setFilterName(''); },
-  }} detailsRef={details} />;
+    dismissPreferencesError: dismissError,
+   }} detailsRef={details} />;
 }

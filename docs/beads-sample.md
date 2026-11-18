@@ -86,6 +86,13 @@ page-storage quota; deleting a set frees space.
 Settings show **Saving…** while the selected storage host acknowledges a write.
 Wait for it to finish before reloading or closing the page; board changes are
 optimistic until then. Save/delete actions are disabled while a write is pending.
+Preference storage has its own permission, separate from GitHub repository reads.
+If unavailable, the board still loads and filters remain usable for this visit;
+workspace/filter notices retain the host's reason and can be dismissed. Dismissing
+a notice does not persist settings. For a denied extension storage request, grant
+**Page storage** for the hosted origin and deployment subpath in extension settings,
+then reload. Other failures retain their quota/storage diagnostics. Remembering an
+already-saved workspace does not issue a redundant write on each page load.
 
 Ready and Dependency blocked badges/filters use the native query results, not
 guesses based on stored status. An open issue can be dependency-blocked while

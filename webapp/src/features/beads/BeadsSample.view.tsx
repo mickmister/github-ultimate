@@ -5,8 +5,8 @@ import { BeadsBoard } from './BeadsBoard';
 import './beads.css';
 
 type Props = {
-  model: { connections: HostedConnection[]; choice: WorkspaceChoice; loadedChoice?: WorkspaceChoice; workspaces: string[]; busy: boolean; status: string; error: string; editing: boolean; results: BeadsResult[]; canDiscover: boolean };
-  actions: { choice(patch: Partial<WorkspaceChoice>): void; edit(): void; discover(): void; load(): void; refresh(): void; cancel(): void };
+  model: { connections: HostedConnection[]; choice: WorkspaceChoice; loadedChoice?: WorkspaceChoice; workspaces: string[]; busy: boolean; status: string; error: string; preferencesError: string; editing: boolean; results: BeadsResult[]; canDiscover: boolean };
+  actions: { choice(patch: Partial<WorkspaceChoice>): void; edit(): void; discover(): void; load(): void; refresh(): void; cancel(): void; dismissPreferencesError(): void };
 };
 export function BeadsSampleView({ model, actions }: Props) {
   const scope = model.loadedChoice;
@@ -24,6 +24,7 @@ export function BeadsSampleView({ model, actions }: Props) {
     </div></form>}
     {model.status && <p role="status" className="beads-loading">{model.status}</p>}
     {model.error && <p role="alert" className="error">{model.error}</p>}
+    {model.preferencesError && <aside role="status" aria-label="Workspace preference storage"><p>{model.preferencesError}</p><button type="button" onClick={actions.dismissPreferencesError}>Dismiss workspace settings notice</button></aside>}
     {scope && <BeadsBoard key={JSON.stringify(scope)} results={model.results} workspace={scope.workspace} preferencesScope={JSON.stringify(scope)} />}
   </main>;
 }

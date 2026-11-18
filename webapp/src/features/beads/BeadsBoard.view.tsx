@@ -12,7 +12,7 @@ type Props = {
     readyAvailable: boolean; blockedAvailable: boolean; selectedReady: boolean; selectedBlocked: boolean; error: string; loaded: boolean;
     preferencesReady: boolean; preferencesSaving: boolean; preferencesError: string; views: SavedBoardFilter[]; selectedView: string; filtersOpen: boolean; filterName: string };
   actions: { filter(patch: Partial<BoardFilters>): void; clear(): void; density(value: 'compact' | 'comfortable'): void; close(): void;
-    toggleFilters(): void; filterName(value: string): void; saveFilter(): void; selectView(name: string): void; deleteView(): void };
+    toggleFilters(): void; filterName(value: string): void; saveFilter(): void; selectView(name: string): void; deleteView(): void; dismissPreferencesError(): void };
   detailsRef: RefObject<HTMLElement | null>;
 };
 function BeadsCardView({ card }: { card: KanbanCard }) {
@@ -42,7 +42,7 @@ export function BeadsBoardView({ model, actions, detailsRef }: Props) {
       <label className="beads-checkbox"><input type="checkbox" checked={model.filters.closed} onChange={event => actions.filter({ closed: event.target.checked })} />Include closed</label><button type="button" onClick={actions.clear}>Clear filters</button>
     </div><form className="beads-save-filter" onSubmit={event => { event.preventDefault(); actions.saveFilter(); }}><input aria-label="Filter name" placeholder="Filter name" maxLength={60} value={model.filterName} onChange={event => actions.filterName(event.target.value)} /><button type="submit" aria-label="Save filters" disabled={!model.filterName.trim() || model.preferencesSaving}>{model.preferencesSaving ? 'Saving…' : 'Save filters'}</button><button type="button" disabled={!model.selectedView || model.preferencesSaving} onClick={actions.deleteView}>Delete saved filter</button></form></div>}
     </fieldset>
-    {model.preferencesError && <p role="alert" className="error">{model.preferencesError}</p>}
+    {model.preferencesError && <aside role="status" aria-label="Filter preference storage"><p>{model.preferencesError}</p><button type="button" onClick={actions.dismissPreferencesError}>Dismiss filter settings notice</button></aside>}
     {model.error ? <p role="alert" className="error">{model.error}</p> : model.loaded && <>
       {model.total === 0 ? <p className="welcome">No issues yet.</p> : model.cards.length === 0 ? <p className="welcome">No matching issues.</p> : <div className="beads-board-layout" data-details={Boolean(model.selected)}>
         <div className="beads-board-viewport"><Theme><Kanban readonly cards={model.cards} columns={model.columns} cardContent={BeadsCardView} render={{ fixedColumnWidth: true, columnScroll: true, virtualizeCards: true, estimatedCardHeight: model.density === 'compact' ? 150 : 240, cardOverscan: 4 }} /></Theme></div>

@@ -138,3 +138,55 @@ test('honors an explicit workspace link and refuses a remembered connection that
   await expect(page.getByRole('button', { name: 'Open workspace', exact: true })).toBeDisabled();
   await expect(page.locator('.beads-count')).toHaveCount(0);
 });
+
+test('keeps browsing with actionable, dismissible storage notices when page storage is not granted', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.githubUltimateStorageAdapter = { protocolVersion: 1, backend: 'extension', async request() {
+      throw new Error('Page storage is not approved for this document.');
+    } };
+  });
+  await page.goto('/iframe.html?id=web-app-beads-kanban--remembered-workspace&viewMode=story#/beads?connection=11111111-1111-4111-8111-111111111111&repository=example%2Fstorage&workspace=first');
+  await expect(page.locator('.beads-count')).toHaveText('6 / 7');
+  await expect(page.getByRole('status', { name: 'Workspace preference storage' })).toContainText('Page storage is not approved');
+  await expect(page.getByRole('status', { name: 'Filter preference storage' })).toContainText('Grant Page storage');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Dismiss workspace settings notice' }).click();
+  await page.getByRole('button', { name: 'Dismiss filter settings notice' }).click();
+  await expect(page.getByRole('status', { name: 'Workspace preference storage' })).toHaveCount(0);
+  await expect(page.getByRole('status', { name: 'Filter preference storage' })).toHaveCount(0);
+  await page.getByLabel('Search issues').fill('demo-1.2');
+  await expect(page.locator('.beads-count')).toHaveText('1 / 7');
+  await expect(page.getByRole('status', { name: 'Filter preference storage' })).toContainText('Page storage is not approved');
+});
+
+test('preserves the write-denial reason for later filter saves after initial hydration succeeds', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.githubUltimateStorageAdapter = { protocolVersion: 1, backend: 'extension', async request(input) {
+      if (input.operation === 'kvSnapshot') return { revision: 0, entries: [['github-ultimate:storage-migration:v1', '1']] };
+      throw new Error('Page storage access changed during this request.');
+    } };
+  });
+  await page.goto('/iframe.html?id=web-app-beads-kanban--remembered-workspace&viewMode=story#/beads?connection=11111111-1111-4111-8111-111111111111&repository=example%2Fstorage&workspace=first');
+  await expect(page.locator('.beads-count')).toHaveText('6 / 7');
+  await expect(page.getByRole('status', { name: 'Workspace preference storage' })).toContainText('access changed');
+  await page.getByLabel('Search issues').fill('demo-1.2');
+  await expect(page.locator('.beads-count')).toHaveText('1 / 7');
+  await expect(page.getByRole('status', { name: 'Filter preference storage' })).toContainText('access changed');
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('does not rewrite an unchanged remembered workspace on page load', async ({ page }) => {
+  await page.addInitScript(() => {
+    window.githubUltimateStorageAdapter = { protocolVersion: 1, backend: 'extension', async request(input) {
+      if (input.operation !== 'kvSnapshot') throw new Error('Unexpected preference write during restoration.');
+      return { revision: 1, entries: [
+        ['github-ultimate:storage-migration:v1', '1'],
+        ['github-ultimate:beads:last-workspace:v1', JSON.stringify({ connection: '11111111-1111-4111-8111-111111111111', repository: 'example/storage', workspace: 'first' })],
+      ] };
+    } };
+  });
+  await page.goto('/iframe.html?id=web-app-beads-kanban--remembered-workspace&viewMode=story');
+  await expect(page.locator('.beads-count')).toHaveText('6 / 7');
+  await expect(page.getByRole('status', { name: /preference storage/ })).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});

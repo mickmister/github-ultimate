@@ -96,7 +96,7 @@ describe('hydrated localStorage method adapter', () => {
     storage.setItem('a', '1'); storage.setItem('b', '2');
     await expect(storage.flush()).rejects.toThrow('revoked');
     expect(writes).toBe(1); expect(errors).toEqual(['revoked']);
-    expect(() => storage.setItem('c', '3')).toThrow();
+    expect(() => storage.setItem('c', '3')).toThrow('revoked');
     expect(storage.getItem('a')).toBe('1'); // optimistic memory is not durable proof
   });
   it('does not permit a refresh result to overwrite concurrent synchronous writes', async () => {

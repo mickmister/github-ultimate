@@ -6,6 +6,7 @@ import { WorkspaceReader } from '../../../../hosted/workspaces';
 import { applicationStorage } from '../../app-storage';
 import { lastWorkspaceKey, readWorkspace, validWorkspace, workspaceChoice, type WorkspaceChoice } from './preferences';
 import { BeadsSampleView } from './BeadsSample.view';
+import { settingsError } from './settings-error';
 
 const services = {
   connections: () => bridgeRequest<HostedConnection[]>({ operation: 'connections' }),
@@ -21,6 +22,7 @@ export function BeadsSample({ host = services }: { host?: typeof services }) {
   const [loadedChoice, setLoadedChoice] = useState<WorkspaceChoice>();
   const [workspaces, setWorkspaces] = useState<string[]>([]), [status, setStatus] = useState('Connecting…');
   const [error, setError] = useState(''), [busy, setBusy] = useState(true), [editing, setEditing] = useState(false);
+  const [preferencesError, setPreferencesError] = useState('');
   const [results, setResults] = useState<BeadsResult[]>([]);
   const active = useRef<{ controller: AbortController; session?: BeadsSession } | undefined>(undefined), epoch = useRef(0);
   const storage = useRef<Awaited<ReturnType<typeof applicationStorage>> | undefined>(undefined);
@@ -35,11 +37,14 @@ export function BeadsSample({ host = services }: { host?: typeof services }) {
     setBusy(true); setEditing(false); setLoadedChoice(value); setStatus('Loading tasks…');
     // Remember the explicit choice independently of the network operation. It is
     // restored only after checking the host's current approved connections.
-    try {
-      if (!storage.current) throw new Error('Settings unavailable');
-      storage.current.setItem(lastWorkspaceKey, JSON.stringify(value));
-      void storage.current.flush().catch(() => { if (attempt === epoch.current) setError('Workspace settings could not be saved.'); });
-    } catch { setError('Workspace settings could not be saved.'); }
+    if (storage.current) try {
+      const serialized = JSON.stringify(value);
+      if (storage.current.getItem(lastWorkspaceKey) !== serialized) {
+        storage.current.setItem(lastWorkspaceKey, serialized);
+        void storage.current.flush().then(() => { if (attempt === epoch.current) setPreferencesError(''); })
+          .catch(reason => { if (attempt === epoch.current) setPreferencesError(settingsError('Workspace', reason)); });
+      }
+    } catch (reason) { setPreferencesError(settingsError('Workspace', reason)); }
     try {
       const opened = await host.open({ connectionId: value.connection, installationId: selected.installation.id, repository: value.repository, workspace: value.workspace }, controller.signal, () => {});
       if (attempt !== epoch.current) { opened.dispose(); return; }
@@ -60,7 +65,7 @@ export function BeadsSample({ host = services }: { host?: typeof services }) {
     void (async () => {
       // Storage failure must not prevent browsing or a supplied deep link.
       let saved: WorkspaceChoice | undefined;
-      const [values] = await Promise.all([host.connections(), host.storage().then(opened => { if (!stopped) { storage.current = opened; saved = readWorkspace(opened.getItem(lastWorkspaceKey)); } }).catch(() => { if (!stopped) setError('Workspace settings could not be restored.'); })]);
+      const [values] = await Promise.all([host.connections(), host.storage().then(opened => { if (!stopped) { storage.current = opened; saved = readWorkspace(opened.getItem(lastWorkspaceKey)); setPreferencesError(''); } }).catch(reason => { if (!stopped) setPreferencesError(settingsError('Workspace', reason)); })]);
       if (stopped) return;
       setConnections(values);
       navigate = () => {
@@ -84,7 +89,8 @@ export function BeadsSample({ host = services }: { host?: typeof services }) {
     catch (reason) { if (attempt === epoch.current) setError(reason instanceof Error ? reason.message : 'Workspaces could not be loaded.'); }
     finally { if (attempt === epoch.current) { setBusy(false); setStatus(''); } }
   }
-  return <BeadsSampleView model={{ connections, choice, loadedChoice, workspaces, busy, status, error, editing, results, canDiscover }} actions={{
+  return <BeadsSampleView model={{ connections, choice, loadedChoice, workspaces, busy, status, error, preferencesError, editing, results, canDiscover }} actions={{
+    dismissPreferencesError: () => setPreferencesError(''),
     choice(patch) { setChoice(current => ({ ...current, ...patch })); if ('connection' in patch || 'repository' in patch) setWorkspaces([]); },
     edit: () => setEditing(value => !value), discover: () => void discover(), load() {
       if (validWorkspace(choice) && selected?.installation) {
