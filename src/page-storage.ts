@@ -23,7 +23,7 @@ export class HydratedPageStorage implements Storage {
   clear() { this.write({ operation: 'kvClear' }); }
   private write(request: PageKVRequest) {
     if (this.failure) throw this.failure;
-    if (this.stopped || this.refreshing) throw new Error('Page storage is unavailable or refreshing; reopen explicitly after failure.');
+    if (this.stopped || this.refreshing) throw new Error('Page storage is closed or refreshing.');
     const next = mutatePageKV(this.state, parsePageKVRequest(request));
     this.state = next;
     this.tail = this.tail.then(async () => {
