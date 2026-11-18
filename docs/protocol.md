@@ -27,6 +27,13 @@ The renderer automatically adds **Other** to every choices question unless an au
 
 Every choice/question has optional contextual notes opened with a **Leave a comment** button and an accessible label identifying its context. `additional_notes` is the master textarea and has no redundant nested notes. Next Instruction is an independent textarea, with optional `{label, value}` presets. Safe Markdown supports contextual text without executing HTML. A form with `invalidatedAt` is displayed as superseded and cannot be answered.
 
+Hosted review forms expose **Add note about <choice>** for every choice, including
+Other and choices the reviewer has not selected. Notes use the same
+`<question>_<choice>_more_info` answer keys, survive remote drafts and both form-only
+and full-review submission, and never select or deselect an option. Question-wide
+context remains separate. Author-suggested single-choice groups remain answerable
+with multiple checkboxes selected.
+
 Forms with more than one question excluding `additional_notes` use a single-question wizard with direct navigation and final review. Requested answers can be skipped when no longer applicable. The UI passes `allowUnanswered: true` to validation/composition, records omissions, and still rejects invalid answer types and unknown options (the derived Other option is known). Protocol callers enforce requested answers by default unless they opt into the same behavior. Wizard position and values are local, scoped to the source revision, and shared by inline and zen views.
 
 `allowCodeFileChanges: false` exposes only discussion intent. Otherwise its optional object supports `allowLabel`, `avoidLabel`, `label`, `description`, `defaultChecked` (accepted for authoring compatibility, never grants implicit permission). Approval requires the explicit button action.
