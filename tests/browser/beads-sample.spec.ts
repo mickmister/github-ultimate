@@ -42,6 +42,26 @@ test.describe('real selected workspace / published CDN engine', () => {
     test.setTimeout(360000);
     const workspace = process.env.BEADS_LIVE_WORKSPACE!, repository = process.env.BEADS_LIVE_REPOSITORY ?? 'mickmister/workspace-storage';
     const connection = '11111111-1111-4111-8111-111111111111', api = new Map<string, Promise<unknown>>();
+    await page.addInitScript(() => {
+      const Original = Worker;
+      const diagnostic = window as unknown as { __beadsWorkerFailures: { message: string; filename: string; line: number }[] };
+      diagnostic.__beadsWorkerFailures = [];
+      window.Worker = class extends Original {
+        constructor(url: string | URL, options?: WorkerOptions) {
+          super(url, options);
+          this.addEventListener('error', event => diagnostic.__beadsWorkerFailures.push({ message: event.message, filename: event.filename, line: event.lineno }));
+        }
+      };
+    });
+    const publicAssets: string[] = [];
+    const engineSources = new Set<string>();
+    page.on('response', response => {
+      if (response.url().startsWith('https://browser-tools.alohak.dev/')) {
+        publicAssets.push(`${response.url().split('/').at(-1)} ${response.status()}`);
+        const source = /\/commits\/([a-f0-9]{40})\//.exec(response.url())?.[1]; if (source) engineSources.add(source);
+      }
+    });
+    page.on('requestfailed', request => { if (request.url().startsWith('https://browser-tools.alohak.dev/')) publicAssets.push(`${request.url().split('/').at(-1)} failed ${request.failure()?.errorText}`); });
     let parts = 0, activeNativeHTTP = 0, maxNativeHTTP = 0;
     await page.exposeFunction('__beadsNativeRead', async (input: unknown) => {
       const request = input as { operation: string };
@@ -74,7 +94,9 @@ test.describe('real selected workspace / published CDN engine', () => {
     await page.goto(base + '#/beads?' + new URLSearchParams({ connection, repository, workspace }));
     // A complete workspace link starts the reader without a load button.
     await page.waitForFunction(() => document.querySelector('[role=alert]') || document.querySelector('.beads-count'), undefined, { timeout: 300000 });
-    await expect(page.getByRole('alert')).toHaveCount(0);
+    const failures = await page.evaluate(() => (window as unknown as { __beadsWorkerFailures: unknown[] }).__beadsWorkerFailures);
+    expect(await page.getByRole('alert').allTextContents(), JSON.stringify({ failures, publicAssets })).toEqual([]);
+    if (process.env.BEADS_EXPECTED_ENGINE_SHA) expect([...engineSources]).toEqual([process.env.BEADS_EXPECTED_ENGINE_SHA]);
     await expect(page.locator('.beads-count')).toBeVisible();
     // Current-state packs normally fit ordinary blobs; legacy snapshots may use parts.
     expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(6);
@@ -84,7 +106,7 @@ test.describe('real selected workspace / published CDN engine', () => {
     const readyCount = await page.locator('.beads-count').innerText();
     await page.getByRole('combobox', { name: /^Readiness/ }).selectOption('blocked');
     const blockedCount = await page.locator('.beads-count').innerText();
-    const evidence = { scope: 'Real private native Git data through authorized Node-side gh transport; actual production UI and published CDN Worker/WASM, not packaged extension authorization acceptance.', workspace, repository, blobPartRequests: parts, maxNativeHTTP, allCount, readyCount, blockedCount };
+    const evidence = { scope: 'Real private native Git data through authorized Node-side gh transport; actual production UI and published CDN Worker/WASM, not packaged extension authorization acceptance.', workspace, repository, deployment: process.env.BEADS_LIVE_DEPLOYMENT_URL ?? 'local built assets', engineSources: [...engineSources], blobPartRequests: parts, maxNativeHTTP, allCount, readyCount, blockedCount };
     await writeFile(info.outputPath('native-beads-proof.json'), JSON.stringify(evidence, null, 2));
     await expect(page.getByText(/Native query diagnostics|Snapshot identity|Verified engine release/)).toHaveCount(0);
     await page.reload();

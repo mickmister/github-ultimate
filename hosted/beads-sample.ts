@@ -6,8 +6,8 @@ import { selectBeadsServing } from './beads-serving';
 
 // Updated only with a verified immutable release; workspace metadata cannot select executable code.
 export const beadsRelease = {
-  baseURL: 'https://browser-tools.alohak.dev/beads-engine/commits/4123ae678498ad611d39b7ef6569bb79d359df71/',
-  manifestSha256: 'e7bafae0ef2471cad03b8c1957753a3949c1322cb01a0020a874360979c8b492',
+  baseURL: 'https://browser-tools.alohak.dev/beads-engine/commits/b3bf8c4c70384cd3f23349b915197bc5ff03a54a/',
+  manifestSha256: '157c5211842f2d2bc9e170754cd3029e625a6c99b07bdc2041559cbc4d47e7db',
 };
 export type BeadsScope = { connectionId: string; installationId: number; repository: string; workspace: string };
 export type BeadsOperation = 'list' | 'ready' | 'blocked';
