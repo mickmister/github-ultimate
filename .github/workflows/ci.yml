@@ -100,7 +100,7 @@ jobs:
   browser:
     needs: build
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     permissions:
       contents: read
       actions: read
@@ -149,6 +149,15 @@ jobs:
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-24.04-${{ matrix.browsers }}-${{ hashFiles('pnpm-lock.yaml') }}
+      # Regional EC2 HTTP mirrors have repeatedly exhausted the job budget while
+      # fetching WebKit libraries. Use the official HTTPS Ubuntu mirrors.
+      - name: Use HTTPS Ubuntu package mirrors
+        run: |
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+            if test -f "$source"; then
+              sudo sed -i -E 's@http://([a-z0-9-]+\.)?ec2\.archive\.ubuntu\.com/ubuntu/?@https://archive.ubuntu.com/ubuntu/@g; s@http://archive\.ubuntu\.com/ubuntu/?@https://archive.ubuntu.com/ubuntu/@g; s@http://security\.ubuntu\.com/ubuntu/?@https://security.ubuntu.com/ubuntu/@g' "$source"
+            fi
+          done
       # System libraries are still required on cache hits.
       - name: Install browser binaries and system dependencies
         env:

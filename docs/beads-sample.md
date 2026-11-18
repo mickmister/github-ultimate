@@ -135,6 +135,9 @@ BEADS_LIVE_REPOSITORY=owner/storage \
 pnpm exec playwright test tests/browser/beads-sample.spec.ts --grep 'executes list'
 ```
 
+Set `BEADS_LIVE_DEPLOYMENT_URL` to the exact published GitHub Ultimate preview
+`.../app/` URL to test the served application rather than local built assets.
+
 This opt-in test runs the production page and real published engine against
 actual native Git blobs; it retains only compact identity/count evidence, with
 network tracing disabled. It is not a claim of installed-extension login or

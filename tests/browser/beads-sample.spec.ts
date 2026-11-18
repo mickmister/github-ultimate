@@ -9,6 +9,11 @@ import { pageChannel, replyChannel, hostedRelayRevision } from '../../src/bridge
 test.use({ trace: 'off' });
 
 async function serve(page: Page) {
+  if (process.env.BEADS_LIVE_DEPLOYMENT_URL) {
+    const url = new URL(process.env.BEADS_LIVE_DEPLOYMENT_URL);
+    if (url.origin !== 'https://mickmister.github.io' || !/^\/github-ultimate\/.+\/app\/$/.test(url.pathname) || url.search || url.hash) throw new Error('Expected the explicit published GitHub Ultimate app URL.');
+    return url.href;
+  }
   const shell = await readFile('hosted-dist/app/index.html', 'utf8');
   const base = shell.match(/href="([^"]+)assets\/[^" ]+\.css"/)![1];
   await page.route('https://mickmister.github.io/**', route => {
