@@ -32,7 +32,10 @@ export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubm
             const selected = { ...(typeof answers[question.id] === 'object' ? answers[question.id] as Record<string, boolean> : {}), [choice.id]: checked };
             onAnswer({ ...answers, [question.id]: selected }, intent);
           }} />{choice.description && <p>{choice.description}</p>}{choice.is_recommended_reason && <p>Recommendation: {choice.is_recommended_reason}</p>}
-          {choice.prosAndCons && <><ul>{choice.prosAndCons.pros?.map((pro, index) => <li key={index}>Pro: {pro}</li>)}</ul><ul>{choice.prosAndCons.cons?.map((con, index) => <li key={index}>Con: {con}</li>)}</ul></>}
+          {(choice.prosAndCons?.pros?.length || choice.prosAndCons?.cons?.length) ? <section aria-label={`Tradeoffs for ${choice.label}`}>
+            {!!choice.prosAndCons.pros?.length && <><h5>Pros</h5><ul>{choice.prosAndCons.pros.map((pro, index) => <li key={index}>{pro}</li>)}</ul></>}
+            {!!choice.prosAndCons.cons?.length && <><h5>Cons</h5><ul>{choice.prosAndCons.cons.map((con, index) => <li key={index}>{con}</li>)}</ul></>}
+          </section> : null}
         </div>)}</div> : <label>{question.title}<textarea placeholder={question.placeholder} value={typeof answers[question.id] === 'string' ? answers[question.id] as string : ''} onChange={event => onAnswer({ ...answers, [question.id]: event.target.value }, intent)} /></label>}
         {question.id !== 'additional_notes' && <label>Additional context for {question.title}<textarea value={typeof answers[`${question.id}_more_info`] === 'string' ? answers[`${question.id}_more_info`] as string : ''} onChange={event => onAnswer({ ...answers, [`${question.id}_more_info`]: event.target.value }, intent)} /></label>}
       </section> : <>
