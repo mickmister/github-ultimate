@@ -41,7 +41,7 @@ test.describe('real selected workspace / published CDN engine', () => {
     await page.exposeFunction('__beadsNativeRead', async (input: unknown) => {
       const request = input as { operation: string };
       if (request.operation === 'connections') return [{ id: connection, name: 'Authorized live-workspace proof', appId: 1, installation: { id: 1, account: 'mickmister' } }];
-      if (request.operation === 'discover') return { capabilities: ['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces'] };
+      if (request.operation === 'discover') return { capabilities: ['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces'] };
       const read = gitReadSchema.parse(input);
       expect(read.id).toBe(connection); expect(read.installationId).toBe(1); expect(read.repository).toBe(repository);
       if ('workspace' in read) expect(read.workspace).toBe(workspace);
@@ -71,7 +71,7 @@ test.describe('real selected workspace / published CDN engine', () => {
     await page.waitForFunction(() => document.querySelector('[role=alert]') || document.querySelector('.beads-count'), undefined, { timeout: 300000 });
     await expect(page.getByRole('alert')).toHaveCount(0);
     await expect(page.locator('.beads-count')).toBeVisible();
-    expect(parts).toBeGreaterThan(0);
+    // Current-state packs normally fit ordinary blobs; legacy snapshots may use parts.
     expect(maxNativeHTTP).toBeGreaterThan(1); expect(maxNativeHTTP).toBeLessThanOrEqual(6);
     const allCount = await page.locator('.beads-count').innerText();
     await page.getByRole('button', { name: 'Filters', exact: true }).click();

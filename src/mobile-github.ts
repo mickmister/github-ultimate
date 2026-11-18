@@ -3,7 +3,7 @@ import { hostedRequestSchema } from './hosted-protocol';
 import { MobileReviewTransfers } from './mobile-review-transfer';
 import { ZodError } from 'zod';
 
-export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'mobileReviewTransfer'];
+export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'mobileReviewTransfer'];
 const operations = new Set(['discover', 'connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'loadNavigation', 'saveNavigation', 'forgetNavigation', 'documentCache', 'reviewWrite', 'reviewProgress']);
 
 /** Settings stay native-only; hosted calls reuse the shared bounded GitHub engine. */

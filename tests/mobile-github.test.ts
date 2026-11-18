@@ -26,6 +26,7 @@ function github(store: MobileConnectionStore, enabled = () => true) {
     if (url.endsWith('/user')) return Response.json({ id: 1, login: 'owner' });
     if (url.includes('/user/installations?')) return Response.json({ installations: [{ id: 7, app_id: 123, account: { login: 'owner' }, permissions: { contents: 'read', metadata: 'read' } }] });
     if (url.includes('/user/installations/7/repositories?')) return Response.json({ repositories: [{ full_name: 'owner/private', private: true, default_branch: 'main' }] });
+    if (url.includes('/matching-refs/beads/')) return Response.json([{ ref: 'refs/beads/workspace', object: { sha: 'b'.repeat(40), type: 'commit' } }]);
     if (url.includes('/matching-refs/')) return Response.json([{ ref: 'refs/documents/workspace', object: { sha: 'a'.repeat(40), type: 'commit' } }]);
     throw new Error('Unexpected fixture route');
   }, () => clock);
@@ -36,6 +37,14 @@ function github(store: MobileConnectionStore, enabled = () => true) {
 }
 
 describe('native GitHub credential persistence', () => {
+  it('advertises and authorizes native serving-pack refs through the existing mobile Git bridge', async () => {
+    const disk = storage(); await disk.store.put(record()); const app = github(disk.store);
+    expect((await app.call({ operation: 'discover' })).result).toMatchObject({ capabilities: expect.arrayContaining(['beadsServingPacks']) });
+    const request = { operation: 'gitRefs', id, installationId: 7, repository: 'owner/private', namespace: 'dolt', prefix: 'beads/' };
+    expect((await app.call(request)).result).toMatchObject([{ ref: 'refs/beads/workspace' }]);
+    await app.host.settings({ operation: 'revokeOrigin', id, ...grantForEntry(entry) });
+    expect((await app.call(request)).error).toBeDefined();
+  });
   it('keeps device codes/tokens out of metadata, survives restart, rotates and removes only the chosen connection', async () => {
     const disk = storage(), app = github(disk.store);
     const added = await app.host.settings({ operation: 'add', name: 'User configured', appId: 123, clientId: 'IvChosenByUser' }) as PublicConnection;

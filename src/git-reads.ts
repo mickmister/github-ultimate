@@ -12,7 +12,7 @@ export const workspaceName = z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/);
 const scope = { id: z.string().uuid(), installationId: z.number().int().positive(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220), cacheOnly: z.boolean().optional(), cacheVisit: z.boolean().optional(), cacheRetain: z.boolean().optional(), namespace: z.enum(['documents', 'dolt']).optional() };
 const workspaceScope = { ...scope, workspace: workspaceName };
 export const gitReadSchemas = [
-  z.object({ operation: z.literal('gitRefs'), ...scope, prefix: z.enum(['documents/', 'dolt/']) }).strict(),
+  z.object({ operation: z.literal('gitRefs'), ...scope, prefix: z.enum(['documents/', 'dolt/', 'beads/']) }).strict(),
   z.object({ operation: z.literal('gitCommit'), ...workspaceScope, oid: gitOid }).strict(),
   z.object({ operation: z.literal('gitTree'), ...workspaceScope, oid: gitOid }).strict(),
   z.object({ operation: z.literal('gitBlob'), ...workspaceScope, oid: gitOid }).strict(),

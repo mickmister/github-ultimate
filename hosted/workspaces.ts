@@ -10,7 +10,7 @@ const maxBlobBytes = 16 * 1024 * 1024;
 
 export class WorkspaceReader {
   constructor(private send: GitTransport, private id: string, private repository: string, private installationId: number, private workspace?: string, private namespace: 'documents' | 'dolt' = 'documents', private verifyBlob?: (blob: GitBlob) => Uint8Array<ArrayBuffer>) {}
-  private read<T>(request: Omit<GitRead, 'id' | 'repository' | 'installationId' | 'workspace'> & { prefix?: 'documents/' | 'dolt/'; oid?: string; offset?: number; length?: number }) {
+  private read<T>(request: Omit<GitRead, 'id' | 'repository' | 'installationId' | 'workspace'> & { prefix?: 'documents/' | 'dolt/' | 'beads/'; oid?: string; offset?: number; length?: number }) {
     if (request.operation !== 'gitRefs' && !this.workspace) throw new Error('Select a workspace first.');
     return this.send<T>({ ...(this.namespace === 'dolt' ? { namespace: this.namespace } : {}), ...request, id: this.id, installationId: this.installationId, repository: this.repository, ...(request.operation !== 'gitRefs' ? { workspace: this.workspace } : {}) } as GitRead);
   }
@@ -39,6 +39,13 @@ export class WorkspaceReader {
     const tree = await this.read<GitTree>({ operation: 'gitTree', oid: commit.tree.sha });
     if (tree.truncated || tree.sha !== commit.tree.sha) throw new Error('Incomplete or mismatched snapshot tree.');
     return { commit: oid, tree };
+  }
+  async beadsServingSnapshot(): Promise<Snapshot | undefined> {
+    if (this.namespace !== 'dolt' || !this.workspace) throw new Error('Select a native workspace first.');
+    const refs = await this.read<GitRef[]>({ operation: 'gitRefs', prefix: 'beads/' });
+    if (refs.some(ref => !ref.ref.startsWith('refs/beads/'))) throw new Error('Unexpected Beads serving ref namespace.');
+    const ref = refs.find(ref => ref.ref === `refs/beads/${this.workspace}`);
+    return ref ? this.snapshot(ref.object.sha, true) : undefined;
   }
   async open(workspace: Workspace) {
     if (!workspace.documents || workspace.name !== this.workspace) throw new Error('Workspace manifest is required: this namespace has no matching documents ref.');

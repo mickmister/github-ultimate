@@ -2,6 +2,7 @@ import { bridgeRequest } from './client';
 import { WorkspaceReader, documentText, type GitTransport } from './workspaces';
 import { mapReads } from '../src/bounded-reads';
 import { nativeReadConcurrency } from '../src/git-read-limits';
+import { selectBeadsServing } from './beads-serving';
 
 // Updated only with a verified immutable release; workspace metadata cannot select executable code.
 export const beadsRelease = {
@@ -58,18 +59,21 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     await reader.open(workspace);
     const native = new WorkspaceReader(send, scope.connectionId, scope.repository, scope.installationId, scope.workspace, 'dolt');
     const snapshot = await native.snapshot(workspace.dolt, true);
-    const manifest = snapshot.tree.tree.find(entry => entry.path === 'manifest');
+    const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
+    progress('Resolving the current-state Beads serving pack…');
+    const serving = support.capabilities.includes('beadsServingPacks') ? await selectBeadsServing(native, snapshot, scope.workspace, signal) : undefined;
+    const manifest = serving?.manifest ?? snapshot.tree.tree.find(entry => entry.path === 'manifest');
     if (!manifest) throw new Error('Native storage snapshot has no manifest.');
-    const entries = snapshot.tree.tree.filter(entry => entry.type === 'blob' && /^(?:oldgen\/)?[0-9a-v]{32}(?:\.darc)?$/.test(entry.path));
+    const entries = serving?.entries ?? snapshot.tree.tree.filter(entry => entry.type === 'blob' && /^(?:oldgen\/)?[0-9a-v]{32}(?:\.darc)?$/.test(entry.path));
     const total = entries.reduce((sum, entry) => sum + (entry.size ?? Infinity), 0);
-    if (!entries.length || entries.length > 512 || total > 64 * 1024 * 1024) throw new Error('Native snapshot exceeds the engine’s 64 MiB encoded-data bound.');
+    if (!entries.length || entries.length > 512 || total > 64 * 1024 * 1024) throw new Error(support.capabilities.includes('beadsServingPacks') ? 'Native snapshot exceeds the engine’s 64 MiB encoded-data bound. Run nugs beads sync with current-state pack support, then refresh.' : 'Update the extension or Alohak for current-state Beads packs, then reload. Native snapshot exceeds the engine’s 64 MiB encoded-data bound.');
     if (entries.some(entry => (entry.size ?? Infinity) > 16 * 1024 * 1024)) {
-      const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
       if (!support.capabilities.includes('gitBlobPart')) throw new Error('This snapshot contains a large archive. Update the extension or Alohak to enable bounded Dolt blob reads, then reload.');
     }
-    async function reference(entry: NonNullable<typeof manifest>): Promise<FileReference> {
+    async function reference(entry: NonNullable<typeof manifest> & { sha256?: string }): Promise<FileReference> {
       signal.throwIfAborted();
       const bytes = await native.blob(entry, signal), sha256 = await digest(bytes);
+      if (entry.sha256 && sha256 !== entry.sha256) throw new Error('Beads serving file failed SHA-256 verification.');
       signal.throwIfAborted();
       const url = URL.createObjectURL(new Blob([bytes])); urls.push(url);
       return { url, size: bytes.length, sha256 };
@@ -77,6 +81,7 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     const manifestReference = await reference(manifest);
     const fields = documentText(new Uint8Array(await (await fetch(manifestReference.url)).arrayBuffer())).trim().split(':');
     if (fields[0] !== '5' || fields[1] !== '__DOLT__' || !/^[0-9a-v]{32}$/.test(fields[3] ?? '')) throw new Error('Unsupported native Dolt manifest.');
+    if (serving && fields[3] !== serving.descriptor.storageRoot) throw new Error('Beads serving storage root mismatch.');
     let completed = 0;
     progress(`Downloading native files · 0/${entries.length} verified · up to ${nativeReadConcurrency} files in parallel`);
     const files = await mapReads(entries, nativeReadConcurrency, signal, async entry => {
@@ -88,10 +93,11 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     progress('Loading the integrity-pinned WASM engine and decoding native Dolt chunks…');
     engine = await createEngine(signal); signal.throwIfAborted();
     const opened = await engine.open({ apiVersion: 1, manifest: manifestReference, files }, signal);
+    if (serving && (opened.commit !== serving.descriptor.doltCommit || opened.root !== serving.descriptor.root)) throw new Error('Beads serving database identity mismatch.');
     for (const url of urls.splice(0)) URL.revokeObjectURL(url);
     const runtime = engine;
     return {
-      gitCommit: snapshot.commit, doltCommit: opened.commit, root: opened.root, storageRoot: fields[3], fileCount: files.length, encodedBytes: total,
+      gitCommit: snapshot.commit, ...(serving ? { servingCommit: serving.gitCommit } : {}), doltCommit: opened.commit, root: opened.root, storageRoot: fields[3], fileCount: files.length, encodedBytes: total,
       async query(operation: BeadsOperation): Promise<BeadsResult> {
         // A workspace board must not silently truncate the collection to the sample's first 50.
         const request = operation === 'list' ? { operation, issueFilter: { SortBy: 'priority', Limit: 0 } }

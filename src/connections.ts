@@ -108,7 +108,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {

@@ -25,6 +25,24 @@ online authorization per part, and a bounded 96 MiB transient API cache. Ordinar
 document reads remain capped at 16 MiB. Update the extension or Alohak if the
 page reports that large native reads are unavailable.
 
+With a host advertising `beadsServingPacks`, the page also resolves
+`refs/beads/<workspace>`. Normal `nugs beads sync`/`publish` publication creates a
+derived **beads-current-head-v1** pack there, separate from canonical Dolt history.
+Its `serving.json` pins the workspace, collection, source Git commit, native
+storage root, selected Dolt commit/current root, and file sizes/SHA-256 hashes.
+The pack's manifest must be the exact canonical manifest blob. The page checks
+descriptor/tree agreement, Git identities, SHA-256 hashes and opened native roots.
+Workspace metadata cannot change the integrity-pinned engine release.
+
+Only selected current-state files count toward the existing 64 MiB encoded-data
+bound; historical native files are not downloaded when a valid pack is available.
+The pack omits commit parents and is **not a complete/restorable Dolt remote**.
+Native history remains under `refs/dolt/<workspace>`. An absent pack permits the
+legacy path within its existing bounds. A stale or mismatched pack fails explicitly:
+finish synchronization using a pack-capable nugs release and refresh. Update both
+the extension/Alohak host and hosted page for the new ref-discovery capability.
+Physical-phone memory/load-time acceptance remains separate from browser tests.
+
 Native files download with up to six concurrent file reads. The updated host
 also permits six native blob reads, reserving at most 144 MiB of aggregate
 upstream response limits (24 MiB per ordinary blob, 96 MiB per large-blob part),
