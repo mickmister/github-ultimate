@@ -11,6 +11,7 @@ export { pageChannel, replyChannel } from './bridge-channels';
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('discover') }).strict(),
   z.object({ operation: z.literal('connections') }).strict(),
+  z.object({ operation: z.literal('vdConnections') }).strict(),
   z.object({ operation: z.literal('loadNavigation') }).strict(),
   z.object({ operation: z.literal('forgetNavigation') }).strict(),
   z.object({ operation: z.literal('saveNavigation'), navigation: workspaceNavigationSchema }).strict(),

@@ -30,11 +30,15 @@ export async function writeReview(request: ReviewWrite, reviewer: string, read: 
   if (current.status === 'withdrawn') throw new Error('This request has been withdrawn. Existing responses remain available.');
   await validateReviewArtifact(opened.request, value, pin => reviews.read(pin));
   if (opened.request.process) await reviews.read(opened.request.process.config);
-  const finish = async (receipt: ReviewReceipt) => {
-    if (value.kind !== 'review-response' || !opened.request.process) return receipt;
-    if (!deliver) return { ...receipt, dispatch: { state: 'pending' as const, message: 'Response saved; trusted workflow delivery is not configured.' } };
+  const finish = async (receipt: ReviewReceipt): Promise<ReviewReceipt> => {
+    if (value.kind !== 'review-response' || !opened.request.process && !opened.request.response_effect) return receipt;
+    if (!opened.request.process && value.request.version !== currentEntry.sha) return { ...receipt, dispatch: { kind: 'vk', state: 'pending', message: 'Response saved against a superseded request. Automatic VK notification was withheld.' } };
+    if (!deliver) return { ...receipt, dispatch: { state: 'pending' as const, message: 'Response saved; trusted continuation delivery is not configured.' } };
     try { return await deliver(receipt, opened.request); }
-    catch (error) { return { ...receipt, dispatch: { state: 'failed' as const, message: error instanceof Error ? error.message : 'Workflow delivery failed. Retry the saved response.' } }; }
+    catch (error) {
+      if (!opened.request.process) return { ...receipt, dispatch: { kind: 'vk', state: 'unknown', message: 'Response saved; VK delivery evidence is unavailable. Inspect the destination and restore connection storage before retrying. No automatic replay was attempted.' } };
+      return { ...receipt, dispatch: { state: 'failed' as const, message: error instanceof Error ? error.message : 'Workflow delivery failed. Retry the saved response.' } };
+    }
   };
   const resource = artifactResource(value);
   const path = `documents/${resource}`;

@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { isDeepStrictEqual, parseArgs } from 'node:util';
+import { reviewOrigin } from '../src/review-origin.ts';
 import { resolve } from 'node:path';
 import { parseRecord } from '../src/protocol.ts';
 import { attachedFormDSL, reviewBeadMetadata } from '../src/review-beads.ts';
@@ -12,6 +13,7 @@ const { values, positionals } = parseArgs({ allowPositionals: true, options: {
   request: { type: 'string' }, watch: { type: 'boolean', default: false },
   bead: { type: 'string' }, form: { type: 'string' },
   'until-response': { type: 'boolean', default: false },
+  'vk-origin': { type: 'string' },
 } });
 const workspace = values.workspace;
 if (!workspace) throw new Error('Pass --workspace <stored workspace handle>.');
@@ -61,7 +63,9 @@ async function main() {
     if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password) throw new Error('Expected a public HTTP(S) app URL.');
     const input = JSON.parse(readFileSync(values.file, 'utf8'));
     input.revision_id ??= `revision-${crypto.randomUUID()}`;
-    const request = parseReviewRequest(JSON.stringify(input));
+    if (values['vk-origin'] && !['handoff', 'none'].includes(values['vk-origin'])) throw new Error('--vk-origin must be handoff or none.');
+    const prior = values.expected ? parseReviewRequest(read(requestResource(input.request_id)).text) : undefined;
+    const request = parseReviewRequest(JSON.stringify(reviewOrigin(input, prior, process.env, values['vk-origin'] as 'handoff' | 'none' | undefined)));
     if (request.workspace !== workspace) throw new Error('Request workspace does not match --workspace.');
     const resources = listing();
     const current = resources.find(resource => resource.name === requestResource(request.request_id));

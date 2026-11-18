@@ -1,5 +1,7 @@
 import type { ConnectionRecord, ConnectionStore } from './connections';
 import type { S3ConnectionRecord, S3ConnectionStore } from './s3-connections';
+import type { VdRecord, VdStore } from './vd-connections';
+import type { ReviewReceipt } from './review-protocol';
 
 // Extension-origin IndexedDB is deliberately separate from chrome.storage.local:
 // that storage is also used by the existing GitHub content script for drafts.
@@ -7,9 +9,9 @@ import type { S3ConnectionRecord, S3ConnectionStore } from './s3-connections';
 class IndexedStore<Record extends { id: string }> {
   constructor(private storeName: string) {}
   private database = new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('github-ultimate-credentials', 2);
+    const request = indexedDB.open('github-ultimate-credentials', 3);
     request.onupgradeneeded = () => {
-      for (const name of ['connections', 's3Connections']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name, { keyPath: 'id' });
+      for (const name of ['connections', 's3Connections', 'vdConnections', 'vdDeliveries']) if (!request.result.objectStoreNames.contains(name)) request.result.createObjectStore(name, { keyPath: 'id' });
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(new Error('Credential storage unavailable.'));
@@ -32,3 +34,9 @@ class IndexedStore<Record extends { id: string }> {
 }
 export class IndexedConnectionStore extends IndexedStore<ConnectionRecord> implements ConnectionStore { constructor() { super('connections'); } }
 export class IndexedS3ConnectionStore extends IndexedStore<S3ConnectionRecord> implements S3ConnectionStore { constructor() { super('s3Connections'); } }
+export class IndexedVdStore extends IndexedStore<VdRecord> implements VdStore {
+  constructor() { super('vdConnections'); }
+  private deliveries = new IndexedStore<{ id: string; receipt: ReviewReceipt }>('vdDeliveries');
+  async delivery(key: string) { return (await this.deliveries.get(key))?.receipt; }
+  async saveDelivery(key: string, receipt: ReviewReceipt) { await this.deliveries.put({ id: key, receipt }); }
+}

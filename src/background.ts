@@ -1,5 +1,6 @@
 import { Connections, ConnectionError } from './connections';
-import { IndexedConnectionStore, IndexedS3ConnectionStore } from './connection-store';
+import { IndexedConnectionStore, IndexedS3ConnectionStore, IndexedVdStore } from './connection-store';
+import { VdConnections, VdError } from './vd-connections';
 import { trustedOrigin, originPattern } from './hosted-protocol';
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath } from './hosted-access';
 import { hostedRelayRevision } from './bridge-channels';
@@ -18,7 +19,9 @@ const cacheSettings = new CacheSettingsService({
   async setItem(key, value) { await api.storage.local.set({ [key]: value }); },
 });
 const workspaceCache = new WorkspaceCache(new IndexedWorkspaceCacheStore(), cacheSettings);
-const connections = new Connections(store, undefined, undefined, undefined, undefined, workspaceCache);
+const vdStore = new IndexedVdStore();
+const vd = new VdConnections(vdStore, (...args) => fetch(...args), origin => api.permissions.contains({ origins: [originPattern(origin)] }));
+const connections = new Connections(store, undefined, undefined, undefined, undefined, workspaceCache, undefined, vd);
 const s3Store = new IndexedS3ConnectionStore();
 const s3Connections = new S3Connections(s3Store, (...args) => fetch(...args), origin => api.permissions.contains({ origins: [originPattern(origin)] }), workspaceCache);
 const pageKVStore = new IndexedPageKVStore();
@@ -29,7 +32,7 @@ const pageKV = new PageKVService(pageKVStore, async documentURL => {
 let registrationTail: Promise<unknown> = Promise.resolve();
 function syncRegistrations() {
   const work = registrationTail.catch(() => {}).then(async () => {
-    const records = [...await store.all(), ...await s3Store.all()];
+    const records = [...await store.all(), ...await s3Store.all(), ...await vdStore.all()];
     const patterns = [...new Set([...records.flatMap(record => hostedGrants(record).map(grant => grant.origin)), ...(await pageKVStore.grants()).map(grant => grant.origin)].map(originPattern))];
     const scripts: chrome.scripting.RegisteredContentScript[] = [];
     for (const pattern of patterns) {
@@ -56,7 +59,8 @@ api.runtime.onMessage.addListener((message: unknown, sender, reply) => {
   const { channel, request, documentURL, relayRevision } = message as { channel?: string; request?: unknown; documentURL?: unknown; relayRevision?: unknown };
   const s3Settings = channel === 'github-ultimate-s3-settings-v1';
   const kvSettings = channel === 'github-ultimate-page-storage-settings-v1';
-  const settings = (channel === 'github-ultimate-connections-v1' || s3Settings || kvSettings) && sender.url === api.runtime.getURL('connections.html') && (!sender.tab || sender.frameId === 0);
+  const vdSettings = channel === 'github-ultimate-vd-settings-v1';
+  const settings = (channel === 'github-ultimate-connections-v1' || s3Settings || kvSettings || vdSettings) && sender.url === api.runtime.getURL('connections.html') && (!sender.tab || sender.frameId === 0);
   const hosted = channel === 'github-ultimate-hosted-v1' && sender.tab && sender.frameId === 0 && sender.url;
   if (!settings && !hosted) return false;
   void Promise.resolve().then(async () => {
@@ -86,14 +90,14 @@ api.runtime.onMessage.addListener((message: unknown, sender, reply) => {
       const origin = trustedOrigin((request as { origin: string }).origin);
       if (!await api.permissions.contains({ origins: [originPattern(origin)] })) throw new ConnectionError('Browser host permission was not granted.');
     }
-    const result = await (s3Settings ? s3Connections : connections).handle(request);
+    const result = await (vdSettings ? vd : s3Settings ? s3Connections : connections).handle(request);
     if (['grantOrigin', 'revokeOrigin', 'disconnect', 'remove'].includes((request as { operation: string }).operation)) await syncRegistrations();
     return result;
   }).then(
     result => reply({ ok: true, result }),
     error => {
       const operation = (request as { operation?: unknown })?.operation;
-      reply({ ok: false, error: error instanceof Error && (error instanceof ConnectionError || kvSettings || typeof operation === 'string' && operation.startsWith('kv')) ? error.message : 'Invalid request, response or unavailable credential storage. Retry or reconnect.' });
+      reply({ ok: false, error: error instanceof Error && (error instanceof ConnectionError || error instanceof VdError || kvSettings || typeof operation === 'string' && operation.startsWith('kv')) ? error.message : 'Invalid request, response or unavailable credential storage. Retry or reconnect.' });
     },
   );
   return true;

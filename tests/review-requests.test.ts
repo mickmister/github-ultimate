@@ -13,6 +13,8 @@ import { bridgeRequest } from '../hosted/client';
 import { MobileGitHub } from '../src/mobile-github';
 import { MobileFixtureBroker } from '../src/mobile-protocol';
 import { mobileGitHubRequest } from '../src/mobile-github-client';
+import { VdConnections, type VdRecord } from '../src/vd-connections';
+import type { ReviewReceipt } from '../src/review-protocol';
 
 vi.mock('../hosted/client', () => ({ bridgeRequest: vi.fn(async (request: any) => request.operation === 'discover' ? { capabilities: [] } : [{ id: 'a6075abf-226e-4c88-977c-e11404e59f32', installation: { id: 1 }, user: { id: 1 } }]) }));
 
@@ -121,6 +123,71 @@ function processFixture() {
   f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
   return f;
 }
+
+test('VK effects run only after exact response persistence; draft, conflict and superseded revision never notify', async () => {
+  const f = fixture();
+  f.request.response_effect = { kind: 'vk-session', workspace_id: '46e5772c-a538-498f-b3ae-4d7073dddc39', session_id: '8d4c83eb-bfd9-4321-8bb4-976f1bac24c5' };
+  const requestText = JSON.stringify(f.request);
+  f.value.request.version = f.git.blob(requestText);
+  f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': requestText });
+  const deliver = vi.fn(async (receipt: ReviewReceipt) => {
+    const tree = f.git.trees.get(f.git.commits.get(f.git.head)!)!;
+    expect(tree.find(entry => entry.path === `documents/${receipt.resource}`)?.sha).toBe(receipt.version);
+    expect(JSON.parse(f.git.blobs.get(receipt.version)!)).toEqual(f.value);
+    return { ...receipt, dispatch: { kind: 'vk' as const, state: 'pending' as const, message: 'Connect VD.' } };
+  });
+  const { intent: _, ...draft } = f.value;
+  await writeReview({ ...f.input(), text: JSON.stringify({ ...draft, kind: 'review-draft', id: 'draft' }) }, 'github:1', f.git.read, f.git.mutate, deliver);
+  expect(deliver).not.toHaveBeenCalled();
+  f.git.conflict = true;
+  await expect(writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver)).rejects.toThrow(/ref changed/);
+  expect(deliver).not.toHaveBeenCalled(); f.git.conflict = false;
+  const saved = await writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver);
+  expect(saved.dispatch?.kind).toBe('vk'); expect(deliver).toHaveBeenCalledTimes(1);
+  const nextRequest = JSON.stringify({ ...f.request, revision_id: 'revision-2' });
+  f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': nextRequest, [saved.resource]: f.git.blobs.get(saved.version)! });
+  expect((await writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver)).dispatch?.message).toMatch(/superseded/);
+  expect(deliver).toHaveBeenCalledTimes(1);
+});
+
+test('authenticated broker routes a saved process-less response through VD and does not dispatch Actions', async () => {
+  const f = fixture();
+  const workspaceId = '46e5772c-a538-498f-b3ae-4d7073dddc39', sessionId = '8d4c83eb-bfd9-4321-8bb4-976f1bac24c5';
+  f.request.response_effect = { kind: 'vk-session', workspace_id: workspaceId, session_id: sessionId };
+  const text = JSON.stringify(f.request); f.value.request.version = f.git.blob(text);
+  f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
+  const vdRecord: VdRecord = { id: scope.id, revision: scope.id, name: 'VD', origin: 'https://vd.test', repository: scope.repository, workspace: scope.workspace, workspaceId, headers: [], hostedGrants: [{ origin: 'https://review.test', subpath: '/app/' }] };
+  const journal = new Map<string, ReviewReceipt>(), posts: string[] = [];
+  const vd = new VdConnections({ all: async () => [vdRecord], get: async () => vdRecord, put: async () => {}, remove: async () => {}, delivery: async key => journal.get(key), saveDelivery: async (key, receipt) => { journal.set(key, receipt); } }, async (url, init) => {
+    let data: unknown;
+    if (init?.method === 'POST') {
+      posts.push(String(url)); expect(f.git.blobs.size).toBeGreaterThan(0);
+      const persisted = [...f.git.blobs.values()].find(text => text.includes('"kind": "review-response"'));
+      expect(persisted).toBeTruthy(); data = { id: scope.id, session_id: sessionId };
+    } else if (String(url).endsWith('/api/workspaces')) data = [{ id: workspaceId }];
+    else if (String(url).endsWith('/queue')) data = { status: 'empty' };
+    else if (String(url).includes('conversation-preview')) data = { session_id: sessionId, has_running_turn: false };
+    else data = { id: sessionId, workspace_id: workspaceId, executor: 'OPENCODE' };
+    return Response.json({ success: true, data });
+  });
+  const githubRecord: ConnectionRecord = { id: scope.id, name: 'Storage', appId: 7, clientId: 'client', user: { id: 1, login: 'reviewer' }, installation: { id: 1, account: 'owner' }, tokens: { accessToken: 'secret', expiresAt: Date.now() + 999999 }, hostedGrants: [{ origin: 'https://review.test', subpath: '/app/' }] };
+  const fetcher: typeof fetch = async (url, init = {}) => {
+    const path = String(url).replace('https://api.github.com', '');
+    if (path.includes('/dispatches')) throw new Error('VK must not invoke Actions');
+    if (path.includes('/user/installations?')) return Response.json({ installations: [{ id: 1, app_id: 7, account: { login: 'owner' }, permissions: { contents: 'write' } }] });
+    if (path.includes('/user/installations/1/repositories?')) return Response.json({ repositories: [{ full_name: scope.repository, private: true, default_branch: 'main' }] });
+    if (init.method === 'POST' || init.method === 'PATCH') return Response.json(await f.git.mutate(path, init.method, JSON.parse(String(init.body))));
+    const route = path.split('/git/')[1];
+    const operation = route.startsWith('matching-refs/') ? 'gitRefs' : route.startsWith('commits/') ? 'gitCommit' : route.startsWith('trees/') ? 'gitTree' : 'gitBlob';
+    return Response.json(await f.git.read({ operation, prefix: route.slice('matching-refs/'.length), oid: route.split('/')[1]?.split('?')[0] } as any));
+  };
+  const broker = new Connections({ all: async () => [githubRecord], get: async () => githubRecord, put: async () => {}, remove: async () => {} }, fetcher, undefined, undefined, undefined, undefined, undefined, vd);
+  const host = new MobileGitHub(broker, () => true);
+  const result = await host.hosted('https://review.test/app/', f.input(), () => true) as ReviewReceipt;
+  expect(result.dispatch).toMatchObject({ kind: 'vk', state: 'dispatched', process_id: scope.id });
+  expect(posts).toHaveLength(1);
+  await host.hosted('https://review.test/app/', f.input(), () => true); expect(posts).toHaveLength(1);
+});
 
 function mobileFixture() {
   const f = processFixture();
