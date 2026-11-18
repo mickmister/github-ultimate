@@ -18,7 +18,7 @@ if (form) {
     const result = reply.result as { settings: CacheSettings; status: { bytes: number; error: string } };
     current = result.settings; dolt.checked = current.cacheDolt;
     for (const field of fields) field.input.value = String(current[field.key]);
-    status.textContent = `${(result.status.bytes / 1048576).toFixed(1)} MiB cached. Read-through cache; full snapshots are not yet prefetched. ${result.status.error}`;
+    status.textContent = `${(result.status.bytes / 1048576).toFixed(1)} MiB cached. Fetched resources are cached; review contents are prefetched when opened. ${result.status.error}`;
   }
   form.addEventListener('submit', event => {
     event.preventDefault();

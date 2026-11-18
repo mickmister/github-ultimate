@@ -18,7 +18,6 @@ export interface DocumentSnapshotDTO {
   readonly commit: string;
   readonly purpose: string;
   readonly documents: readonly DocumentDTO[];
-  readonly cacheState?: import('../../../src/document-cache').DocumentCacheStatus;
 }
 export interface DocumentsModuleV1 {
   readonly version: 1;
@@ -29,7 +28,6 @@ export interface DocumentsModuleV1 {
   readonly read: (snapshotId: string, documentId: string) => Promise<string>;
   readonly restore?: (scope: WorkspaceScope) => Promise<DocumentSnapshotDTO>;
   readonly readCached?: (snapshotId: string, documentId: string) => Promise<string>;
-  readonly cache?: (snapshotId: string, priority: () => string[], progress: (status: import('../../../src/document-cache').DocumentCacheStatus) => void, signal: AbortSignal) => Promise<void>;
   readonly dispose: () => void;
   readonly navigation?: {
     load(): Promise<WorkspaceNavigation | null>;

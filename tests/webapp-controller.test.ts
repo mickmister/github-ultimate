@@ -30,6 +30,25 @@ async function ready(controller: ReturnType<typeof setup>, expected = snapshot) 
 }
 
 describe('document browser behavior independent of presentation', () => {
+  it('opens and refreshes metadata without warming unopened documents, even with a legacy cache hook', async () => {
+    const controller = setup();
+    const extended = { ...snapshot, documents: [...snapshot.documents, { id: 'unopened', path: 'notes/unopened.md', size: 10 }, { id: 'form', path: 'review-requests/other/forms/decision.json', size: 20 }] };
+    controller.module.open.mockResolvedValue(extended);
+    const legacyCache = vi.fn(async () => {});
+    Object.assign(controller.module, { cache: legacyCache });
+    await ready(controller, extended);
+    controller.actions.setQuery('unopened');
+    expect(controller.module.read).not.toHaveBeenCalled();
+    expect(legacyCache).not.toHaveBeenCalled();
+    controller.actions.selectDocument('note-a');
+    await vi.waitFor(() => expect(controller.getSnapshot().content).toBe('Hello'));
+    controller.actions.refresh?.();
+    await vi.waitFor(() => expect(controller.module.read).toHaveBeenCalledTimes(2));
+    expect(controller.module.read.mock.calls).toEqual([['snapshot-a', 'note-a'], ['snapshot-a', 'note-a']]);
+    expect(legacyCache).not.toHaveBeenCalled();
+    controller.dispose();
+  });
+
   it('opens the saved workspace and latest version of its last document without a Discover command', async () => {
     const saved = { connectionId: connection.id, installationId: 123, repository: 'owner/storage', workspace: 'workspace-a', documentId: 'old-object-id', documentPath: 'notes/a.md' };
     const navigation = { load: vi.fn(async () => saved), save: vi.fn(async () => {}), forget: vi.fn(async () => {}) };

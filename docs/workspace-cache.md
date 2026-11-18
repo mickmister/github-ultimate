@@ -58,52 +58,41 @@ are retained and the new record is not admitted.
   where available. Uploads remain network-only and invalidate cached results.
   OAuth/token responses and mutation responses are never cache-replayed.
 
-## Complete Documents snapshots
+## Fetch-driven Documents caching and review prefetch
 
-Opening a workspace in the Documents app starts background filling after the
-foreground open completes. The open document has first priority, followed by
-review request/form files and then the remaining Documents objects. Browsing is
-not held busy by prefetch. The page displays progress, completion or a paused
-reason separately from foreground loading/errors.
+Opening Documents fetches the verified workspace metadata and manifest needed to
+browse the tree. A document's body is fetched when it is opened. Successful reads
+use the host's existing read-through cache; listing, searching, refreshing or
+reopening a workspace does not start a background download of every document or
+form. Refresh may revalidate the selected document, but does not warm unopened
+resources.
 
-The host's `documentSnapshots` capability exposes bounded `documentCache` fill and
-restore calls. A fill downloads at most one missing document blob (plus manifest
-and inventory metadata when first preparing a snapshot). Objects are deduplicated
-by OID within the workspace. Persisted, checksummed objects form the resume journal;
-closing the page/browser or replacing the mobile WebView pauses filling without
-discarding its completed downloads. Reopen online, focus/reconnect or visible-page
-polling retries a paused fill. An old preview never replaces a newer pending fill.
+Offline preview restores cached refs, commit/tree metadata, manifest and any
+previously fetched document bytes. A tree entry alone does not mean its body is
+available offline. An unopened/evicted document is a cache miss; the UI does not
+claim a complete offline workspace. Existing cached objects remain reusable within
+the normal capacity, eviction, integrity and access rules.
 
-The host validates the workspace manifest and complete Git tree, then verifies
-every required blob's Git hash and size before promotion. The completed-snapshot
-index replacement and old-object collection share one IndexedDB/SQLite adapter
-transaction. The last complete snapshot remains available during interrupted or
-over-capacity refreshes. Completed and pending snapshots share the configured byte
-budget; if both cannot fit, caching pauses rather than destroying the last good
-snapshot. The new snapshot is usable online while its fill is incomplete.
+Entering a **review-request detail screen** starts bounded prefetch of all that
+request's document targets, form DSLs and pinned document baselines. Inbox listing
+does not prefetch those contents. Exact resource/version/snapshot identities are
+deduplicated, including in-flight reads; switching between downloaded members
+does not fetch their bodies again. A failed member can be retried independently
+without blocking the others. Successful prefetch reads use the same host cache
+as foreground reads, not a second workspace-wide download mechanism.
 
-Restore prefers the last complete snapshot, independently of cached mutable refs.
-After restoration, live browsing checks the latest published revision. Once a
-snapshot is complete, even documents never individually opened can be read from
-that host's cache. Corruption or missing objects invalidate completeness and are
-repaired on a subsequent online fill. Unsupported files, missing sizes, truncated
-trees, manifests over 256 KiB and document blobs over 16 MiB pause completion with
-an explicit reason; partial inventories are never promoted.
-
-Review reads on capable hosts conservatively retain their pinned commit/tree/blob
-resources across latest-snapshot collection. These pins persist across page and
-host restarts and are released with whole-workspace eviction or access cleanup.
-At the bounded pin-index limit, individual collection is disabled for that
-workspace rather than deleting a potentially active revision. Count/byte eviction
-still applies to the workspace as a whole; this is disposable cache, not durable
-storage for authored review data.
+Review reads on capable hosts retain their exact pinned commit/tree/blob resources
+against legacy per-object snapshot collection. Whole-workspace eviction and access
+cleanup still apply; this is disposable cache, not durable authored review data.
+The broker's older `documentSnapshots`/`documentCache` inventory protocol remains
+compatible with older deployed clients, but the current Documents app no longer
+invokes fill/restore inventory operations or advertises full-snapshot completion.
 
 ## Remaining boundaries
 
-Completion is **per Documents snapshot**, shown in the Documents app. The legacy
-aggregate settings field `completeSnapshots: false` remains a statement that the
-cache does not guarantee completeness for every workspace/namespace. Eviction,
-quota failure, an incomplete fill or unsupported objects can prevent offline reads.
+The aggregate settings field `completeSnapshots: false` states that the cache does
+not guarantee completeness for every workspace/namespace. Eviction, quota failure,
+an unfetched document or unsupported objects can prevent offline reads.
 The remotely loaded app shell and its assets are not installed offline by this
 feature. Current mobile capabilities do not include S3 or review submission merely
 because a cache adapter exists. Installed-device lifecycle acceptance remains
@@ -114,12 +103,13 @@ The Beads sample reads native Dolt blobs up to 64 MiB using bounded
 large-object parts use the connection-scoped transient API cache and are not
 persisted for offline replay. Ordinary document blobs retain their 16 MiB limit.
 
-Tests cover resumable Documents fill across real SQLite file reopen and IndexedDB
-replacement, prioritized downloads, atomic promotion failure, last-complete
-retention, review pins, unsupported inventories, count/byte eviction, corruption
-repair, ETag reuse and access retirement. The packaged-extension browser test
-interrupts a background fill, replaces the browser, resumes it and then replaces
-the browser again with GitHub HTTP unavailable to read a never-opened document.
+Tests cover fetched-document reuse, no background warming on browse/refresh,
+review-detail-only prefetch of all pinned members/baselines, read deduplication,
+count/byte eviction, corruption, ETag reuse and access retirement. The packaged
+extension test replaces the browser and restores a fetched document offline while
+confirming that an unopened document was never downloaded and is not available
+offline. Legacy inventory tests still cover explicit older-client fill/restore
+operations across SQLite reopen and IndexedDB replacement.
 Metro exports
 and native build CI cover both platforms; installed-device lifecycle acceptance
 must be recorded separately from compilation and Node SQLite adapter tests.

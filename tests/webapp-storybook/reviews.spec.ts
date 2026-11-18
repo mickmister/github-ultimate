@@ -10,6 +10,26 @@ function pinnedReviewURL() {
   return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
 }
 
+test('review inbox does not prefetch member content; opening a detail prefetches all documents, forms and baselines', async ({ page }) => {
+  const reads: string[] = [];
+  await page.route('**/__review-fixture', async route => {
+    const resource = route.request().headers()['x-review-resource'];
+    if (resource) reads.push(JSON.parse(resource).version);
+    await route.fulfill({ json: { artifacts: [], revision: 1 } });
+  });
+  await page.goto('/iframe.html?id=web-app-reviews--inbox&viewMode=story&remoteFixture=true');
+  await expect(page.getByRole('region', { name: 'Review inbox', exact: true })).toBeVisible({ timeout: 30000 });
+  const detail = page.getByRole('link', { name: 'Reader follow-up', exact: true });
+  await expect(detail).toBeVisible();
+  expect(reads).toEqual([]);
+  await detail.click();
+  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  expect(reads.sort()).toEqual(['a', 'b', 'c', 'd'].map(letter => letter.repeat(40)));
+  await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+  await expect(page.locator('.review-form h3')).toHaveText('Reader decisions');
+  expect(reads).toHaveLength(4);
+});
+
 for (const fullReview of [false, true]) {
   test(`choice notes and multiple suggested-single selections survive remote drafts and ${fullReview ? 'full-review' : 'form-only'} submission`, async ({ page }) => {
     let state: any = { artifacts: [], revision: 1 };
@@ -300,7 +320,7 @@ test('a failed preload leaves other items usable and can be retried independentl
     await route.fulfill({ json: { artifacts: [], revision: 1 } });
   });
   await page.goto('/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true');
-  await expect(page.getByRole('button', { name: 'Retry unavailable review contents', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Retry unavailable review contents', exact: true })).toBeVisible({ timeout: 30000 });
   await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
   await expect(page.locator('.review-form h3')).toHaveText('Reader decisions');
   await page.getByRole('button', { name: 'Reader plan', exact: true }).click();

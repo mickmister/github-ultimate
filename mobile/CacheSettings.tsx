@@ -9,7 +9,7 @@ export default function CacheSettings() {
   const [status, setStatus] = useState('Loading cache settings…'), [busy, setBusy] = useState(true);
   const show = (result: { settings: Settings; status: { bytes: number; error: string } }) => {
     setSettings(result.settings); setValues(Object.fromEntries(cacheSettingFields.map(field => [field.key, String(result.settings[field.key])])));
-    setStatus(`${(result.status.bytes / 1048576).toFixed(1)} MiB cached (read-through; full snapshots are not yet prefetched). ${result.status.error}`);
+    setStatus(`${(result.status.bytes / 1048576).toFixed(1)} MiB cached. Fetched resources are cached; review contents are prefetched when opened. ${result.status.error}`);
   };
   useEffect(() => { void github.settings({ operation: 'cacheSettings' }).then(result => show(result as Parameters<typeof show>[0])).catch(() => setStatus('Cache settings unavailable.')).finally(() => setBusy(false)); }, []);
   return <View style={{ gap: 8, paddingVertical: 12 }}><Text accessibilityRole="header">Workspace cache</Text>

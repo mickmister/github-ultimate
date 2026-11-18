@@ -18,7 +18,6 @@ export interface DocumentBrowserModel {
   readonly documentFullscreen: boolean;
   readonly busy: boolean;
   readonly status: string;
-  readonly cacheStatus?: string;
   readonly error: string | null;
   readonly canDiscover: boolean;
   readonly canBrowse: boolean;

@@ -6,26 +6,23 @@ import { workspaceNavigationSchema, type WorkspaceNavigation } from '../../../sr
 import { createHostedReviews } from './reviews';
 import { createQueryTransport } from '../../../hosted/query-cache';
 import { applicationStorage } from '../app-storage';
-import type { DocumentCacheStatus } from '../../../src/document-cache';
 
 export function createHostedAppHooks(): AppHooksV1 {
-  const snapshots = new Map<string, { reader: WorkspaceReader; cachedReader: WorkspaceReader; entries: ReturnType<typeof documents>; scope: WorkspaceScope; commit: string; live: boolean }>();
+  const snapshots = new Map<string, { reader: WorkspaceReader; cachedReader: WorkspaceReader; entries: ReturnType<typeof documents> }>();
   const queries = createQueryTransport(bridgeRequest);
   let persistent = false;
-  let completeSnapshots = false;
   const reader = (scope: WorkspaceScope, cached = false) => new WorkspaceReader(cached ? request => queries.transport({ ...request, cacheOnly: true }) : queries.transport, scope.connectionId, scope.repository, scope.installationId, scope.workspace);
   async function open(scope: WorkspaceScope, cached = false): Promise<DocumentSnapshotDTO> {
     if (cached && !persistent) throw new Error('This host does not support persistent workspace reads.');
     const activeReader = reader(scope, cached);
-    const restored = cached && completeSnapshots ? await bridgeRequest<DocumentCacheStatus>({ operation: 'documentCache', action: 'restore', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, priority: [] }) : undefined;
-    const workspace = restored?.commit ? { name: scope.workspace, documents: restored.commit } : (await activeReader.discover()).find(item => item.name === scope.workspace);
+    const workspace = (await activeReader.discover()).find(item => item.name === scope.workspace);
     if (!workspace) throw new Error('This workspace is no longer available. Discover workspaces again.');
     const opened = await activeReader.open(workspace), entries = documents(opened.snapshot);
     const id = JSON.stringify([scope.connectionId, scope.installationId, scope.repository.toLowerCase(), scope.workspace, opened.snapshot.commit]);
-    snapshots.set(id, { reader: reader(scope), cachedReader: reader(scope, true), entries, scope, commit: opened.snapshot.commit, live: !cached });
+    snapshots.set(id, { reader: reader(scope), cachedReader: reader(scope, true), entries });
     // Bound live handles; durable objects stay in the host, independent of these.
     if (snapshots.size > 32) snapshots.delete(snapshots.keys().next().value!);
-    return { id, commit: opened.snapshot.commit, purpose: opened.manifest.purpose ?? '', ...(restored ? { cacheState: restored } : {}), documents: entries.map(entry => ({ id: entry.sha + ':' + entry.path, path: entry.path.slice('documents/'.length), size: entry.size ?? null })) };
+    return { id, commit: opened.snapshot.commit, purpose: opened.manifest.purpose ?? '', documents: entries.map(entry => ({ id: entry.sha + ':' + entry.path, path: entry.path.slice('documents/'.length), size: entry.size ?? null })) };
   }
   async function read(snapshotId: string, documentId: string, cached: boolean) {
     const snapshot = snapshots.get(snapshotId), entry = snapshot?.entries.find(item => item.sha + ':' + item.path === documentId);
@@ -61,7 +58,6 @@ export function createHostedAppHooks(): AppHooksV1 {
       async connect() {
         const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' }, 5000);
         persistent = support.capabilities?.includes('persistedWorkspaceCache') ?? false;
-        completeSnapshots = support.capabilities?.includes('documentSnapshots') ?? false;
         if (!['gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'implicitWorkspaces'].every(id => support.capabilities?.includes(id))) throw new Error('Update the extension and reload this page to enable document browsing.');
         const connections = await bridgeRequest<HostedConnection[]>({ operation: 'connections' });
         return connections.filter(connection => connection.installation).map(connection => ({
@@ -80,23 +76,6 @@ export function createHostedAppHooks(): AppHooksV1 {
       restore: (scope: WorkspaceScope) => open(scope, true),
       read: (snapshotId: string, documentId: string) => read(snapshotId, documentId, false),
       readCached: (snapshotId: string, documentId: string) => read(snapshotId, documentId, true),
-      async cache(snapshotId: string, priority: () => string[], progress: (status: DocumentCacheStatus) => void, signal: AbortSignal) {
-        if (!completeSnapshots) return;
-        const snapshot = snapshots.get(snapshotId);
-        // A stale preview must never replace a newer interrupted inventory.
-        if (!snapshot?.live) return;
-        const { scope, commit, entries } = snapshot;
-        while (!signal.aborted) {
-          const selected = priority().map(id => id.split(':')[0]);
-          const reviews = entries.filter(entry => /^documents\/review-requests\/[^/]+\/(request\.json|forms\/)/.test(entry.path)).map(entry => entry.sha);
-          const status = await bridgeRequest<DocumentCacheStatus>({ operation: 'documentCache', action: 'fill', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, commit, priority: [...new Set([...selected, ...reviews])].slice(0, 100) }, 120000);
-          if (signal.aborted) return;
-          progress(status);
-          if (status.complete || status.error) return;
-          // Yield between bounded host calls so foreground document reads take priority.
-          await new Promise(resolve => setTimeout(resolve, 100));
-        }
-      },
       dispose() { snapshots.clear(); queries.dispose(); },
     }) }),
   });

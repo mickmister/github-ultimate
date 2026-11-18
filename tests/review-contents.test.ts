@@ -12,6 +12,7 @@ test('preloads every document, form and baseline once, and shares in-flight and 
   const { service, review } = await fixture();
   service.read = vi.fn(service.read);
   const cache = createReviewContents(reviewScope, review, service);
+  expect(service.read).not.toHaveBeenCalled();
   const member = review.request.members[0];
   if (member.kind !== 'document') throw new Error('Expected document fixture');
   const first = cache.read(member.target);
