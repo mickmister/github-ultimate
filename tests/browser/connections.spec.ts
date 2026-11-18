@@ -164,7 +164,9 @@ test('GitHub content scripts cannot invoke the privileged connections broker', a
 });
 
 test('hosted branch page reads through an approved connection and revocation takes effect in an already open tab', async () => {
-  test.setTimeout(60000);
+  // Includes cold packaged-extension startup, denied-bridge timeout, both hosted
+  // applications, editor Workers, reload/restoration and in-tab revocation.
+  test.setTimeout(120000);
   const id = await launch(true);
   await serveHosted();
   const settings = await context.newPage(); await settings.goto(`chrome-extension://${id}/connections.html`);
@@ -175,13 +177,13 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(card).toContainText('Signed in as mickmister', { timeout: 15000 });
   await card.getByRole('button', { name: 'Load installations' }).click(); await card.getByRole('button', { name: 'Use mickmister' }).click();
   const page = await context.newPage(); await page.goto('https://mickmister.github.io/github-ultimate/previews/test-branch/settings.html');
-  await expect(page.getByRole('status')).toContainText('No bridge response', { timeout: 10000 });
+  await expect(page.locator('#status')).toContainText('No bridge response', { timeout: 10000 });
   await card.getByLabel('Hosted origin to approve').fill('https://mickmister.github.io');
   await card.getByRole('button', { name: 'Grant hosted read access' }).click();
   await expect(settings.locator('#status')).toContainText('Hosted read access granted');
   await expect(card.getByRole('button', { name: 'Bind workspace', exact: true })).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole('status')).toContainText('1 approved connection');
+  await expect(page.locator('#status')).toContainText('1 approved connection');
   await expect(page.getByRole('button', { name: 'Read repository', exact: true })).toBeEnabled();
   await expect(page.getByLabel('Repository (owner/name)')).toHaveValue('');
   await page.getByLabel('Repository (owner/name)').fill('mickmister/workspace-storage');
@@ -205,12 +207,12 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(page.getByLabel('Read result')).toContainText('"private": true');
   await expect(page.getByLabel('Read result')).toContainText('b'.repeat(40));
   await page.getByRole('button', { name: 'Discover workspaces' }).click();
-  await expect(page.getByRole('status')).toContainText('1 stored workspace');
+  await expect(page.locator('#status')).toContainText('1 stored workspace');
   await expect(page.locator('#workspace-status')).toContainText('1 stored workspace');
   expect(await worker.evaluate(() => (globalThis as typeof globalThis & { __githubRequests: string[] }).__githubRequests.filter(url => url.includes('/git/matching-refs/')).length)).toBe(2);
   await page.getByLabel('Stored workspace').selectOption('workspace-a');
   await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('Document list loaded');
+  await expect(page.locator('#status')).toContainText('Document list loaded');
   await expect(page.locator('#snapshot-info')).toContainText('Explore product requirements before choosing source repositories');
   await page.getByLabel('Document or nugget').selectOption({ index: 1 });
   await page.getByRole('button', { name: 'Read document', exact: true }).click();
@@ -225,7 +227,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   expect(JSON.parse(preferences.values[0])).toMatchObject({ repository: 'mickmister/workspace-storage', workspace: 'workspace-a', installationId: 123 });
   expect(preferences.values.join('')).not.toMatch(/Private workspace note|unsafeDocument|ghu_|ghr_/);
   await page.reload();
-  await expect(page.getByRole('status')).toContainText('Document list loaded');
+  await expect(page.locator('#status')).toContainText('Document list loaded');
   await expect(page.getByLabel('Stored workspace')).toHaveValue('workspace-a');
   await expect(page.getByLabel('Document content')).not.toContainText('Private workspace note');
   await page.getByLabel('Document or nugget').selectOption({ index: 1 });
@@ -255,6 +257,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   const workerURLs: string[] = []; modern.on('worker', worker => workerURLs.push(worker.url()));
   await modern.goto('https://mickmister.github.io' + appPath);
   await expect(modern.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
+  await expect(modern.getByRole('status')).toContainText('Connected. Choose a repository');
   await expect(modern.getByLabel('Storage repository')).toHaveValue('');
   await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
   await modern.getByLabel('Storage repository').fill('mickmister/workspace-storage');
@@ -289,12 +292,12 @@ test('hosted branch page reads through an approved connection and revocation tak
   expect(await modern.evaluate(() => '__unsafeDocument' in window)).toBe(false);
   await expect(modern.getByLabel('Markdown preview', { exact: true }).locator('script')).toHaveCount(0);
   await modern.getByRole('button', { name: 'Source', exact: true }).click();
-  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
+  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
   await expect(modern.getByLabel('Document content')).toContainText('Private workspace note');
   await modern.getByRole('button', { name: 'Back to documents' }).click();
   await modern.getByRole('treeitem', { name: 'workspace', exact: true }).click();
   await modern.getByRole('treeitem', { name: 'workspace/manifest.json', exact: true }).click();
-  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible();
+  await expect(modern.locator('[data-editor-ready=true]')).toBeVisible({ timeout: 20000 });
   await expect.poll(() => workerURLs.some(url => url.includes('json.worker'))).toBe(true);
   expect(workerURLs.every(url => url.startsWith('https://mickmister.github.io/'))).toBe(true);
   await expect(modern.getByRole('button', { name: 'Markdown preview', exact: true })).toHaveCount(0);
@@ -326,10 +329,10 @@ test('hosted branch page reads through an approved connection and revocation tak
   await modern.close();
   await settings.getByRole('button', { name: 'Revoke https://mickmister.github.io' }).click();
   await page.getByRole('button', { name: 'Read document', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('no approved connections');
+  await expect(page.locator('#status')).toContainText('no approved connections');
   await expect(page.getByLabel('Document content')).not.toContainText('Private workspace note');
   await page.getByRole('button', { name: 'Read repository', exact: true }).click();
-  await expect(page.getByRole('status')).toContainText('no approved connections');
+  await expect(page.locator('#status')).toContainText('no approved connections');
   await expect(page.getByLabel('Read result')).not.toContainText('"private": true');
   await page.getByRole('button', { name: 'Forget saved selections' }).click();
   await expect(page.getByLabel('Repository (owner/name)')).toHaveValue('');
