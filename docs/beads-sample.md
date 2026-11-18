@@ -38,8 +38,11 @@ Only selected current-state files count toward the existing 64 MiB encoded-data
 bound; historical native files are not downloaded when a valid pack is available.
 The pack omits commit parents and is **not a complete/restorable Dolt remote**.
 Native history remains under `refs/dolt/<workspace>`. An absent pack permits the
-legacy path within its existing bounds. A stale or mismatched pack fails explicitly:
-finish synchronization using a pack-capable nugs release and refresh. Update both
+legacy path within its existing bounds. Canonical and serving refs are published
+separately: a source-revision mismatch triggers one fresh discovery and validation
+of both snapshots. A still-stale pack fails explicitly with canonical, pack-source
+and serving commit IDs: finish synchronization using a pack-capable nugs release
+and refresh. Workspace identity and integrity failures are not retried. Update both
 the extension/Alohak host and hosted page for the new ref-discovery capability.
 Physical-phone memory/load-time acceptance remains separate from browser tests.
 
@@ -59,6 +62,8 @@ importing the SDK. The SDK verifies its Worker/runtime/WASM and every supplied
 file. Private native files are passed using temporary local Blob URLs, never
 uploaded to the CDN. The Worker decodes native chunks and resolves
 `refs/heads/main` from the verified storage root.
+Seeing a local `blob:` response beginning `5:__DOLT__:` is expected: it is the
+verified native manifest, not an API endpoint or credential response.
 
 The initial run executes upstream `list` (priority order, no sample limit),
 `ready` (open, priority policy) and `blocked`. The SVAR React Kanban board uses
@@ -140,7 +145,10 @@ Set `BEADS_LIVE_DEPLOYMENT_URL` to the exact published GitHub Ultimate preview
 
 This opt-in test runs the production page and real published engine against
 actual native Git blobs; it retains only compact identity/count evidence, with
-network tracing disabled. It is not a claim of installed-extension login or
+network tracing disabled. Its Node transport also runs the portable blob verifier
+used by the desktop/native broker, including on maximum-size serving files.
+This catches large-Base64 validator failures that hosted WebCrypto checks alone
+would miss. It is not a claim of installed-extension login or
 signed-device acceptance. Engine cross-browser tests use public synthetic native
 fixtures; production private workspace bytes are not committed or uploaded as CI
 artifacts.

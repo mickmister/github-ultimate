@@ -1,6 +1,6 @@
 import { expect, test, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { selectBeadsServing } from '../hosted/beads-serving';
+import { resolveBeadsServing, selectBeadsServing } from '../hosted/beads-serving';
 import { WorkspaceReader, type GitTransport, type Snapshot } from '../hosted/workspaces';
 import type { GitRead, GitTree } from '../src/git-reads';
 
@@ -29,13 +29,18 @@ function fixture() {
     throw new Error('Unexpected request');
   });
   const reader = new WorkspaceReader(send as GitTransport, '11111111-1111-4111-8111-111111111111', 'owner/private', 7, 'selected', 'dolt');
-  const select = (signal = new AbortController().signal) => {
+  const prepare = () => {
     const bytes = Buffer.from(JSON.stringify(descriptor));
     tree.tree = tree.tree.filter(entry => entry.path !== 'serving.json');
     tree.tree.push({ path: 'serving.json', type: 'blob', mode: '100644', size: bytes.length, sha: createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex') });
-    return selectBeadsServing(reader, source, 'selected', signal);
   };
-  return { source, descriptor, tree, send, select, noPack: () => { refs = []; } };
+  const select = (signal = new AbortController().signal) => { prepare(); return selectBeadsServing(reader, source, 'selected', signal); };
+  const resolve = async (fresh: Snapshot, signal = new AbortController().signal) => {
+    prepare();
+    const refresh = vi.fn(async () => fresh);
+    return { result: await resolveBeadsServing(reader, source, 'selected', signal, refresh), refresh };
+  };
+  return { source, descriptor, tree, send, select, resolve, noPack: () => { refs = []; } };
 }
 
 test('selects only the pinned compact native pack even when canonical storage exceeds 64 MiB', async () => {
@@ -61,4 +66,19 @@ test('rejects canonical manifest mismatch, duplicate files, symlinks, missing fi
   oversized.tree.tree = [oversized.tree.tree[0], ...oversized.descriptor.files.map(file => ({ path: file.path, mode: '100644', type: 'blob' as const, size: file.size, sha: 'a'.repeat(40) }))];
   await expect(oversized.select()).rejects.toThrow('64 MiB');
   await expect(fixture().select(AbortSignal.abort())).rejects.toThrow();
+});
+
+test('rediscovers once when the serving ref advances after canonical discovery', async () => {
+  const value = fixture(), commit = 'e'.repeat(40);
+  value.descriptor.sourceGitCommit = commit;
+  const { result, refresh } = await value.resolve({ ...value.source, commit });
+  expect(refresh).toHaveBeenCalledTimes(1);
+  expect(result.snapshot.commit).toBe(commit);
+  expect(result.serving?.descriptor.sourceGitCommit).toBe(commit);
+});
+
+test('still rejects a genuinely stale pack after bounded reconciliation, with revision diagnostics', async () => {
+  const value = fixture(); value.descriptor.sourceGitCommit = 'e'.repeat(40);
+  await expect(value.resolve(value.source)).rejects.toThrow(`Canonical: ${value.source.commit}; pack source: ${value.descriptor.sourceGitCommit}`);
+  expect(value.send.mock.calls.filter(([request]) => request.operation === 'gitRefs')).toHaveLength(2);
 });

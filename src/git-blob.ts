@@ -8,7 +8,10 @@ export const maxBlobBytes = 16 * 1024 * 1024;
 // Portable to the native broker: no Node Buffer, atob or WebCrypto dependency.
 export function verifiedGitBlobBytes(blob: GitBlob): Uint8Array<ArrayBuffer> {
   const content = blob.content.replace(/\s/g, ''), alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
-  if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(content)) throw new Error('Invalid Git blob base64.');
+  // A repeated-group regexp over a valid multi-MiB blob can exhaust the JS
+  // regexp stack. Check padding separately and scan the alphabet without groups.
+  const padding = content.endsWith('==') ? 2 : content.endsWith('=') ? 1 : 0;
+  if (content.length % 4 !== 0 || /[^A-Za-z0-9+/]/.test(content.slice(0, content.length - padding)) || content.length < padding + (padding ? 2 : 0)) throw new Error('Invalid Git blob base64.');
   const length = content.length / 4 * 3 - (content.endsWith('==') ? 2 : content.endsWith('=') ? 1 : 0);
   if (length !== blob.size || length > maxBlobBytes) throw new Error('Git blob size mismatch.');
   const bytes = new Uint8Array(length);

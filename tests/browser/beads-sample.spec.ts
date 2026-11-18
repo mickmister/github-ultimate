@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { gitReadSchema, readGit } from '../../src/git-reads';
+import { gitReadSchema, readGit, verifiedGitBlobBytes, type GitBlob } from '../../src/git-reads';
 import { pageChannel, replyChannel, hostedRelayRevision } from '../../src/bridge-channels';
 // Live private native bytes must not enter trace/network artifacts.
 test.use({ trace: 'off' });
@@ -71,7 +71,7 @@ test.describe('real selected workspace / published CDN engine', () => {
       expect(read.id).toBe(connection); expect(read.installationId).toBe(1); expect(read.repository).toBe(repository);
       if ('workspace' in read) expect(read.workspace).toBe(workspace);
       if (read.operation === 'gitBlobPart') parts++;
-      return readGit(read, repository, async path => {
+      const result = await readGit(read, repository, async path => {
         if (!api.has(path)) {
           const native = 'namespace' in read && read.namespace === 'dolt' && path.includes('/blobs/');
           if (native) maxNativeHTTP = Math.max(maxNativeHTTP, ++activeNativeHTTP);
@@ -79,6 +79,10 @@ test.describe('real selected workspace / published CDN engine', () => {
         }
         return api.get(path)!;
       });
+      // Exercise the portable validation used by the real desktop/native broker,
+      // not only the hosted reader's WebCrypto verification.
+      if (read.operation === 'gitBlob') verifiedGitBlobBytes(result as GitBlob);
+      return result;
     });
     await page.addInitScript(({ channel, reply, revision }) => {
       window.addEventListener('message', async event => {

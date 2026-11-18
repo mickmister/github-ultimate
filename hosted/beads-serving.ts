@@ -11,6 +11,20 @@ const descriptorSchema = z.object({
   files: z.array(file).min(1).max(512),
 }).strict();
 
+class ServingSnapshotChanged extends Error {}
+
+/** Ref publication is not atomic across namespaces. Retry one freshly discovered
+ * canonical/serving pair, never relax the exact source or manifest checks. */
+export async function resolveBeadsServing(reader: WorkspaceReader, source: Snapshot, workspace: string, signal: AbortSignal, refresh: () => Promise<Snapshot>) {
+  try { return { snapshot: source, serving: await selectBeadsServing(reader, source, workspace, signal) }; }
+  catch (error) {
+    if (!(error instanceof ServingSnapshotChanged)) throw error;
+    signal.throwIfAborted();
+    const snapshot = await refresh();
+    return { snapshot, serving: await selectBeadsServing(reader, snapshot, workspace, signal) };
+  }
+}
+
 /** Resolve data only; workspace metadata never selects executable engine code. */
 export async function selectBeadsServing(reader: WorkspaceReader, source: Snapshot, workspace: string, signal: AbortSignal) {
   const pack = await reader.beadsServingSnapshot();
@@ -19,7 +33,8 @@ export async function selectBeadsServing(reader: WorkspaceReader, source: Snapsh
   const entry = pack.tree.tree.find(value => value.path === 'serving.json');
   if (!entry || (entry.size ?? Infinity) > 256 * 1024) throw new Error('Invalid Beads serving descriptor.');
   const descriptor = descriptorSchema.parse(JSON.parse(documentText(await reader.blob(entry, signal))));
-  if (descriptor.workspace !== workspace || descriptor.sourceGitCommit !== source.commit) throw new Error('The Beads serving pack is not current for this workspace snapshot. Finish nugs beads sync, then refresh.');
+  if (descriptor.workspace !== workspace) throw new Error('The Beads serving pack is not current for this workspace: workspace identity mismatch.');
+  if (descriptor.sourceGitCommit !== source.commit) throw new ServingSnapshotChanged(`The Beads serving pack is not current for this workspace snapshot. Finish nugs beads sync, then refresh. Canonical: ${source.commit}; pack source: ${descriptor.sourceGitCommit}; serving: ${pack.commit}.`);
   const originalManifest = source.tree.tree.find(value => value.path === 'manifest');
   const manifest = pack.tree.tree.find(value => value.path === 'manifest');
   if (!originalManifest || !manifest || originalManifest.sha !== manifest.sha || originalManifest.size !== manifest.size || manifest.size !== descriptor.manifest.size) throw new Error('Beads serving manifest does not match its canonical snapshot.');

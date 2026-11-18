@@ -2,7 +2,7 @@ import { bridgeRequest } from './client';
 import { WorkspaceReader, documentText, type GitTransport } from './workspaces';
 import { mapReads } from '../src/bounded-reads';
 import { nativeReadConcurrency } from '../src/git-read-limits';
-import { selectBeadsServing } from './beads-serving';
+import { resolveBeadsServing } from './beads-serving';
 
 // Updated only with a verified immutable release; workspace metadata cannot select executable code.
 export const beadsRelease = {
@@ -58,10 +58,18 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     if (!workspace?.dolt) throw new Error('The selected workspace has no published native Beads/Dolt snapshot.');
     await reader.open(workspace);
     const native = new WorkspaceReader(send, scope.connectionId, scope.repository, scope.installationId, scope.workspace, 'dolt');
-    const snapshot = await native.snapshot(workspace.dolt, true);
+    let snapshot = await native.snapshot(workspace.dolt, true);
     const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
     progress('Resolving the current-state Beads serving pack…');
-    const serving = support.capabilities.includes('beadsServingPacks') ? await selectBeadsServing(native, snapshot, scope.workspace, signal) : undefined;
+    const resolved = support.capabilities.includes('beadsServingPacks') ? await resolveBeadsServing(native, snapshot, scope.workspace, signal, async () => {
+      progress('Workspace publication changed; rediscovering the canonical snapshot and serving pack…');
+      const current = (await reader.discover()).find(value => value.name === scope.workspace);
+      signal.throwIfAborted();
+      if (!current?.dolt) throw new Error('The selected workspace has no published native Beads/Dolt snapshot.');
+      return native.snapshot(current.dolt, true);
+    }) : undefined;
+    snapshot = resolved?.snapshot ?? snapshot;
+    const serving = resolved?.serving;
     const manifest = serving?.manifest ?? snapshot.tree.tree.find(entry => entry.path === 'manifest');
     if (!manifest) throw new Error('Native storage snapshot has no manifest.');
     const entries = serving?.entries ?? snapshot.tree.tree.filter(entry => entry.type === 'blob' && /^(?:oldgen\/)?[0-9a-v]{32}(?:\.darc)?$/.test(entry.path));
