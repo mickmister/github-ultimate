@@ -1,0 +1,71 @@
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import { z } from 'zod';
+import type { PublicS3Connection, S3Object } from '../src/s3-protocol';
+import type { PiBridge } from './pi-transport';
+
+const text = z.object({ type: z.literal('text'), text: z.string().max(2 * 1024 * 1024) }).strict();
+const toolCall = z.object({ type: z.literal('toolCall'), id: z.string().min(1).max(200), name: z.string().min(1).max(100), arguments: z.record(z.string(), z.json()) }).strict();
+const count = z.number().nonnegative();
+const usage = z.object({ input: count, output: count, cacheRead: count, cacheWrite: count, totalTokens: count, cost: z.object({ input: count, output: count, cacheRead: count, cacheWrite: count, total: count }) });
+// Parse only the supported text/tool transcript. Rebuild tools and the system prompt
+// from the current application, never deserialize executable tools from S3.
+const message = z.discriminatedUnion('role', [
+  z.object({ role: z.literal('user'), content: z.union([z.string(), z.array(text)]), timestamp: count }),
+  z.object({ role: z.literal('assistant'), content: z.array(z.union([text, toolCall])), api: z.literal('openai-completions'), provider: z.literal('extension'), model: z.string().max(200), usage, stopReason: z.enum(['stop', 'length', 'toolUse', 'error', 'aborted']), errorMessage: z.string().optional(), timestamp: count }),
+  z.object({ role: z.literal('toolResult'), toolCallId: z.string().min(1), toolName: z.string(), content: z.array(text), isError: z.boolean(), timestamp: count }),
+]);
+// Portable identities permit independently authorized devices with different
+// local connection UUIDs. Each request still uses that device's current revision.
+export const sessionBindingSchema = z.object({ runtime: z.literal('earendil-pi-1.5.2-text-v1'), inferenceModel: z.string().min(1).max(200), githubAppId: z.number().int().positive(), githubUserId: z.number().int().positive(), installationId: z.number().int().positive(), storageEndpoint: z.string().max(2000), storageBucket: z.string().max(63), storagePrefix: z.string().max(1024), storageRegion: z.string().max(100), storageAddressing: z.enum(['path', 'virtual']) }).strict();
+export type SessionBinding = z.infer<typeof sessionBindingSchema>;
+export const checkpointSchema = z.object({ kind: z.literal('browser-pi-checkpoint'), schema_version: z.literal(1), session_id: z.string().uuid(), checkpoint_id: z.string().uuid(), parent: z.string().nullable(), created_at: z.string().datetime(), binding: sessionBindingSchema, messages: z.array(message).max(2000) }).strict();
+export type PiCheckpoint = z.infer<typeof checkpointSchema>;
+export function validateTranscript(messages: PiCheckpoint['messages']) {
+  const pending = new Map<string, string>(), seen = new Set<string>();
+  for (const item of messages) {
+    if (item.role === 'toolResult') {
+      if (pending.get(item.toolCallId) !== item.toolName) throw new Error('Checkpoint has an unmatched tool result.');
+      pending.delete(item.toolCallId);
+    } else {
+      if (pending.size) throw new Error('Checkpoint has unresolved tool calls; automatic replay is disabled.');
+      if (item.role === 'assistant') for (const call of item.content) if (call.type === 'toolCall') {
+        if (seen.has(call.id)) throw new Error('Checkpoint has duplicate tool call IDs.');
+        seen.add(call.id); pending.set(call.id, call.name);
+      }
+    }
+  }
+  if (pending.size) throw new Error('Checkpoint has unresolved tool calls; automatic replay is disabled.');
+}
+function encode(text: string) {
+  const bytes = new TextEncoder().encode(text); let binary = '';
+  for (let offset = 0; offset < bytes.length; offset += 16384) binary += String.fromCharCode(...bytes.subarray(offset, offset + 16384));
+  return btoa(binary);
+}
+export class PiSessions {
+  constructor(private bridge: PiBridge, private storage: PublicS3Connection) {}
+  prefix(sessionId: string) { return `${this.storage.prefix}pi-sessions/${z.string().uuid().parse(sessionId)}/`; }
+  async save(sessionId: string, binding: SessionBinding, messages: AgentMessage[], parent: string | null) {
+    if (!this.storage.allowRead || !this.storage.allowUpload || this.storage.allowOverwrite) throw new Error('Choose S3 storage with reads/uploads enabled and overwrites disabled.');
+    const checkpoint = checkpointSchema.parse({ kind: 'browser-pi-checkpoint', schema_version: 1, session_id: sessionId, checkpoint_id: crypto.randomUUID(), parent, created_at: new Date().toISOString(), binding, messages: messages.filter(message => message.role !== 'system') });
+    validateTranscript(checkpoint.messages);
+    const key = `${this.prefix(sessionId)}${checkpoint.created_at.replace(/[:.]/g, '-')}-${checkpoint.checkpoint_id}.json`;
+    const json = JSON.stringify(checkpoint);
+    if (new TextEncoder().encode(json).length > 4 * 1024 * 1024) throw new Error('Checkpoint exceeds the POC 4 MiB session limit.');
+    await this.bridge({ operation: 's3Upload', id: this.storage.id, revision: this.storage.revision, key, contentType: 'application/json', base64: encode(json) });
+    // A PUT acknowledgement alone is not proof that the session can be restored.
+    const stored = await this.read(key, sessionId, binding);
+    if (JSON.stringify(stored) !== json) throw new Error('Session readback differs from the saved checkpoint.');
+    return key;
+  }
+  async read(key: string, sessionId: string, binding: SessionBinding): Promise<PiCheckpoint> {
+    if (!key.startsWith(this.prefix(sessionId)) || !key.endsWith('.json')) throw new Error('Checkpoint is outside the selected session.');
+    const object = await this.bridge<S3Object>({ operation: 's3Read', id: this.storage.id, revision: this.storage.revision, key });
+    if (object.key !== key || object.size > 4 * 1024 * 1024) throw new Error('Invalid checkpoint object.');
+    const bytes = Uint8Array.from(atob(object.base64), char => char.charCodeAt(0));
+    if (bytes.length !== object.size) throw new Error('Invalid checkpoint size.');
+    const checkpoint = checkpointSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+    if (checkpoint.session_id !== sessionId || Object.keys(binding).some(key => binding[key as keyof SessionBinding] !== checkpoint.binding[key as keyof SessionBinding])) throw new Error('Checkpoint belongs to different connections or configuration. No fallback was used.');
+    validateTranscript(checkpoint.messages);
+    return checkpoint;
+  }
+}

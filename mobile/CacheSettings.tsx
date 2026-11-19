@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Button, Switch, Text, TextInput, View } from 'react-native';
+import { Button, Switch, Text, TextInput, View } from './Theme';
 import { cacheSettingFields, cacheSettingsSchema, defaultCacheSettings, type CacheSettings as Settings } from '../src/cache-settings';
 import { github } from './github';
 

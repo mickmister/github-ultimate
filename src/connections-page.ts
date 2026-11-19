@@ -6,6 +6,7 @@ import './s3-settings-page';
 import './page-storage-settings';
 import './cache-settings-page';
 import './vd-settings-page';
+import './inference-settings-page';
 
 const status = document.getElementById('status')!;
 const container = document.getElementById('connections')!;

@@ -31,6 +31,7 @@ for (const [entry, page] of [['mobile-isolation', 'isolation/index'], ['mobile-i
 }
 if (await payloadSize('hosted-dist/isolation') > 32 * 1024) throw new Error('Isolation diagnostics exceed 32 KiB.');
 await writeFile('hosted-dist/build.json', JSON.stringify(metadata) + '\n');
+await import('./build-pi.mjs');
 execFileSync('pnpm', ['--dir', 'webapp', 'build'], { stdio: 'inherit', env: { ...process.env, NODE_ENV: 'production', WEBAPP_BASE_PATH: webappBase } });
 // Start's server build is used only to generate the SPA shell. Publish only
 // client files: GitHub Pages does not run a server or server functions.

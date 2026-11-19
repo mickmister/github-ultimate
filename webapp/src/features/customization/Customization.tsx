@@ -4,6 +4,7 @@ import { builtInThemes } from '../../../../src/ui-themes';
 import { applicationStorage } from '../../app-storage';
 import { CustomizationView } from './Customization.view';
 import { hexColor, type ThemeToken } from './settings';
+import { syncNativeTheme } from './native-theme';
 
 export function Customization() {
   const revision = useSyncExternalStore(uiCustomization.subscribe, uiCustomization.snapshot, () => 0);
@@ -14,6 +15,14 @@ export function Customization() {
   const resolved = draft ? resolvedCustomizationTokens(draft, typeof window !== 'undefined' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light') : {};
   const colorValues = Object.fromEntries(Object.entries(resolved).map(([key, value]) => [key, hexColor(typeof value === 'string' ? value : undefined)]));
   useEffect(() => { setJSON(uiCustomization.export()); }, [revision]);
+  useEffect(() => { syncNativeTheme(); }, [revision]);
+  useEffect(() => {
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    // Run after the media-query styles have been recalculated.
+    const sync = () => { syncNativeTheme(); };
+    media.addEventListener('change', sync); window.addEventListener('alohak-native-ready', sync);
+    return () => { media.removeEventListener('change', sync); window.removeEventListener('alohak-native-ready', sync); };
+  }, []);
   useEffect(() => {
     uiCustomization.configure({
       read: async () => (await applicationStorage()).getItem('github-ultimate:customization:v1'),

@@ -10,10 +10,12 @@ import { restoreReviewComments, responsesFor, storeReviewComments } from './mode
 import { readRecovery, recoveryKey, writeRecovery, recoveryFingerprint } from './recovery';
 import { ReviewSessionView } from './ReviewSession.view';
 import type { createReviewContents, ReviewContents } from './review-contents';
+import type { ReviewDocumentZen } from './ReviewPacket.hooks';
 
-export function ReviewSession({ scope, review, listing, service, refresh, updateListing, contentsCache, contents, initialSelected }: {
+export function ReviewSession({ scope, review, listing, service, refresh, updateListing, contentsCache, contents, initialSelected, documentZen }: {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; service: ReviewsModuleV1; refresh(): void; updateListing: Dispatch<SetStateAction<ReviewListing | null>>;
   contentsCache: ReturnType<typeof createReviewContents>; contents: ReviewContents; initialSelected: string;
+  documentZen: ReviewDocumentZen;
 }) {
   const initial = useMemo(() => listing.artifacts.find(item => item.value.kind === 'review-draft' && item.value.reviewer === listing.reviewer && item.value.request.id === review.request.request_id && item.value.request.version === review.pin.version && item.value.request.snapshot === review.pin.snapshot), []);
   const key = recoveryKey(scope, review, listing.reviewer);
@@ -118,7 +120,7 @@ export function ReviewSession({ scope, review, listing, service, refresh, update
   const latest = listing.requests.find(item => item.request.request_id === review.request.request_id);
   return <FeedbackProvider queue={queue} storageKey={`review:${scope.repository}:${scope.workspace}:${review.request.request_id}:${review.pin.version}`}>
     <ReviewSessionView scope={scope} review={review} listing={listing} latest={latest} service={service} selected={selected} forms={forms} progress={progress}
-      responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error} sidebarOpen={sidebarOpen} contents={contents}
+      responses={responses} submitted={submitted} busy={busy} dirty={dirty} notice={notice} error={error} sidebarOpen={sidebarOpen} contents={contents} documentZen={documentZen}
       actions={{ select: setSelected, toggleSidebar() { setSidebarOpen(open => !open); }, retryContents: () => void contentsCache.retryFailed(), answer, progress(id, checked) { setProgress(current => checked ? [...new Set([...current, id])] : current.filter(item => item !== id)); }, saveDraft: () => void save(false), submit: id => void save(true, id), retry: value => void retry(value), refresh }} />
   </FeedbackProvider>;
 }
