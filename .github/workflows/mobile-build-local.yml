@@ -28,6 +28,7 @@ jobs:
           node-version: '22'
       - run: corepack enable && corepack prepare pnpm@12.18.0 --activate
       - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint:ui
       - run: pnpm --dir mobile run check
       - run: pnpm exec vitest run tests/mobile-*.test.ts tests/page-storage.test.ts tests/connections.test.ts tests/workspace-cache.test.ts tests/document-cache.test.ts
       - name: Generate the native project

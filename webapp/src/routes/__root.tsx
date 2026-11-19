@@ -5,6 +5,7 @@ import { FeedbackProvider } from '../features/feedback/FeedbackProvider';
 import { Customization } from '../features/customization/Customization';
 import { AppSettingsView } from '../views/AppSettings.view';
 import { MobileHandoff } from '../features/mobile/MobileHandoff';
+import { PresentationProvider } from '../presentation/Presentation';
 
 export const Route = createRootRoute({
   head: () => ({
@@ -20,7 +21,7 @@ export const Route = createRootRoute({
 function Root() {
   // Keep the initial client tree identical to the static shell even if the
   // index route's lazy chunk resolves before React hydrates the document.
-  return <RootDocument><ClientOnly fallback={<AppPending />}><RootContent /></ClientOnly></RootDocument>;
+  return <RootDocument><ClientOnly fallback={<AppPending />}><PresentationProvider><RootContent /></PresentationProvider></ClientOnly></RootDocument>;
 }
 
 function RootContent() {

@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "features": [{
+    "id": "documents",
+    "host": "webapp/src/features/documents/DocumentBrowser.tsx",
+    "hooks": "webapp/src/features/documents/Documents.hooks.ts",
+    "hook": "useDocumentsFeature",
+    "copy": "webapp/src/features/documents/Documents.copy.ts",
+    "ownedViews": ["webapp/src/features/documents/DocumentsWorkspace.view.tsx", "webapp/src/features/documents/DocumentsReading.view.tsx"],
+    "presentations": [
+      { "id": "documents", "kind": "page", "file": "webapp/src/features/documents/Documents.presentation.tsx", "export": "DocumentsPresentation" },
+      { "id": "documents.navigation", "kind": "region", "file": "webapp/src/features/documents/DocumentNavigation.tsx", "export": "DocumentNavigation" }
+    ],
+    "scenarios": "webapp/stories/DocumentsSurfaces.stories.tsx"
+  }],
+  "routes": {
+    "webapp/src/routes/documents.tsx": { "feature": "documents" },
+    "webapp/src/routes/documents.$documentId.tsx": { "feature": "documents", "parent": "webapp/src/routes/documents.tsx" }
+  },
+  "legacyRoutes": {
+    "webapp/src/routes/index.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing index redirect; replace with cross-workspace Reviews home after contract batch." },
+    "webapp/src/routes/beads.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing Kanban; three-surface task browsing is subsequent experience work." },
+    "webapp/src/routes/reviews.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing review inbox/session migration follows Documents pilot." },
+    "webapp/src/routes/reviews.$requestId.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing review detail uses parent review controller; migrate with review inbox." }
+  },
+  "exceptions": []
+}

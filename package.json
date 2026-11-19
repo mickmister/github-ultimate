@@ -10,6 +10,9 @@
     "github-ultimate-form": "bin/github-ultimate-form"
   },
   "scripts": {
+    "lint:ui": "ol check --policy-dir .github/openlint --preset ui-mobile-first --target . src hosted webapp/src",
+    "lint:ui:changed": "ol check --policy-dir .github/openlint --preset ui-mobile-first --changed --target .",
+    "test:ui-policy": "vitest run tests/ui-policy.test.ts tests/presentation-geometry.test.ts",
     "customization:audit": "ast-grep scan --rule .github/openlint/rules/ast-grep/customization-native-controls.yml webapp/src && ast-grep scan --rule .github/openlint/rules/ast-grep/customization-inline-styles.yml webapp/src",
     "lint:tsx-view-boundary": "ast-grep scan --rule .github/openlint/rules/ast-grep/no-intrinsic-jsx-outside-view.yml src hosted webapp/src && ast-grep scan --rule .github/openlint/rules/ast-grep/no-hooks-in-view.yml src hosted webapp/src",
     "lint:tsx-view-boundary:changed": "OPENLINT_POLICY_DIR=.github/openlint ol check --changed --preset tsx-view-boundary --target .",
@@ -52,6 +55,7 @@
   },
   "devDependencies": {
     "@ast-grep/cli": "0.45.3",
+    "@mickmister/openlint": "0.1.0",
     "@playwright/test": "^1.56.1",
     "@storybook/html-vite": "^10.6.6",
     "@types/chrome": "^0.1.24",

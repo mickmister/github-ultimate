@@ -6,10 +6,11 @@ import type { DocumentBrowserActions, DocumentBrowserModel } from '../src/featur
 import { createMockAppHooks, mockDocumentContents, mockSnapshot, readyModel } from './documents.fixtures';
 import { ancestorFolders } from '../src/features/documents/document-tree';
 import { isMarkdown } from '../src/features/documents/document-format';
+import { PresentationProvider } from '../src/presentation/Presentation';
 
 function InteractiveBrowser() {
   const appHooks = useMemo(createMockAppHooks, []);
-  return <StrictMode><DocumentBrowser appHooks={appHooks} /></StrictMode>;
+  return <StrictMode><PresentationProvider value={{ surface: 'desktop', orientation: 'landscape' }}><DocumentBrowser appHooks={appHooks} /></PresentationProvider></StrictMode>;
 }
 
 // Presentation fixtures keep inputs and document selection interactive without
@@ -34,7 +35,9 @@ function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }
     setDocumentMode(documentMode) { patch({ documentMode }); },
     setDocumentFullscreen(documentFullscreen) { patch({ documentFullscreen }); },
   };
-  return <DocumentBrowserView model={model} actions={actions} />;
+  // Keep historical desktop scenarios stable; DocumentsSurfaces exercises the
+  // actual adaptive resolver and all six device/orientation configurations.
+  return <PresentationProvider value={{ surface: 'desktop', orientation: 'landscape' }}><DocumentBrowserView model={model} actions={actions} /></PresentationProvider>;
 }
 
 const meta = {

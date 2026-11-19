@@ -47,6 +47,7 @@ jobs:
       - run: pnpm run check
       - run: pnpm run webapp:check
       - run: pnpm run lint:tsx-view-boundary
+      - run: pnpm run lint:ui
       # Unit build tests intentionally overwrite default outputs. Build the
       # publishable assets afterwards so fixtures cannot enter a release.
       - run: pnpm test

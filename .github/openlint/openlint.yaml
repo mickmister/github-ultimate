@@ -26,6 +26,10 @@ rules:
       prefixes: "{{prefixes}}"
 
 packs:
+  device-surfaces:
+    description: Three-surface routes, feature hooks and classified copy.
+    rules:
+      - ui/device-surfaces
   tsx-view-boundary:
     description: Keep intrinsic JSX in *.view.tsx files and hooks out of view files.
     rules:
@@ -47,6 +51,14 @@ packs:
       - no-ui-class-prefixes
 
 presets:
+  ui-mobile-first:
+    integrations:
+      - device-surfaces
+      - tsx-no-intrinsic-jsx-outside-view
+      - tsx-no-hooks-in-view
+    packs:
+      - device-surfaces
+      - tsx-view-boundary
   tsx-view-boundary:
     description: Separate TSX presentation from stateful controller components.
     integrations:
@@ -65,6 +77,33 @@ presets:
       - ui-customization-fences
 
 integrations:
+  device-surfaces:
+    enabled: true
+    required: true
+    run_by_default: false
+    rules: [ui/device-surfaces]
+    spec:
+      id: device-surfaces
+      schema_version: 1
+      kind: shell
+      adapter: generic-json
+      rule_support: rule_files
+      availability: { command: node }
+      shell:
+        cwd: target_root
+        timeout_secs: 90
+        command: node --experimental-strip-types scripts/lint-ui.ts
+      output:
+        parser: json_diagnostics
+        source: stdout
+        diagnostics:
+          items: $[*]
+          rule_id: { path: $.rule_id }
+          message: { path: $.message }
+          severity: { path: $.severity, default: error }
+          file: { path: $.file }
+          line: { path: $.line }
+          column: { path: $.column }
   tsx-no-intrinsic-jsx-outside-view:
     enabled: true
     required: true
