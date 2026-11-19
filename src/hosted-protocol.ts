@@ -3,6 +3,7 @@ import { pageChannel } from './bridge-channels';
 import { gitReadSchemas } from './git-reads';
 import { workspaceNavigationSchema } from './workspace-navigation';
 import { s3HostedSchemas } from './s3-protocol';
+import { inferenceHostedSchemas } from './inference-protocol';
 import { reviewWriteSchema } from './review-protocol';
 import { reviewProgressSchema } from './review-progress';
 import { documentCacheSchema } from './document-cache';
@@ -17,11 +18,14 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('saveNavigation'), navigation: workspaceNavigationSchema }).strict(),
   z.object({ operation: z.literal('repositories'), id: z.string().uuid() }).strict(),
   z.object({ operation: z.literal('probe'), id: z.string().uuid(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
+  z.object({ operation: z.literal('agentRepositories'), id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive() }).strict(),
+  z.object({ operation: z.literal('agentProbe'), id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
   documentCacheSchema,
   reviewWriteSchema,
   reviewProgressSchema,
   ...s3HostedSchemas,
+  ...inferenceHostedSchemas,
   z.object({ operation: z.literal('kvSnapshot') }).strict(),
   z.object({ operation: z.literal('kvClear') }).strict(),
   z.object({ operation: z.literal('kvSet'), key: z.string().max(256), value: z.string().max(4096) }).strict(),
