@@ -65,7 +65,7 @@ function renderCards(container: HTMLElement, active: () => boolean, available: r
 }
 
 async function chooser(available: HostedConnection[], signal: AbortSignal) {
-  root.append(element('h1', 'Workspaces'), element('p', 'Choose a workspace to open its engineering apps.', 'muted'));
+  root.append(element('h1', 'Workspaces'));
   const controls = element('div', undefined, 'toolbar'), refresh = element('button', 'Refresh workspaces');
   controls.append(refresh); root.append(controls);
   const cards = element('div', undefined, 'workspace-grid'), notices = element('details', undefined, 'discovery-notices'), more = element('button', 'Load more workspaces');
@@ -83,7 +83,7 @@ async function chooser(available: HostedConnection[], signal: AbortSignal) {
       notices.replaceChildren(element('summary', `${catalog!.incomplete} incomplete namespace(s) · ${catalog!.notices.length} discovery notice(s)`));
       notices.open = catalog!.notices.length > 0;
       for (const message of catalog!.notices) notices.append(element('p', message));
-      report(`${catalog!.workspaces.size} available workspace(s).${catalog!.queue.length ? ' More repositories or namespaces remain; load another bounded batch.' : ''}${catalog!.incomplete ? ' Namespaces without a valid required manifest are omitted.' : ''}${catalog!.notices.length ? ' Some access routes need attention; see discovery notices below.' : ''}`);
+      report(`${catalog!.workspaces.size} workspace(s).${catalog!.queue.length ? ' More results available.' : ''}${catalog!.incomplete ? ' Incomplete namespaces omitted.' : ''}${catalog!.notices.length ? ' Some access routes need attention; see discovery notices.' : ''}`);
       if (!catalog!.workspaces.size) cards.append(element('p', 'No valid workspaces found in this batch. Check connection access in Settings or load more results.', 'empty'));
     } catch (error) { if (active()) report(error instanceof Error ? error.message : 'Workspace discovery failed.'); }
     finally { busy = false; refresh.disabled = more.disabled = false; }

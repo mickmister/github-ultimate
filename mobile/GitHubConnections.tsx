@@ -10,6 +10,7 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
   const [installations, setInstallations] = useState<Record<string, Installation[]>>({});
   const [repositories, setRepositories] = useState<Record<string, Repository[]>>({});
   const [busy, setBusy] = useState(false), [error, setError] = useState('');
+  const [setupHelp, setSetupHelp] = useState(false);
   const [active, setActive] = useState(AppState.currentState === 'active');
   const reload = async () => setConnections(await github.settings({ operation: 'list' }) as PublicConnection[]);
   useEffect(() => {
@@ -33,13 +34,13 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
   const action = (request: ConnectionRequest, receive?: (result: unknown) => void) => () => { void run(request, receive); };
   return <View style={styles.section}>
     <Text accessibilityRole="header">GitHub App connections</Text>
-    <Text>Choose your own GitHub Apps. Tokens and device codes stay in native secure storage. Each connection needs a separate deployment grant.</Text>
-    <Text>{githubEnabled ? 'GitHub sign-in, repository reads, review drafts, submission and workflow progress are enabled in this build.' : 'GitHub connections are disabled in this release. Apply the GitHub-enabled preview update to sign in.'}</Text>
+    {!githubEnabled && <Text>GitHub connections are disabled in this release. Apply the GitHub-enabled preview update to sign in.</Text>}
     <TextInput accessibilityLabel="Connection name" placeholder="Connection name" value={name} onChangeText={setName} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App ID" placeholder="GitHub App ID" keyboardType="number-pad" value={appId} onChangeText={setAppId} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App client ID" placeholder="GitHub App client ID" autoCapitalize="none" autoCorrect={false} value={clientId} onChangeText={setClientId} style={styles.input} />
     <Button title="Add GitHub connection" disabled={busy || !githubEnabled || !name.trim() || !/^\d+$/.test(appId) || !clientId.trim()} onPress={action({ operation: 'add', name: name.trim(), appId: Number(appId), clientId: clientId.trim() }, () => { setName(''); setAppId(''); setClientId(''); })} />
-    <Text>The App must enable device flow and expiring user tokens, and be installed on the repositories you use. Reading needs Contents read; saving drafts and responses needs Contents read and write. Workflow delivery needs Actions write on the trusted source repository. No App private key or client secret is needed.</Text>
+    <Button title={setupHelp ? 'Hide App setup help' : 'App setup help'} onPress={() => setSetupHelp(value => !value)} />
+    {setupHelp && <Text>The App must enable device flow and expiring user tokens, and be installed on the repositories you use. Reading needs Contents read; saving drafts and responses needs Contents read and write. Workflow delivery needs Actions write on the trusted source repository. No App private key or client secret is needed. Tokens and device codes stay in native secure storage. Each connection needs a separate deployment grant.</Text>}
     <Button title="Manage GitHub installations" onPress={() => { void Linking.openURL('https://github.com/settings/installations').catch(() => setError('Could not open the system browser.')); }} />
     {error ? <Text accessibilityRole="alert">{error}</Text> : null}
     {connections.length === 0 && <Text>No GitHub connections yet.</Text>}
@@ -70,7 +71,7 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
       <Button title="Disconnect GitHub connection" disabled={busy} onPress={action({ operation: 'disconnect', id: connection.id }, () => { setInstallations(current => ({ ...current, [connection.id]: [] })); setRepositories(current => ({ ...current, [connection.id]: [] })); })} />
       <Button title="Remove GitHub connection" disabled={busy} onPress={action({ operation: 'remove', id: connection.id })} />
     </View>)}
-    <Text>Disconnect removes local credentials and grants. Revoke upstream authorization in GitHub settings if needed; other connections to the same App may share that authorization. Reload the hosted page after granting access.</Text>
+    <Text>Disconnect removes credentials and grants from this device; GitHub authorization remains. Revoke it in GitHub settings if needed; other connections may share it. Reload the hosted page after granting access.</Text>
   </View>;
 }
 const styles = StyleSheet.create({ section: { paddingVertical: 12, gap: 8 }, connection: { borderWidth: 1, padding: 8, gap: 8 }, input: { borderWidth: 1, padding: 10 } });

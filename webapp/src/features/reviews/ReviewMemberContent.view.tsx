@@ -22,10 +22,10 @@ export function ReviewMemberContentView({ scope, review, member, answer, submitt
   const target = reviewTarget(scope, review, member, markdown ? 'rendered-markdown' : 'source');
   return <ReviewDocument title={member.label} busy={busy} onSaveDraft={onSaveDraft} formStatus={formStatus}><section aria-label="Pinned document review"><div className="review-progress">
     <ReviewCheckbox label="I have reviewed this item" checked={reviewed} disabled={busy} descriptionId="review-progress-help" onChange={onReviewed} />
-    <p id="review-progress-help" className="muted">Optional progress marker. Save a draft or submit to record it. Leaving it unchecked does not block submission or authorize code changes.</p>
+    <details><summary>Review progress (optional)</summary><p id="review-progress-help" className="muted">Save a draft or submit to record this marker. It does not block submission or authorize code changes.</p></details>
   </div><div role="group" aria-label="Document comparison view"><button aria-pressed={mode === 'full'} onClick={() => setMode('full')}>Full document</button>
     {member.baseline && <><button aria-pressed={mode === 'changes'} onClick={() => setMode('changes')}>Changes</button><button aria-pressed={mode === 'baseline'} onClick={() => setMode('baseline')}>Baseline</button></>}</div>
-    <p className="muted">{member.target.resource}</p>
+    <details><summary>Item details</summary><code>{member.target.resource}</code></details>
     {mode !== 'full' && (baselineError ? <p role="alert">{baselineError}</p> : baseline === null ? <p role="status">Loading pinned baseline…</p> : mode === 'changes'
       ? <DocumentChanges path={member.target.resource} before={baseline} after={content} />
       : markdown ? <MarkdownDocument content={baseline} /> : <MonacoDocument path={member.baseline!.resource} content={baseline} />)}

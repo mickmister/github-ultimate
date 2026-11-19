@@ -23,6 +23,7 @@ export default function App() {
   const [bootstrap, setBootstrap] = useState('');
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(true);
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [reload, setReload] = useState(0);
   const [navigation, setNavigation] = useState({ key: '', back: false, forward: false });
   const [settingsBusy, setSettingsBusy] = useState(true);
@@ -115,16 +116,16 @@ export default function App() {
       <Button title="Reload" disabled={!entry} onPress={() => { lifecycle.reset(); setBootstrap(''); webView.current?.reload(); }} /></View>
     {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
       <Text accessibilityRole="header">Alohak</Text>
-      <Text selectable>Mobile build commit: {String(Constants.expoConfig?.extra?.buildCommit ?? 'unavailable')}</Text>
       <Text>Approve only a deployment whose scripts you trust. GitHub credentials stay in native secure storage; page storage and GitHub approvals are independent.</Text>
-      <Text>Paste the complete hosted deployment URL supplied by your agent. This is the website URL, not an Expo installation link. The confirmed URL and your approvals are saved on this device.</Text>
+      <Text>Deployment URL (website, not Expo installation link)</Text>
       <TextInput accessibilityLabel="HTTPS entry URL" editable={!settingsBusy} autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/app/" style={styles.input} />
       <Button title={settingsBusy ? 'Loading or saving deployment…' : 'Set deployment'} disabled={settingsBusy} onPress={configure} />
       {grant && <><Text>Fixture grant: {grant.origin}{grant.subpath}</Text>
         <View style={styles.toolbar}><Switch accessibilityLabel="Approve fixture bridge" disabled={settingsBusy} value={approved} onValueChange={value => permission(value, storageApproved)} /><Text>Approve fixture bridge</Text></View>
         <Text>Page data namespace: {grant.origin}. All approved paths on this origin share data; no GitHub/S3 credentials belong here.</Text>
         <View style={styles.toolbar}><Switch accessibilityLabel="Approve page storage" disabled={settingsBusy} value={storageApproved} onValueChange={value => permission(approved, value)} /><Text>Approve page storage</Text></View></>}
-      <Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text>
+      <Button title={showDiagnostics ? 'Hide diagnostics' : 'Diagnostics'} onPress={() => setShowDiagnostics(value => !value)} />
+      {showDiagnostics && <><Text selectable>Mobile build commit: {String(Constants.expoConfig?.extra?.buildCommit ?? 'unavailable')}</Text><Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text></>}
       <GitHubConnections grant={grant} />
       <VdConnections grant={grant} />
       <CacheSettings />

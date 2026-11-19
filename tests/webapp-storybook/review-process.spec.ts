@@ -11,7 +11,9 @@ test('production process context shows pinned/current evidence and retries the s
   const receipts = page.getByRole('list', { name: 'Submission receipts' });
   await expect(receipts).toContainText('Response saved · dispatch failed');
   await expect(receipts).toContainText('Missing installed-source Actions write route');
+  await receipts.getByText('Submission details', { exact: true }).click();
   const id = await receipts.locator('strong').innerText();
+  expect(id).toMatch(/^response-/);
   await page.getByRole('button', { name: 'Retry delivery of saved response', exact: true }).click();
   await expect(receipts).toContainText('dispatch dispatched');
   await expect(receipts).toContainText('start unknown');
