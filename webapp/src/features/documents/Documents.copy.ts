@@ -27,6 +27,7 @@ export const copy = defineCopy({
   readonly: { purpose: 'status', text: 'Read-only' },
   pages: { purpose: 'label', text: 'Workspace pages' },
   tasks: { purpose: 'action', text: 'Beads Kanban' },
+  runs: { purpose: 'action', text: 'Workflow runs' },
   reviews: { purpose: 'action', text: 'Review requests' },
   treeAppearance: { purpose: 'label', text: 'Tree appearance' },
   density: { purpose: 'label', text: 'Tree density' },

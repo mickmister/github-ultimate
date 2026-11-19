@@ -5,7 +5,7 @@ import { writeIcons } from './icons.mjs';
 import { bundleLicenses } from './bundle-licenses.mjs';
 const browser = process.argv[2] ?? 'chrome';
 if (!['chrome', 'safari'].includes(browser)) throw new Error(`Unknown browser target: ${browser}`);
-const outdir = browser === 'safari' ? 'dist-safari' : 'dist';
+const outdir = process.env.GHU_EXTENSION_OUTDIR ?? (browser === 'safari' ? 'dist-safari' : 'dist');
 await rm(outdir, { recursive: true, force: true });
 await mkdir(outdir, { recursive: true });
 const bundled = await build({ entryPoints: ['src/content.ts', 'src/popup.ts', 'src/background.ts', 'src/connections-page.ts', 'src/hosted-content.ts'], outdir, bundle: true, format: 'iife', target: browser === 'safari' ? 'safari16.4' : 'chrome120', minify: true, legalComments: 'eof', metafile: true, loader: { '.css': 'text' } });

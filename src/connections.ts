@@ -15,6 +15,7 @@ import { BoundedReads } from './bounded-reads';
 import { nativeReadConcurrency, nativeReadResponseBytes } from './git-read-limits';
 import { documentCache, reviewCachePinsKey } from './document-cache';
 import type { VdConnections } from './vd-connections';
+import { actionPath, actionResult } from './actions-protocol';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -109,7 +110,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'actionsRead', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       if (request.operation === 'vdConnections') return this.vd?.publicConnections(documentURL) ?? [];
       const navigationSource = source.origin + source.pathname;
@@ -152,6 +153,13 @@ export class Connections {
           if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
         }
         return documentCache(this.persistentCache, scope, request, <T>(input: GitRead) => readGit(input, request.repository, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'conditional' : 'immutable')) as Promise<T>, isCurrent);
+      }
+      if (request.operation === 'actionsRead') {
+        if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('Reconnect the selected Actions connection and installation.');
+        const installation = (await this.installations(record)).find(item => item.id === request.installationId);
+        const repo = (await this.repositories(record)).find(item => item.full_name.toLowerCase() === request.repository.toLowerCase());
+        if (!repo || !installation || !['read', 'write'].includes(installation.permissions.actions ?? '')) throw new ConnectionError('Actions read access is required on this repository.');
+        return actionResult(request, await this.api(record, actionPath(request), maxMetadataBytes, 'conditional'));
       }
       if (request.operation === 'reviewProgress') {
         if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('Reconnect the original authenticated reviewer and installation to read workflow progress.');

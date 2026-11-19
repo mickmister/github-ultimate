@@ -2,6 +2,7 @@ import { cp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve, basename } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { payloadSize, previewLimit } from './publish-hosted.mjs';
+import { compressEditorAssets } from './compress-editor-assets.mjs';
 
 export async function stageHostedStorybook({ source = 'webapp/storybook-static', output = 'hosted-dist' } = {}) {
   // Validate both builds before replacing the previous staged Storybook.
@@ -16,6 +17,9 @@ export async function stageHostedStorybook({ source = 'webapp/storybook-static',
     filter: path => !path.endsWith('.map') && basename(path) !== 'project.json',
   });
   await writeFile(join(destination, 'build.json'), JSON.stringify(metadata) + '\n');
+  // Tiny staging fixtures need not contain an assets directory.
+  try { await compressEditorAssets(join(destination, 'assets')); }
+  catch (error) { if (error.code !== 'ENOENT') throw error; }
   for (const name of ['MONACO_LICENSE.txt', 'MONACO_THIRD_PARTY_NOTICES.txt']) {
     await cp(join(output, 'app', name), join(destination, name));
   }

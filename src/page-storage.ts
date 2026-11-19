@@ -23,7 +23,7 @@ export class HydratedPageStorage implements Storage {
   clear() { this.write({ operation: 'kvClear' }); }
   private write(request: PageKVRequest) {
     if (this.failure) throw this.failure;
-    if (this.stopped || this.refreshing) throw new Error('Page storage is closed or refreshing.');
+    if (this.stopped || this.refreshing) throw new Error('Page storage closed/refreshing.');
     const next = mutatePageKV(this.state, parsePageKVRequest(request));
     this.state = next;
     this.tail = this.tail.then(async () => {
@@ -39,7 +39,7 @@ export class HydratedPageStorage implements Storage {
   }
   async flush() { await this.tail; if (this.failure) throw this.failure; if (this.stopped) throw new Error('Page storage closed.'); }
   async refresh() {
-    if (this.refreshing) throw new Error('Page storage refresh already in progress.');
+    if (this.refreshing) throw new Error('Page storage refreshing.');
     this.refreshing = true;
     try { await this.flush(); const snapshot = await this.transport({ operation: 'kvSnapshot' }); if (!this.stopped) this.state = validatePageKV(snapshot); }
     finally { this.refreshing = false; }

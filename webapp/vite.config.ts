@@ -2,6 +2,7 @@ import { defineConfig } from 'vite';
 import { tanstackStart } from '@tanstack/react-start/plugin/vite';
 import react from '@vitejs/plugin-react';
 import { uiBuild } from './build-metadata';
+import { duckdbAssets } from './duckdb-assets';
 
 export default defineConfig({
   base: process.env.WEBAPP_BASE_PATH ?? '/',
@@ -10,6 +11,7 @@ export default defineConfig({
   // client hydration must instead use logical paths within hash history.
   environments: { client: { define: { 'process.env.TSS_ROUTER_BASEPATH': JSON.stringify('/') } } },
   plugins: [
+    duckdbAssets(),
     tanstackStart({
       spa: { enabled: true, prerender: { outputPath: '/index.html' } },
     }),

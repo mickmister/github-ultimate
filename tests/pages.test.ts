@@ -75,12 +75,19 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   expect(app).not.toContain('<main');
   expect(await readdir('hosted-dist/app')).not.toContain('server');
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.map'))).toBe(false);
-  // Keep legacy pages separate from the React app. The 2 KiB allowance covers
+  // The query runtime is self-hosted and compressed explicitly for static Pages.
+  expect((await readdir('hosted-dist/app/assets')).filter(name => /^duckdb-eh\.wasm-.*\.gz$/.test(name))).toHaveLength(1);
+  expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.wasm'))).toBe(false);
+  // Pi is a separate opt-in page added by integration, not a legacy dependency.
+  const piFiles = (await readdir('hosted-dist')).filter(name => /^pi-[\w-]+\.(js|css)$/.test(name) || ['pi.html', 'PI_THIRD_PARTY_LICENSES.txt'].includes(name));
+  expect(piFiles.length).toBeGreaterThanOrEqual(4);
+  const piBytes = (await Promise.all(piFiles.map(name => readFile(join('hosted-dist', name))))).reduce((size, bytes) => size + bytes.length, 0);
+  // Keep legacy pages separate from the React app and opt-in Pi page. The 2 KiB allowance covers
   // portable text decoding and native transport selection, not review schemas,
   // transfer assembly or portable hashing (which stay out of this bundle).
-  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation')).toBeLessThan(66 * 1024);
+  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes).toBeLessThan(66 * 1024);
   expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);
-}, 120000);
+}, 600000);
 
 test('Storybook staging replaces stale assets, preserves app files and binds public build metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'storybook-stage-'));

@@ -2,6 +2,7 @@ import { build } from 'esbuild';
 import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { previewDirectory, payloadSize, previewLimit } from './publish-hosted.mjs';
+import { compressEditorAssets } from './compress-editor-assets.mjs';
 
 const metadata = {
   branch: process.env.GITHUB_REF_NAME ?? execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim(),
@@ -36,7 +37,10 @@ execFileSync('pnpm', ['--dir', 'webapp', 'build'], { stdio: 'inherit', env: { ..
 // Start's server build is used only to generate the SPA shell. Publish only
 // client files: GitHub Pages does not run a server or server functions.
 await cp('webapp/dist/client', 'hosted-dist/app', { recursive: true });
+await compressEditorAssets('hosted-dist/app/assets');
 await cp('webapp/node_modules/monaco-editor/LICENSE', 'hosted-dist/app/MONACO_LICENSE.txt');
 await cp('webapp/node_modules/monaco-editor/ThirdPartyNotices.txt', 'hosted-dist/app/MONACO_THIRD_PARTY_NOTICES.txt');
+await cp('licenses/duckdb-wasm-MIT.txt', 'hosted-dist/app/DUCKDB_LICENSE.txt');
+await cp('node_modules/apache-arrow/LICENSE.txt', 'hosted-dist/app/ARROW_LICENSE.txt');
 if (await payloadSize('hosted-dist') > previewLimit) throw new Error('Hosted pages exceed the branch preview payload limit.');
 console.log(`Built hosted page for ${metadata.branch} at ${metadata.sha}`);

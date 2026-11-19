@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import mermaidUrl from '@mermaid-js/tiny/dist/mermaid.tiny.js?url';
+import mermaidUrl from 'virtual:mermaid-url';
 
 let nextDiagramId = 0;
 interface MermaidRenderer {
@@ -9,9 +9,14 @@ interface MermaidRenderer {
 
 // The official tiny build is a standalone browser script. Serve it from the
 // app's own asset base and load it only when a document contains a diagram.
-const loadMermaid = () => new Promise<MermaidRenderer>((resolve, reject) => {
+const loadMermaid = async () => {
+  const response = await fetch(mermaidUrl, { credentials: 'omit', redirect: 'error' });
+  if (!response.ok || !response.body) throw new Error('Unable to load Mermaid.');
+  const code = await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).blob();
+  const url = URL.createObjectURL(new Blob([code], { type: 'text/javascript' }));
+  try { return await new Promise<MermaidRenderer>((resolve, reject) => {
   const script = document.createElement('script');
-  script.src = mermaidUrl;
+  script.src = url;
   script.onload = () => {
     try {
       const mermaid = (window as Window & { mermaid?: MermaidRenderer }).mermaid;
@@ -26,7 +31,8 @@ const loadMermaid = () => new Promise<MermaidRenderer>((resolve, reject) => {
   };
   script.onerror = () => { script.remove(); reject(new Error('Unable to load Mermaid.')); };
   document.head.append(script);
-});
+  }); } finally { URL.revokeObjectURL(url); }
+};
 let renderer: ReturnType<typeof loadMermaid> | undefined;
 
 export async function renderDocumentDiagrams(preview: HTMLElement, signal: AbortSignal): Promise<void> {
