@@ -75,15 +75,27 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   expect(app).not.toContain('<main');
   expect(await readdir('hosted-dist/app')).not.toContain('server');
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.map'))).toBe(false);
-  // Keep legacy pages separate from the React app. The 2 KiB allowance covers
+  // The query runtime is self-hosted and compressed explicitly for static Pages.
+  expect((await readdir('hosted-dist/app/assets')).filter(name => /^duckdb-eh\.wasm-.*\.gz$/.test(name))).toHaveLength(1);
+  expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.wasm'))).toBe(false);
+  // Keep legacy pages separate from the React app and opt-in Pi page. The 2 KiB allowance covers
   // portable text decoding and native transport selection, not review schemas,
   // transfer assembly or portable hashing (which stay out of this bundle).
   // Pi is an independently bundled optional page, not part of the legacy client.
-  const optionalPi = (await readdir('hosted-dist')).filter(name => /^pi-[A-Z0-9]+\.(js|css)$/.test(name) || name === 'pi.html' || name === 'PI_THIRD_PARTY_LICENSES.txt');
-  const piBytes = (await Promise.all(optionalPi.map(name => readFile(join('hosted-dist', name))))).reduce((total, file) => total + file.byteLength, 0);
+  const piRedirect = await readFile('hosted-dist/pi.html', 'utf8');
+  const piBytes = await payloadSize('hosted-dist/pi') + Buffer.byteLength(piRedirect);
   expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes).toBeLessThan(66 * 1024);
   expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);
-}, 120000);
+  // The optional agent runtime and its licenses stay in a separately bounded
+  // directory, never shared with pages that do not run an agent.
+  expect(piBytes).toBeLessThan(768 * 1024);
+  expect(piRedirect).toContain('url=./pi/index.html');
+  const pi = await readFile('hosted-dist/pi/index.html', 'utf8');
+  expect(pi).toMatch(/src="\.\/pi-[A-Z0-9]+\.js"/);
+  expect(pi).toContain('href="../index.html"');
+  expect(await readdir('hosted-dist/pi')).toContain('THIRD_PARTY_LICENSES.txt');
+  expect((await readdir('hosted-dist')).some(name => /^pi-.*\.(?:js|css)$/.test(name))).toBe(false);
+}, 600000);
 
 test('Storybook staging replaces stale assets, preserves app files and binds public build metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'storybook-stage-'));

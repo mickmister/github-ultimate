@@ -113,7 +113,7 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await expect(page.locator('#status')).toContainText('Credentials refreshed');
   await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
-  await expect(page.locator('#status')).toContainText('Repository read succeeded');
+  await expect(page.locator('#status')).toContainText('Repository Git ref read succeeded');
   await expect(page.locator('body')).not.toContainText('ghu_browser_secret');
   await expect(page.locator('body')).not.toContainText('ghr_browser_secret');
   await expect(page.locator('body')).not.toContainText('private-device-secret');
@@ -127,7 +127,7 @@ test('packaged settings page authenticates, reads privately, refreshes, persists
   await expect(first).toContainText('Signed in as mickmister');
   await first.getByLabel('Repository to read').fill('mickmister/workspace-storage');
   await first.getByRole('button', { name: 'Read repository', exact: true }).click();
-  await expect(page.locator('#status')).toContainText('Repository read succeeded');
+  await expect(page.locator('#status')).toContainText('Repository Git ref read succeeded');
 
   await fillApp(page, 'Second connection');
   await page.getByRole('button', { name: 'Add connection', exact: true }).click();
@@ -251,9 +251,9 @@ test('hosted branch page reads through an approved connection and revocation tak
   expect(shell).not.toContain('Choose your workspace');
   const appPath = shell.match(/href="([^"]+)assets\/[^" ]+\.css"/)![1];
   const modern = await context.newPage();
+  await modern.setViewportSize({ width: 1440, height: 900 });
   const pageErrors: string[] = []; modern.on('pageerror', error => pageErrors.push(error.message));
   const workerURLs: string[] = []; modern.on('worker', worker => workerURLs.push(worker.url()));
-  await modern.setViewportSize({ width: 1440, height: 900 });
   await modern.goto('https://mickmister.github.io' + appPath);
   await expect(modern.getByRole('heading', { name: 'Documents', exact: true, level: 1 })).toBeVisible();
   await expect(modern.getByRole('status')).toContainText('Connected. Choose a repository');

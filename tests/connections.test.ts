@@ -59,6 +59,26 @@ test('Pi repository tools reject a changed GitHub identity or installation befor
   expect(calls.slice(count).every(call => !call.url.includes('/repos/outside/'))).toBe(true);
 });
 
+test('Actions reads enforce installation, repository, Actions permission and original page grant', async () => {
+  const connection = await login();
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin: 'https://example.test', subpath: '/app/' });
+  const request = { operation: 'actionsRead', id: connection.id, installationId: 1, repository: 'mickmister/workspace-storage', run: 10, attempt: 2, kind: 'jobs', page: 1 };
+  apiOverride = url => url.includes('/actions/runs/10/attempts/2/jobs?') ? Response.json({ total_count: 0, jobs: [] }) : undefined;
+  expect(await broker.handleHosted('https://example.test/app/', request)).toEqual({ total_count: 0, jobs: [] });
+  await expect(broker.handleHosted('https://example.test/sibling/', request)).rejects.toThrow('approved');
+  await expect(broker.handleHosted('https://example.test/app/', { ...request, installationId: 2 })).rejects.toThrow('installation');
+  await expect(broker.handleHosted('https://example.test/app/', { ...request, repository: 'other/private' })).rejects.toThrow('Actions read');
+  permissions = { contents: 'read', metadata: 'read' };
+  // New broker instance avoids the installation response cache from the allowed read.
+  const fresh = new Connections(store, vi.fn(async input => {
+    const url = String(input);
+    if (url.includes('/user/installations?')) return Response.json({ installations: [{ id: 1, app_id: defaultClient.appId, account: { login: 'mickmister' }, permissions }] });
+    throw Error('Forbidden request must stop at permission check.');
+  }), () => clock);
+  await expect(fresh.handleHosted('https://example.test/app/', request)).rejects.toThrow();
+});
+
 async function nativeReads() {
   const connection = await login(), origin = 'https://example.test';
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });

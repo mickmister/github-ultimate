@@ -6,14 +6,24 @@
     "hooks": "webapp/src/features/documents/Documents.hooks.ts",
     "hook": "useDocumentsFeature",
     "copy": "webapp/src/features/documents/Documents.copy.ts",
-    "ownedViews": ["webapp/src/features/documents/DocumentsWorkspace.view.tsx", "webapp/src/features/documents/DocumentsReading.view.tsx"],
+    "ownedViews": ["webapp/src/features/documents/DocumentsWorkspace.view.tsx", "webapp/src/features/documents/DocumentsReading.view.tsx", "webapp/src/features/documents/DocumentTreeAppearance.view.tsx"],
     "presentations": [
       { "id": "documents", "kind": "page", "file": "webapp/src/features/documents/Documents.presentation.tsx", "export": "DocumentsPresentation" },
       { "id": "documents.navigation", "kind": "region", "file": "webapp/src/features/documents/DocumentNavigation.tsx", "export": "DocumentNavigation" }
     ],
     "scenarios": "webapp/stories/DocumentsSurfaces.stories.tsx"
+  }, {
+    "id": "runs",
+    "host": "webapp/src/features/runs/WorkflowRuns.tsx",
+    "hooks": "webapp/src/features/runs/WorkflowRuns.hooks.ts",
+    "hook": "useWorkflowRunsFeature",
+    "copy": "webapp/src/features/runs/WorkflowRuns.copy.ts",
+    "ownedViews": ["webapp/src/features/runs/WorkflowRuns.view.tsx"],
+    "presentations": [{ "id": "runs", "kind": "page", "file": "webapp/src/features/runs/WorkflowRuns.presentation.tsx", "export": "WorkflowRunsPresentation" }],
+    "scenarios": "webapp/stories/WorkspaceRuns.stories.tsx"
   }],
   "routes": {
+    "webapp/src/routes/runs.tsx": { "feature": "runs" },
     "webapp/src/routes/documents.tsx": { "feature": "documents" },
     "webapp/src/routes/documents.$documentId.tsx": { "feature": "documents", "parent": "webapp/src/routes/documents.tsx" }
   },

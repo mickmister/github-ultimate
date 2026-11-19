@@ -7,6 +7,7 @@ import { inferenceHostedSchemas } from './inference-protocol';
 import { reviewWriteSchema } from './review-protocol';
 import { reviewProgressSchema } from './review-progress';
 import { documentCacheSchema } from './document-cache';
+import { actionsReadSchema } from './actions-protocol';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -24,6 +25,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   documentCacheSchema,
   reviewWriteSchema,
   reviewProgressSchema,
+  actionsReadSchema,
   ...s3HostedSchemas,
   ...inferenceHostedSchemas,
   z.object({ operation: z.literal('kvSnapshot') }).strict(),

@@ -13,6 +13,7 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as BeadsRouteImport } from './routes/beads'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ReviewsRouteImport } from './routes/reviews'
+import { Route as RunsRouteImport } from './routes/runs'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents.$documentId'
 import { Route as ReviewsRequestIdRouteImport } from './routes/reviews.$requestId'
 
@@ -36,6 +37,11 @@ const ReviewsRoute = ReviewsRouteImport.update({
   path: '/reviews',
   getParentRoute: () => rootRouteImport,
 } as any)
+const RunsRoute = RunsRouteImport.update({
+  id: '/runs',
+  path: '/runs',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/$documentId',
   path: '/$documentId',
@@ -52,6 +58,7 @@ export interface FileRoutesByFullPath {
   '/beads': typeof BeadsRoute
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
+  '/runs': typeof RunsRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/reviews/$requestId': typeof ReviewsRequestIdRoute
 }
@@ -60,6 +67,7 @@ export interface FileRoutesByTo {
   '/beads': typeof BeadsRoute
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
+  '/runs': typeof RunsRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/reviews/$requestId': typeof ReviewsRequestIdRoute
 }
@@ -69,6 +77,7 @@ export interface FileRoutesById {
   '/beads': typeof BeadsRoute
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
+  '/runs': typeof RunsRoute
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/reviews/$requestId': typeof ReviewsRequestIdRoute
 }
@@ -79,6 +88,7 @@ export interface FileRouteTypes {
     | '/beads'
     | '/documents'
     | '/reviews'
+    | '/runs'
     | '/documents/$documentId'
     | '/reviews/$requestId'
   fileRoutesByTo: FileRoutesByTo
@@ -87,6 +97,7 @@ export interface FileRouteTypes {
     | '/beads'
     | '/documents'
     | '/reviews'
+    | '/runs'
     | '/documents/$documentId'
     | '/reviews/$requestId'
   id:
@@ -95,6 +106,7 @@ export interface FileRouteTypes {
     | '/beads'
     | '/documents'
     | '/reviews'
+    | '/runs'
     | '/documents/$documentId'
     | '/reviews/$requestId'
   fileRoutesById: FileRoutesById
@@ -104,6 +116,7 @@ export interface RootRouteChildren {
   BeadsRoute: typeof BeadsRoute
   DocumentsRoute: typeof DocumentsRouteWithChildren
   ReviewsRoute: typeof ReviewsRouteWithChildren
+  RunsRoute: typeof RunsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -134,6 +147,13 @@ declare module '@tanstack/react-router' {
       path: '/reviews'
       fullPath: '/reviews'
       preLoaderRoute: typeof ReviewsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/runs': {
+      id: '/runs'
+      path: '/runs'
+      fullPath: '/runs'
+      preLoaderRoute: typeof RunsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/documents/$documentId': {
@@ -181,6 +201,7 @@ const rootRouteChildren: RootRouteChildren = {
   BeadsRoute: BeadsRoute,
   DocumentsRoute: DocumentsRouteWithChildren,
   ReviewsRoute: ReviewsRouteWithChildren,
+  RunsRoute: RunsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
