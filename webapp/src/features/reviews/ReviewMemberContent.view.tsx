@@ -13,14 +13,14 @@ import { submissionNotice } from './submission-notice';
 import type { ReviewMemberContentProps } from './ReviewMemberContent';
 
 interface Props extends ReviewMemberContentProps { content: string | null; baseline: string | null; form: TaskForm | null; error: string; baselineError: string; mode: 'full' | 'baseline' | 'changes'; setMode(mode: 'full' | 'baseline' | 'changes'): void }
-export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, preview, onAnswer, onSubmit, onNextForm, onSubmitReview, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode }: Props) {
+export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, preview, onAnswer, onSubmit, onNextForm, onSubmitReview, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode, documentZen }: Props) {
   if (error) return <p role="alert">{error}</p>;
   if (content === null) return <p role="status">Loading {member.label}…</p>;
   if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onNextForm={onNextForm} onSubmitReview={onSubmitReview} onSaveDraft={onSaveDraft} formStatus={formStatus} submissionNotice={submissionNotice(review.request)} feedbackTarget={preview ? undefined : reviewTarget(scope, review, member, 'rendered-form')} />;
   if (member.kind !== 'document') return null;
   const markdown = isMarkdown(member.target.resource);
   const target = reviewTarget(scope, review, member, markdown ? 'rendered-markdown' : 'source');
-  return <ReviewDocument title={member.label} busy={busy} onSaveDraft={onSaveDraft} formStatus={formStatus}><section aria-label="Pinned document review"><div className="review-progress">
+  return <ReviewDocument title={member.label} busy={busy} onSaveDraft={onSaveDraft} formStatus={formStatus} zen={documentZen.member === member.id} onZen={open => documentZen.setMember(open ? member.id : null)}><section aria-label="Pinned document review"><div className="review-progress">
     <ReviewCheckbox label="I have reviewed this item" checked={reviewed} disabled={busy} descriptionId="review-progress-help" onChange={onReviewed} />
     <p id="review-progress-help" className="muted">Optional progress marker. Save a draft or submit to record it. Leaving it unchecked does not block submission or authorize code changes.</p>
   </div><div role="group" aria-label="Document comparison view"><button aria-pressed={mode === 'full'} onClick={() => setMode('full')}>Full document</button>

@@ -6,9 +6,11 @@ import type { WorkspaceScope } from '../../app-hooks/contracts';
 import { ReviewMemberContentView } from './ReviewMemberContent.view';
 import type { ReviewFormProps } from './ReviewForm.view';
 import { reviewResourceKey, type ReviewContents } from './review-contents';
+import type { ReviewDocumentZen } from './ReviewPacket.hooks';
 
 export interface ReviewMemberContentProps {
   scope: WorkspaceScope; review: OpenReview; member: ReviewMember; contents: ReviewContents;
+  documentZen: ReviewDocumentZen;
   answer?: ReviewArtifact['forms'][number]; submitted: boolean; busy: boolean;
   preview?: boolean;
   reviewed: boolean; onReviewed(checked: boolean): void;
