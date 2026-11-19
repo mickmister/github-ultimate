@@ -255,7 +255,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   const pageErrors: string[] = []; modern.on('pageerror', error => pageErrors.push(error.message));
   const workerURLs: string[] = []; modern.on('worker', worker => workerURLs.push(worker.url()));
   await modern.goto('https://mickmister.github.io' + appPath);
-  await expect(modern.getByRole('heading', { name: 'Documents', exact: true }).first()).toBeVisible();
+  await expect(modern.getByRole('heading', { name: 'Documents', exact: true, level: 1 })).toBeVisible();
   await expect(modern.getByRole('status')).toContainText('Connected. Choose a repository');
   await expect(modern.getByLabel('Storage repository')).toHaveValue('');
   await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
@@ -311,6 +311,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(modern.getByText('No documents match this search.')).toBeVisible();
   await modern.setViewportSize({ width: 375, height: 812 });
   expect(await modern.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await modern.setViewportSize({ width: 1440, height: 900 });
   // A new landing visit resumes the workspace without a Discover click. Clear
   // page preferences too: the extension independently remembers this scope.
   await modern.evaluate(() => localStorage.removeItem(`github-ultimate-workspace-v1:${location.pathname}`));
@@ -453,7 +454,7 @@ test('Documents cache only fetched resources and restore them after restart with
   expect(await launch(true)).toBe(id); await serveHosted();
   const resumed = await context.newPage(); await resumed.goto(url);
   await expect(resumed.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
-  await expect(resumed.locator('.request-status')).toContainText('Document bytes verified');
+  await expect(resumed.getByRole('status')).toContainText('Document bytes verified');
   expect(await unopenedRequests(context.serviceWorkers()[0])).toEqual([]);
   await context.close();
   expect(await launch(true)).toBe(id); await serveHosted();
@@ -467,7 +468,7 @@ test('Documents cache only fetched resources and restore them after restart with
   const restored = await context.newPage(); await restored.addInitScript(() => localStorage.clear());
   await restored.goto(url);
   await expect(restored.getByLabel('Markdown preview', { exact: true })).toContainText('Private workspace note');
-  await expect(restored.locator('.request-status')).toContainText('Cached snapshot retained');
+  await expect(restored.getByRole('status')).toContainText('Cached snapshot retained');
   await restored.getByRole('button', { name: 'Back to documents' }).click();
   await restored.getByRole('treeitem', { name: 'notes/unopened.md', exact: true }).click();
   await expect(restored.getByRole('alert')).toBeVisible();
