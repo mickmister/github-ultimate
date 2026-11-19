@@ -54,4 +54,13 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <div id="vd-headers"></div><div id="vd-header-actions"></div>
 <button type="submit">Save VD connection</button><div id="vd-actions"></div></form>
 <p id="vd-status" role="status" aria-live="polite"></p><div id="vd-connections"></div></section>
+<section aria-labelledby="inference-heading"><h2 id="inference-heading">Inference connections</h2>
+<p>Use a full OpenAI-compatible Chat Completions URL, for example https://provider.example/v1/chat/completions. Optional headers (including Authorization) stay in private extension storage. The hosted Pi POC runs the agent; this connection performs bounded, non-streaming inference requests.</p>
+<form id="inference-add">
+<label>Inference connection name<input name="name" required maxlength="80"></label>
+<label>Inference URL<input name="url" type="url" required></label>
+<label>Inference model<input name="model" required maxlength="200"></label>
+<label>Inference HTTP headers (optional JSON)<textarea name="headers" autocomplete="off" spellcheck="false" rows="3" placeholder='{"Authorization":"Bearer ..."}'></textarea></label>
+<button>Save inference connection</button></form>
+<p id="inference-status" role="status"></p><div id="inference-connections"></div></section>
 <script src="connections-page.js"></script></body></html>

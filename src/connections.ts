@@ -139,6 +139,10 @@ export class Connections {
       if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
+      if (request.operation === 'agentRepositories' || request.operation === 'agentProbe') {
+        if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed. Reconnect explicitly.');
+        return request.operation === 'agentRepositories' ? this.repositories(record) : this.execute({ operation: 'probe', id: record.id, repository: request.repository });
+      }
       if (request.operation === 'documentCache') {
         if (!this.persistentCache) throw new ConnectionError('Persistent workspace cache is unavailable.');
         if (!record.tokens || !record.user || record.installation?.id !== request.installationId) throw new ConnectionError('Sign in and select the original installation before caching documents.');
