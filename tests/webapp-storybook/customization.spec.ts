@@ -1,5 +1,35 @@
 import { expect, test } from '@playwright/test';
 
+test('native shell receives resolved colors on bridge readiness, preview, cancel, restore and system changes', async ({ page }) => {
+  const colors: Record<string, string>[] = [];
+  await page.exposeFunction('recordShellTheme', (raw: string) => { colors.push(JSON.parse(raw).params); });
+  await page.emulateMedia({ colorScheme: 'light' });
+  await page.goto('/iframe.html?id=web-app-customization--appearance-editor&viewMode=story');
+  await expect.poll(() => page.evaluate(() => !!window.uiCustomization), { timeout: 30000 }).toBe(true);
+  await page.evaluate(() => window.uiCustomization.ready());
+  const connect = () => page.evaluate(() => {
+    window.alohakNative = { protocolVersion: 1, documentId: 'test', postMessage(raw) { void (window as unknown as { recordShellTheme(raw: string): Promise<void> }).recordShellTheme(raw); } };
+    window.dispatchEvent(new Event('alohak-native-ready'));
+  });
+  await connect();
+  const initial = () => colors.at(-1);
+  await expect.poll(() => initial()?.background).toBe('#f5f7fb');
+  await page.evaluate(() => window.uiCustomization.preview({ ...window.uiCustomization.get(), mode: 'dark', tokens: { background: 'navy', accent: 'rgb(12, 34, 56)' }, css: ':root { --panel: rebeccapurple; }' }));
+  await expect.poll(initial).toMatchObject({ background: '#000080', accent: '#0c2238', surface: '#663399' });
+  await page.evaluate(() => window.uiCustomization.cancelPreview());
+  await expect.poll(() => initial()?.background).toBe('#f5f7fb');
+  await page.emulateMedia({ colorScheme: 'dark' });
+  await expect.poll(() => initial()?.background).toBe('#101724');
+  await page.evaluate(() => window.uiCustomization.apply({ ...window.uiCustomization.get(), mode: 'light', tokens: { background: '#abc123' } }));
+  await expect.poll(() => initial()?.background).toBe('#abc123');
+  await page.reload();
+  await expect.poll(() => page.evaluate(() => window.uiCustomization?.get().tokens.background)).toBe('#abc123');
+  await connect();
+  await expect.poll(() => initial()?.background).toBe('#abc123');
+  await page.evaluate(() => window.uiCustomization.reset());
+  await expect.poll(() => initial()?.background).toBe('#101724');
+});
+
 test('UI and console share portable JSON, preview/reset, shadow styling and device persistence', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-customization--appearance-editor&viewMode=story');
   await page.getByText('Customize appearance', { exact: true }).click();

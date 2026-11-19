@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, Button, Linking, StyleSheet, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, StyleSheet } from 'react-native';
+import { Button, Text, TextInput, View } from './Theme';
 import type { ConnectionRequest, Installation, PublicConnection, Repository } from '../src/connections';
 import type { MobileGrant } from '../src/mobile-protocol';
 import { github, githubEnabled } from './github';

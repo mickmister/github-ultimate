@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { Button, StyleSheet, Text, TextInput, View } from 'react-native';
+import { StyleSheet } from 'react-native';
+import { Button, Text, TextInput, View } from './Theme';
 import { vd } from './github';
 import type { MobileGrant } from '../src/mobile-protocol';
 import type { PublicVdConnection, VdDraft, VdSettingsRequest } from '../src/vd-protocol';
