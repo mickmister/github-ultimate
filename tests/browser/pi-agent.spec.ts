@@ -52,8 +52,8 @@ test('packaged extension keeps inference headers private, runs Pi/GitHub tools a
       };
     });
     await context.route('https://agent.example/**', async route => {
-      const name = new URL(route.request().url()).pathname.split('/').at(-1)!;
-      if (!/^(pi\.html|pi-[A-Z0-9]+\.(js|css))$/.test(name)) return route.fulfill({ status: 404 });
+      const name = new URL(route.request().url()).pathname.slice('/poc/'.length);
+      if (!/^(pi\.html|pi\/(index\.html|pi-[A-Z0-9]+\.(js|css)))$/.test(name)) return route.fulfill({ status: 404 });
       return route.fulfill({ path: resolve('hosted-dist', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
     });
     const settings = await context.newPage(); await settings.goto(`chrome-extension://${worker.url().split('/')[2]}/connections.html`);
