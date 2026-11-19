@@ -1,0 +1,1 @@
+import{e as r,ax as o,aD as c,h as i,aE as n}from"./index-Df3EuzOP.js";function R(){const t=r({select:e=>e.location.search}),a=o({strict:!1,select:e=>e.requestId}),s={...c(t),requestId:a};return i.jsx(n,{location:s},JSON.stringify(s))}export{R};
