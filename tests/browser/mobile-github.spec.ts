@@ -38,7 +38,7 @@ test('hosted app reads a private document over Alohak RPC without extension fall
   const broker = new MobileFixtureBroker(new AsyncPageKVStore({ async getItem(key) { return pageData.get(key) ?? null; }, async setItem(key, value) { pageData.set(key, value); } }), github);
   broker.approveStorage(grantForEntry(entry));
   const native = { documentId: 'fixture-native-document', documentURL: entry, isMainFrame: true }; broker.activate(native);
-  const context = await browser.newContext({ userAgent: 'Mozilla/5.0 Alohak/1' });
+  const context = await browser.newContext({ userAgent: 'Mozilla/5.0 Alohak/1', viewport: { width: 390, height: 844 } });
   try {
     await context.route('https://pages.example/**', async route => {
       const pathname = new URL(route.request().url()).pathname;

@@ -17,6 +17,8 @@ for (const [surface, orientation, width, height] of configurations) {
     await page.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
     await page.getByLabel('Stored workspace').selectOption('product-research');
     await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
+    await page.getByText('Tree appearance', { exact: true }).click();
+    await page.getByLabel('Tree density').selectOption('compact');
     await page.getByRole('treeitem', { name: 'planning', exact: true }).click();
     await page.getByRole('treeitem', { name: 'planning/product-brief.md', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Markdown preview', exact: true })).toContainText('deterministic Storybook fixture data');
@@ -24,6 +26,12 @@ for (const [surface, orientation, width, height] of configurations) {
     await expect(back).toBeVisible();
     const box = await back.boundingBox(); expect(box!.height).toBeGreaterThanOrEqual(44);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await back.click();
+    await expect(page.getByLabel('Tree density')).toHaveValue('compact');
+    if (surface !== 'desktop') await page.getByText('Change workspace', { exact: true }).click();
+    await expect(page.getByLabel('Stored workspace')).toHaveValue('product-research');
+    await page.getByRole('button', { name: 'Forget saved workspace', exact: true }).click();
+    await expect(page.getByLabel('Storage repository')).toHaveValue('');
   });
 }
 test('surface and orientation changes preserve feature/controller selection and search', async ({ page }) => {

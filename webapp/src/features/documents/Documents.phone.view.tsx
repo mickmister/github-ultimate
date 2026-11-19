@@ -4,6 +4,7 @@ import { DocumentNavigation } from './DocumentNavigation';
 import { DocumentsWorkspace } from './DocumentsWorkspace.view';
 import { DocumentsReading } from './DocumentsReading.view';
 import { DocumentTree } from './DocumentTree';
+import { DocumentTreeAppearance } from './DocumentTreeAppearance.view';
 import { FeedbackProvider } from '../feedback/FeedbackProvider';
 import { copy } from './Documents.copy';
 export function DocumentsPhoneView({ model, actions, presentation }: SurfaceProps<DocumentBrowserProps>) {
@@ -11,10 +12,11 @@ export function DocumentsPhoneView({ model, actions, presentation }: SurfaceProp
   return <FeedbackProvider><main className={`app-shell documents-phone${reading ? ' document-fullscreen' : ''}`} data-surface="phone" data-orientation={presentation.orientation}>
     <DocumentNavigation model={model} actions={actions} />
     {!reading && !model.snapshot && <DocumentsWorkspace model={model} actions={actions} />}
-    <p role="status">{model.status}</p>{model.error && <p role="alert">{model.error}</p>}
+    {!reading && model.snapshot && <details><summary>{copy.changeWorkspace}</summary><DocumentsWorkspace model={model} actions={actions} /></details>}
+    <p className="request-status" role="status">{model.status}</p>{model.error && <p role="alert">{model.error}</p>}
     {reading ? <DocumentsReading model={model} actions={actions} /> : model.snapshot && <section aria-label={copy.title}>
       <label>{copy.find}<input type="search" value={model.query} onChange={e => actions.setQuery(e.target.value)} /></label>
-      <DocumentTree model={model} actions={actions} />
+      <DocumentTreeAppearance model={model} actions={actions} /><DocumentTree model={model} actions={actions} />
     </section>}
   </main></FeedbackProvider>;
 }
