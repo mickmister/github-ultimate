@@ -34,7 +34,6 @@ export function ReviewWorkspaceView({ connections, connectionId, repository, wor
         {workspace && !storage.workspaces.includes(workspace) && <option value={workspace}>{workspace} (selected)</option>}
         {storage.workspaces.map(name => <option key={name} value={name}>{name}</option>)}
       </select></label>
-      <p className="muted">Choose an approved connection, its storage repository, then a document workspace to see review requests. A single available choice is selected automatically.</p>
       {(storage.repositoriesBusy || storage.workspacesBusy) && <p aria-live="polite">{storage.repositoriesBusy ? 'Loading repositories for this connection…' : 'Finding document workspaces in the selected repository…'}</p>}
       {!storage.repositoriesBusy && !storage.repositoryError && connectionId && storage.canListRepositories && !storage.repositories.length && !repository && <p>No repositories are available. Check the selected connection's installation access.</p>}
       {!storage.workspacesBusy && !storage.workspaceError && repository && !workspace && !storage.workspaces.length && <p>No document workspaces found in this repository.</p>}

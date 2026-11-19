@@ -78,6 +78,7 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   // Keep legacy pages separate from the React app. The 2 KiB allowance covers
   // portable text decoding and native transport selection, not review schemas,
   // transfer assembly or portable hashing (which stay out of this bundle).
+  // Pi is an independently bundled optional page, not part of the legacy client.
   const piRedirect = await readFile('hosted-dist/pi.html', 'utf8');
   const piBytes = await payloadSize('hosted-dist/pi') + Buffer.byteLength(piRedirect);
   expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes).toBeLessThan(66 * 1024);

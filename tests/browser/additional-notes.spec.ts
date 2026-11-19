@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 
 for (const authored of [false, true]) {
-  test(`Additional notes has fixed guidance for ${authored ? 'authored' : 'automatic'} fields inline and in zen`, async () => {
+  test(`Additional notes preserves ${authored ? 'authored descriptions' : 'a quiet automatic field'} and answers inline and in zen`, async () => {
     const profile = await mkdtemp(resolve(tmpdir(), 'github-ultimate-notes-'));
     const extension = resolve('dist');
     const context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--no-sandbox'] });
@@ -18,13 +18,14 @@ for (const authored of [false, true]) {
       const raw = JSON.stringify(form).replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
       await context.route('https://github.com/**', route => route.fulfill({ contentType: 'text/html', body: `<!doctype html><html><body><article id="issuecomment-1"><div class="comment-body"><pre><code>${raw}</code></pre></div></article></body></html>` }));
       const page = await context.newPage(); await page.goto('https://github.com/example/project/pull/42');
-      const notes = page.getByRole('group', { name: 'Additional notes', exact: true });
-      await expect(notes.getByText(guidance, { exact: true })).toBeVisible();
-      await expect(notes.getByText(old, { exact: true })).toHaveCount(0);
+      const notes = page.getByRole('group', { name: authored ? 'Additional notes' : 'Additional notes (optional)', exact: true });
+      await expect(notes.getByText(guidance, { exact: true })).toHaveCount(0);
+      await expect(notes.getByText(old, { exact: true })).toHaveCount(authored ? 1 : 0);
       await notes.getByRole('textbox', { name: 'Additional notes', exact: true }).fill('Keep this context.');
       await page.getByRole('button', { name: 'View in Zen Mode', exact: true }).click();
       const zen = page.getByRole('dialog');
-      await expect(zen.getByText(guidance, { exact: true })).toBeVisible();
+      await expect(zen.getByText(guidance, { exact: true })).toHaveCount(0);
+      await expect(zen.getByText(old, { exact: true })).toHaveCount(authored ? 1 : 0);
       await expect(zen.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveValue('Keep this context.');
     } finally { await context.close(); await rm(profile, { recursive: true, force: true }); }
   });
