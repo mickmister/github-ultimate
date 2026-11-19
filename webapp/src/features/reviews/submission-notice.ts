@@ -2,6 +2,6 @@ import type { ReviewRequest } from '../../../../src/review-protocol';
 
 export function submissionNotice(request: ReviewRequest): string {
   return request.process
-    ? `Submitting saves your response, then attempts to start the configured GitHub workflow for process ${request.process.id}.`
-    : 'This request saves feedback only. Submitting will not start a GitHub workflow.';
+    ? `Saves feedback and requests a workflow run for ${request.process.id}.`
+    : 'Saves feedback; no GitHub workflow run.';
 }

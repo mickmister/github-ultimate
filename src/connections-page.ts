@@ -44,7 +44,7 @@ function render() {
     card.append(element('h2', record.name), element('p', `App ${record.appId} · ${record.clientId}`));
     if (record.connected) {
       card.append(element('p', `Signed in${record.user ? ` as ${record.user.login}` : ''}. Access token expires ${new Date(record.expiresAt!).toLocaleString()}.`));
-      button(card, 'Refresh credentials', async () => { await request({ operation: 'refresh', id: record.id }); await reload(); status.textContent = 'Credentials refreshed and saved. Use Read repository to verify the new token.'; });
+      button(card, 'Refresh credentials', async () => { await request({ operation: 'refresh', id: record.id }); await reload(); status.textContent = 'Credentials refreshed.'; });
       const installationArea = element('section');
       button(card, 'Load installations', async () => {
         const installations = await request<Installation[]>({ operation: 'installations', id: record.id });
@@ -80,7 +80,7 @@ function render() {
         button(card, 'Read repository', async () => {
           const result = await request({ operation: 'probe', id: record.id, repository: repository.value.trim() });
           output.textContent = JSON.stringify(result, null, 2);
-          status.textContent = 'Repository read succeeded using this connection. This checks the default-branch Git ref, not raw Dolt data yet.';
+          status.textContent = 'Repository Git ref read succeeded.';
         });
         card.append(output);
         const originLabel = element('label', 'Hosted origin to approve');

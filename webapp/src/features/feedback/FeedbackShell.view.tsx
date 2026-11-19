@@ -51,10 +51,10 @@ export function FeedbackShellView({ children, active, composer, review, state, n
         <Dialog.Content className="feedback-dialog" data-feedback-control="true" aria-label={composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}>
           <header><Dialog.Title>{composer ? composer.kind === 'content-comment' ? 'Comment on Content' : 'Comment on Feature' : 'Queued comments'}</Dialog.Title>
             <button type="button" onClick={actions.closeDialog} aria-label="Close comments">Close</button></header>
-          <Dialog.Description>{composer ? 'Add your thought with the captured UI context and highlighted content.' : 'Review your thoughts, then save the review response or copy a compact Markdown review to paste into agent chat. Review-request content comments are saved locally for that revision; app feedback stays in this tab until copied.'}</Dialog.Description>
+          <Dialog.Description>{composer ? 'Comments are queued locally. Copying does not submit.' : 'Review comments are local to this revision. App feedback stays in this tab. Copying clears the selected category; it does not submit.'}</Dialog.Description>
           {composer ? <form onSubmit={event => { event.preventDefault(); actions.addComment(); }}>
-            <p><strong>{composer.context.target.label}</strong><br />{composer.context.target.uiPath.join(' → ')}</p>
-            <p className="feedback-context-detail">{composer.kind === 'content-comment' ? composer.context.target.resource?.path ?? composer.context.target.resource?.id : composer.context.target.featureId}</p>
+            <p><strong>{composer.context.target.label}</strong></p>
+            <details><summary>Context details</summary><p>{composer.context.target.uiPath.join(' → ')}</p><p className="feedback-context-detail">{composer.kind === 'content-comment' ? composer.context.target.resource?.path ?? composer.context.target.resource?.id : composer.context.target.featureId}</p></details>
             <blockquote>{composer.context.selection?.text ?? 'Whole element — no highlighted text.'}</blockquote>
             <label htmlFor="feedback-new-comment">Your comment</label><textarea id="feedback-new-comment" ref={commentRef} value={composer.text} onChange={event => actions.setComment(event.target.value)} rows={4} />
             <button type="submit" disabled={!composer.text.trim()}>Add to queue</button>
@@ -62,13 +62,13 @@ export function FeedbackShellView({ children, active, composer, review, state, n
             {!state.items.length && <p>No comments queued.</p>}
             <ol className="feedback-queue">{state.items.map((item, index) => <li key={item.id}>
               <h3>{index + 1}. {item.context.target.label}</h3>
-              <p>{item.kind === 'content-comment' ? 'Content' : 'Feature'} · {item.context.target.uiPath.join(' → ')}</p>
-              <p className="feedback-context-detail">{item.kind === 'content-comment' ? item.context.target.resource?.path ?? item.context.target.resource?.id : item.context.target.featureId}</p>
+              <p>{item.kind === 'content-comment' ? 'Content' : 'Feature'}</p>
+              <details><summary>Context details</summary><p>{item.context.target.uiPath.join(' → ')}</p><p className="feedback-context-detail">{item.kind === 'content-comment' ? item.context.target.resource?.path ?? item.context.target.resource?.id : item.context.target.featureId}</p></details>
               {item.context.selection && <blockquote>{item.context.selection.text}</blockquote>}
               <label htmlFor={`feedback-comment-${item.id}`}>Comment {index + 1}</label><textarea id={`feedback-comment-${item.id}`} value={item.comment} rows={3} onChange={event => actions.edit(item.id, event.target.value)} />
               <button type="button" onClick={() => actions.remove(item.id)} aria-label={`Remove comment ${index + 1}`}>Remove</button>
             </li>)}</ol>
-            <p>Content belongs to its exact reviewed resources. Feature feedback is app intake: destination workspace/thread unknown; viewed content is reproduction context only. Copying is not delivery.</p>
+            <details><summary>Feedback routing</summary><p>Content comments target the exact reviewed resource. App feedback has no workspace/thread destination; viewed content is reproduction context.</p></details>
             {(['content-comment', 'feature-comment'] as const).map(kind => <ark.button data-ui="feedback-category-export" key={kind} type="button" disabled={!state.items.some(item => item.kind === kind) || state.exporting} onClick={() => actions.copyAndClear(kind)}>{state.exporting ? 'Copying…' : kind === 'content-comment' ? 'Copy Content & clear Content' : 'Copy Feature intake & clear Feature'}</ark.button>)}
           </>}
           {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}

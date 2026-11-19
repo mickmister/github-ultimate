@@ -83,7 +83,7 @@ test('review inbox does not prefetch member content; opening a detail prefetches
   await expect(detail).toBeVisible();
   expect(reads).toEqual([]);
   await detail.click();
-  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-ui="review-content-progress"]')).toHaveText('');
   expect(reads.sort()).toEqual(['a', 'b', 'c', 'd'].map(letter => letter.repeat(40)));
   await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
   await expect(page.locator('.review-form h3')).toHaveText('Reader decisions');
@@ -293,7 +293,7 @@ test('pinned deep links render and preload before targeted saved-state loading, 
   await page.getByRole('button', { name: 'Next question', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Additional notes', exact: true })).toHaveValue('Restore this draft after the fast pinned preview.');
   await expect(page.getByText('Updated packet available.')).toBeVisible();
-  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-ui="review-content-progress"]')).toHaveText('');
   expect(calls.filter(item => item.resource)).toHaveLength(4);
 });
 
@@ -350,7 +350,7 @@ test('opening a review downloads every member and baseline before navigation, th
   await expect.poll(() => reads.length, { timeout: 30000 }).toBe(4);
   expect(new Set(reads)).toEqual(new Set(['a', 'b', 'c', 'd'].map(letter => letter.repeat(40))));
   release();
-  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-ui="review-content-progress"]')).toHaveText('');
   blockNewReads = true;
   for (let pass = 0; pass < 2; pass++) {
     await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
@@ -388,7 +388,7 @@ test('a failed preload leaves other items usable and can be retried independentl
   await expect(page.getByRole('alert')).toContainText('Pinned baseline unavailable');
   failBaseline = false;
   await page.getByRole('button', { name: 'Retry unavailable review contents', exact: true }).click();
-  await expect(page.getByText('All review documents and forms downloaded.', { exact: true })).toBeVisible();
+  await expect(page.locator('[data-ui="review-content-progress"]')).toHaveText('');
   await expect(page.getByText('The baseline had browser-only drafts.')).toBeVisible();
   expect(reads.filter(version => version === 'b'.repeat(40))).toHaveLength(2);
   for (const letter of ['a', 'c', 'd']) expect(reads.filter(version => version === letter.repeat(40))).toHaveLength(1);

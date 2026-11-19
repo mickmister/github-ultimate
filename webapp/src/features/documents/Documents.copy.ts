@@ -2,6 +2,7 @@ import { defineCopy } from '../../presentation/copy';
 export const copy = defineCopy({
   title: { purpose: 'heading', text: 'Documents' },
   workspace: { purpose: 'heading', text: 'Choose your workspace' },
+  changeWorkspace: { purpose: 'action', text: 'Change workspace' },
   reconnect: { purpose: 'action', text: 'Reconnect host' },
   forget: { purpose: 'action', text: 'Forget saved workspace' },
   connection: { purpose: 'label', text: 'Approved connection' },

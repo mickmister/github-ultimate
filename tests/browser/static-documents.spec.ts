@@ -5,7 +5,7 @@ import { resolve, extname } from 'node:path';
 
 test('staged Pages subpath loads compressed diagrams, source editor and JSON language modules', async ({ page }) => {
   test.setTimeout(90000);
-  const root = resolve('hosted-dist/storybook'), base = '/preview/storybook/';
+  const root = resolve('hosted-dist'), base = '/preview/';
   const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.gz': 'application/gzip', '.woff2': 'font/woff2', '.ttf': 'font/ttf' };
   const server = createServer(async (request, response) => {
     const path = new URL(request.url!, 'http://local.test').pathname;
@@ -15,7 +15,7 @@ test('staged Pages subpath loads compressed diagrams, source editor and JSON lan
     catch { response.writeHead(404).end(); }
   });
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done));
-  const address = server.address() as { port: number }, origin = `http://127.0.0.1:${address.port}${base}`;
+  const address = server.address() as { port: number }, origin = `http://127.0.0.1:${address.port}${base}storybook/`;
   const errors: string[] = [], compressed: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   page.on('response', response => { if (response.url().endsWith('.gz') && response.ok()) compressed.push(response.url()); });

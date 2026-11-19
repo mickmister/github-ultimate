@@ -1,3 +1,11 @@
+// Register standalone contribution services before the first editor is created.
+// Loading additional contributions after service initialization can leave later
+// editors (including remounts after a surface change) with missing dependencies.
+import 'monaco-editor/editor/contrib/codelens/browser/codeLensCache.js';
+import 'monaco-editor/editor/contrib/inlayHints/browser/inlayHintsController.js';
+import 'monaco-editor/editor/common/services/treeViewsDndService.js';
+import 'monaco-editor/editor/contrib/suggest/browser/suggestMemory.js';
+import 'monaco-editor/platform/actionWidget/browser/actionWidget.js';
 import * as monaco from 'monaco-editor/editor/editor.api.js';
 import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker';
 import JsonWorker from 'monaco-editor/language/json/json.worker.js?worker';

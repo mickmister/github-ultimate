@@ -14,7 +14,7 @@ test('Start shell hydrates from static branch assets and reports a missing exten
     return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.ttf') ? 'font/ttf' : 'text/html' });
   });
   await page.goto('https://mickmister.github.io' + appPath);
-  await expect(page.getByRole('heading', { name: 'Workspace documents', exact: true })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Documents', exact: true, level: 1 })).toBeVisible();
   await expect(page).toHaveURL('https://mickmister.github.io' + appPath + '#/documents');
   await page.getByText('Settings', { exact: true }).click();
   const metadata = JSON.parse(await readFile('hosted-dist/build.json', 'utf8'));

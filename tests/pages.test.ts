@@ -78,15 +78,23 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   // The query runtime is self-hosted and compressed explicitly for static Pages.
   expect((await readdir('hosted-dist/app/assets')).filter(name => /^duckdb-eh\.wasm-.*\.gz$/.test(name))).toHaveLength(1);
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.wasm'))).toBe(false);
-  // Pi is a separate opt-in page added by integration, not a legacy dependency.
-  const piFiles = (await readdir('hosted-dist')).filter(name => /^pi-[\w-]+\.(js|css)$/.test(name) || ['pi.html', 'PI_THIRD_PARTY_LICENSES.txt'].includes(name));
-  expect(piFiles.length).toBeGreaterThanOrEqual(4);
-  const piBytes = (await Promise.all(piFiles.map(name => readFile(join('hosted-dist', name))))).reduce((size, bytes) => size + bytes.length, 0);
   // Keep legacy pages separate from the React app and opt-in Pi page. The 2 KiB allowance covers
   // portable text decoding and native transport selection, not review schemas,
   // transfer assembly or portable hashing (which stay out of this bundle).
+  // Pi is an independently bundled optional page, not part of the legacy client.
+  const piRedirect = await readFile('hosted-dist/pi.html', 'utf8');
+  const piBytes = await payloadSize('hosted-dist/pi') + Buffer.byteLength(piRedirect);
   expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes).toBeLessThan(66 * 1024);
   expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);
+  // The optional agent runtime and its licenses stay in a separately bounded
+  // directory, never shared with pages that do not run an agent.
+  expect(piBytes).toBeLessThan(768 * 1024);
+  expect(piRedirect).toContain('url=./pi/index.html');
+  const pi = await readFile('hosted-dist/pi/index.html', 'utf8');
+  expect(pi).toMatch(/src="\.\/pi-[A-Z0-9]+\.js"/);
+  expect(pi).toContain('href="../index.html"');
+  expect(await readdir('hosted-dist/pi')).toContain('THIRD_PARTY_LICENSES.txt');
+  expect((await readdir('hosted-dist')).some(name => /^pi-.*\.(?:js|css)$/.test(name))).toBe(false);
 }, 600000);
 
 test('Storybook staging replaces stale assets, preserves app files and binds public build metadata', async () => {
@@ -101,6 +109,9 @@ test('Storybook staging replaces stale assets, preserves app files and binds pub
     const metadata = { branch: 'feature/storybook', sha: 'a'.repeat(40) };
     await writeFile(join(output, 'build.json'), JSON.stringify(metadata));
     await writeFile(join(output, 'app/index.html'), 'existing app');
+    await mkdir(join(source, 'assets')); await mkdir(join(output, 'app/assets'));
+    for (const directory of [join(source, 'assets'), join(output, 'app/assets')]) await writeFile(join(directory, 'mermaid.tiny-ABC.js'), 'window.mermaid = {};');
+    await writeFile(join(source, 'assets/diagram.js'), 'const url = new URL("mermaid.tiny-ABC.js", import.meta.url).href;');
     for (const name of ['MONACO_LICENSE.txt', 'MONACO_THIRD_PARTY_NOTICES.txt']) await writeFile(join(output, 'app', name), name);
     await mkdir(join(output, 'storybook')); await writeFile(join(output, 'storybook/obsolete.js'), 'old');
     await stageHostedStorybook({ source, output });
@@ -109,5 +120,8 @@ test('Storybook staging replaces stale assets, preserves app files and binds pub
     const files = await readdir(join(output, 'storybook'));
     expect(files).toContain('asset.js'); expect(files).toContain('MONACO_LICENSE.txt');
     expect(files).not.toContain('obsolete.js'); expect(files).not.toContain('asset.js.map'); expect(files).not.toContain('project.json');
+    expect(await readdir(join(output, 'storybook/assets'))).not.toContain('mermaid.tiny-ABC.js');
+    expect(await readFile(join(output, 'storybook/assets/diagram.js'), 'utf8')).toContain('new URL("../../app/assets/mermaid.tiny-ABC.js", import.meta.url)');
+    expect(await readFile(join(output, 'app/assets/mermaid.tiny-ABC.js'), 'utf8')).toBe('window.mermaid = {};');
   } finally { await rm(root, { recursive: true, force: true }); }
 });

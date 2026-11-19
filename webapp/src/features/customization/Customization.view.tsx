@@ -8,8 +8,8 @@ export function CustomizationView({ json, draft, selectedPreset, colorValues, er
   actions: { setJSON(value: string): void; preset(id: string): void; name(value: string): void; mode(value: Customization['mode']): void; token(token: ThemeToken, value: string): void; css(value: string): void; apply(): void; preview(): void; reset(): void; cancel(): void; download(): void; import(file: File): Promise<void> };
 }) {
   return <details className="customization-panel" data-ui="customization-panel"><summary>Customize appearance</summary>
-    <p>Current: {current.name}. Device-local theme tokens and custom CSS. Export the entire configuration as JSON to share it or load it on another device.</p>
-    <p>Choose a starting theme and adjust individual settings, then preview or save. Choosing a built-in theme replaces the draft, including custom CSS. Blank settings use app defaults.</p>
+    <p>Current: {current.name}</p>
+    <p>Changing preset replaces your draft, including custom CSS.</p>
     <label htmlFor="ui-theme-preset">Built-in theme</label><select id="ui-theme-preset" disabled={!ready} value={selectedPreset} onChange={event => actions.preset(event.target.value)}><option value="" disabled>Custom theme</option>{builtInThemes.map(theme => <option key={theme.id} value={theme.id}>{theme.id === 'system' ? 'System default' : theme.value.name}</option>)}</select>
     {builtInThemes.filter(theme => theme.id === selectedPreset).map(theme => <p className="muted" key={theme.id}>{theme.description}</p>)}
     {!draft && <p>Fix the invalid advanced JSON to use individual settings.</p>}
@@ -24,7 +24,7 @@ export function CustomizationView({ json, draft, selectedPreset, colorValues, er
         </div></div>)}</div></fieldset>)}
       <label htmlFor="ui-customization-css">Custom CSS</label><textarea id="ui-customization-css" rows={4} spellCheck={false} value={draft?.css ?? ''} onChange={event => actions.css(event.target.value)} />
     </fieldset>
-    <details className="customization-advanced"><summary>Advanced JSON and console</summary><p>The JSON editor and individual settings edit the same draft. The console API is available on <code>window.uiCustomization</code>.</p>
+    <details className="customization-advanced"><summary>Advanced JSON and console</summary><p>Settings are device-local. Export JSON to share them. Blank settings use app defaults. The JSON editor and individual settings edit the same draft. Console API: <code>window.uiCustomization</code>.</p>
       <label htmlFor="ui-customization-json">Customization JSON</label><textarea id="ui-customization-json" rows={12} spellCheck={false} value={json} onChange={event => actions.setJSON(event.target.value)} /></details>
     <div className="customization-actions"><button disabled={!ready} onClick={actions.preview}>Preview customization</button><button disabled={!ready} onClick={actions.apply}>Save customization locally</button><button disabled={!ready} onClick={actions.cancel}>Cancel preview</button><button disabled={!ready} onClick={actions.download}>Export customization JSON</button><button onClick={actions.reset}>Reset appearance</button></div>
     <label>Import customization JSON<input type="file" accept="application/json,.json" disabled={!ready} onChange={event => { const file = event.target.files?.[0]; if (file) void actions.import(file); event.target.value = ''; }} /></label>
