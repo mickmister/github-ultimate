@@ -79,8 +79,8 @@ async function serveHosted() {
     const app = pathname.indexOf('/app/');
     if (app >= 0) {
       const name = pathname.slice(app + '/app/'.length) || 'index.html';
-      if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_.-]+\.(js|css|ttf)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
-      return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.ttf') ? 'font/ttf' : 'text/html' });
+      if (name !== 'index.html' && !/^assets\/[a-zA-Z0-9_.-]+\.(js|css|ttf|gz)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
+      return route.fulfill({ path: resolve('hosted-dist/app', name), contentType: name.endsWith('.gz') ? 'application/gzip' : name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : name.endsWith('.ttf') ? 'font/ttf' : 'text/html' });
     }
     const name = pathname.split('/').pop() || 'index.html';
     if (!['index.html', 'settings.html', 'build.json'].includes(name) && !/^(main|settings|shared|beads|documents)-[A-Z0-9]+\.(js|css)$/.test(name)) return route.fulfill({ status: 404, body: 'Not found' });
