@@ -1,5 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { Connections, type ConnectionRecord, type ConnectionStore, type PublicConnection } from '../src/connections';
+import { gitObject } from '../src/scratch';
 
 const defaultClient = { name: 'Example client', appId: 12345, clientId: 'Iv23ExampleClient' };
 
@@ -45,6 +46,21 @@ async function login(client = defaultClient) {
   await broker.handle({ operation: 'poll', id: connection.id });
   return connection;
 }
+
+test('scratch imports enforce original page, user, installation and repository before reading pinned files', async () => {
+  const connection = await login(), commit = 'a'.repeat(40), tree = 'b'.repeat(40), blob = gitObject('blob', 'Pinned\n');
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin: 'https://example.test', subpath: '/app/' });
+  gitResponses.set(`commits/${commit}`, { sha: commit, tree: { sha: tree } });
+  gitResponses.set(`trees/${tree}?recursive=1`, { sha: tree, truncated: false, tree: [{ path: 'README.md', mode: '100644', type: 'blob', sha: blob, size: 7 }] });
+  gitResponses.set(`blobs/${blob}`, { sha: blob, encoding: 'base64', size: 7, content: Buffer.from('Pinned\n').toString('base64') });
+  const request = { operation: 'agentSnapshot', id: connection.id, userId: 1, installationId: 1, repository: 'mickmister/workspace-storage', commit, directory: '' };
+  expect(await broker.handleHosted('https://example.test/app/', request)).toMatchObject({ files: [{ path: 'README.md', content: 'Pinned\n' }] });
+  const count = calls.length;
+  for (const patch of [{ userId: 9 }, { installationId: 9 }, { repository: 'other/private' }]) await expect(broker.handleHosted('https://example.test/app/', { ...request, ...patch })).rejects.toThrow();
+  await expect(broker.handleHosted('https://example.test/elsewhere/', request)).rejects.toThrow('approved');
+  expect(calls.slice(count).some(call => call.url.includes('/repos/other/'))).toBe(false);
+});
 
 test('Pi repository tools reject a changed GitHub identity or installation before issuing API reads', async () => {
   const connection = await login();

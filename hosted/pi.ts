@@ -65,7 +65,7 @@ async function list(more = false) {
   report('Select an exact checkpoint to restore. Separate tabs create separate branches, not a shared mutable head.');
 }
 action('list-checkpoints', () => list()); action('more-checkpoints', () => list(true));
-action('restore', async () => { configure(); const key = select('checkpoint').value; const checkpoint = await sessions!.read(key, session.value, binding!); start(checkpoint.messages); parent = key; report(`Restored ${key}. No tools were replayed.`); });
+action('restore', async () => { configure(); const key = select('checkpoint').value; const checkpoint = await sessions!.read(key, session.value, binding!); if (checkpoint.scratch) throw Error('This checkpoint contains a scratch workspace. Restore it in the hosted app Agent screen.'); start(checkpoint.messages); parent = key; report(`Restored ${key}. No tools were replayed.`); });
 action('retry-save', save);
 button('stop').addEventListener('click', () => { runtime?.agent.abort(); report('Stopping inference. Completed read-only tool results will be saved.'); });
 document.getElementById('prompt-form')!.addEventListener('submit', async event => {

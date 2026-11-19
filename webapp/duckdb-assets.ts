@@ -10,6 +10,7 @@ export function duckdbAssets(): Plugin {
   const assets = [
     { id: 'virtual:duckdb-wasm-url', file: 'duckdb-eh.wasm.gz', package: '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm' },
     { id: 'virtual:mermaid-url', file: 'mermaid.tiny.js.gz', package: '@mermaid-js/tiny/dist/mermaid.tiny.js' },
+    { id: 'virtual:quickjs-url', file: 'quickjs.wasm.gz', package: 'quickjs-wasi/quickjs.wasm' },
   ];
   const cache = new Map<string, Buffer>();
   const bytes = (asset: typeof assets[number]) => {

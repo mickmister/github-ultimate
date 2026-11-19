@@ -1,6 +1,15 @@
 {
   "schema_version": 1,
   "features": [{
+    "id": "agent",
+    "host": "webapp/src/features/agent/Agent.tsx",
+    "hooks": "webapp/src/features/agent/Agent.hooks.ts",
+    "hook": "useAgentFeature",
+    "copy": "webapp/src/features/agent/Agent.copy.ts",
+    "ownedViews": ["webapp/src/features/agent/Agent.view.tsx"],
+    "presentations": [{ "id": "agent", "kind": "page", "file": "webapp/src/features/agent/Agent.presentation.tsx", "export": "AgentPresentation" }],
+    "scenarios": "webapp/stories/AgentSurfaces.stories.tsx"
+  }, {
     "id": "documents",
     "host": "webapp/src/features/documents/DocumentBrowser.tsx",
     "hooks": "webapp/src/features/documents/Documents.hooks.ts",
@@ -23,6 +32,7 @@
     "scenarios": "webapp/stories/WorkspaceRuns.stories.tsx"
   }],
   "routes": {
+    "webapp/src/routes/agent.tsx": { "feature": "agent" },
     "webapp/src/routes/runs.tsx": { "feature": "runs" },
     "webapp/src/routes/documents.tsx": { "feature": "documents" },
     "webapp/src/routes/documents.$documentId.tsx": { "feature": "documents", "parent": "webapp/src/routes/documents.tsx" }

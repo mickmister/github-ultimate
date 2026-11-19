@@ -6,6 +6,8 @@ import { duckdbAssets } from './duckdb-assets';
 
 export default defineConfig({
   base: process.env.WEBAPP_BASE_PATH ?? '/',
+  optimizeDeps: { include: ['@earendil-works/pi-codemode/portable'] },
+  worker: { format: 'es', plugins: () => [duckdbAssets()] },
   define: { 'import.meta.env.VITE_UI_BUILD': JSON.stringify(uiBuild) },
   // Start's static-shell prerender uses the physical deployment base. Its
   // client hydration must instead use logical paths within hash history.

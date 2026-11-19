@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, symlink } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, readFile, rm, readdir, symlink, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 // @ts-expect-error The publisher is deliberately dependency-free JavaScript for CI.
@@ -78,6 +78,10 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   // The query runtime is self-hosted and compressed explicitly for static Pages.
   expect((await readdir('hosted-dist/app/assets')).filter(name => /^duckdb-eh\.wasm-.*\.gz$/.test(name))).toHaveLength(1);
   expect((await readdir('hosted-dist/app/assets')).some(name => name.endsWith('.wasm'))).toBe(false);
+  const wasm = (await readdir('hosted-dist/app/assets')).filter(name => /^quickjs\.wasm-.*\.gz$/.test(name));
+  expect(wasm).toHaveLength(1);
+  expect(wasm[0]).toMatch(/^quickjs\.wasm-.*\.gz$/);
+  expect((await stat(`hosted-dist/app/assets/${wasm[0]}`)).size).toBeLessThan(768 * 1024);
   // Keep legacy pages separate from the React app and opt-in Pi page. The 2 KiB allowance covers
   // portable text decoding and native transport selection, not review schemas,
   // transfer assembly or portable hashing (which stay out of this bundle).

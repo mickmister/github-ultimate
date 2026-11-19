@@ -8,6 +8,7 @@ import { reviewWriteSchema } from './review-protocol';
 import { reviewProgressSchema } from './review-progress';
 import { documentCacheSchema } from './document-cache';
 import { actionsReadSchema } from './actions-protocol';
+import { agentSnapshotSchema } from './agent-snapshot';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -22,6 +23,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('agentRepositories'), id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive() }).strict(),
   z.object({ operation: z.literal('agentProbe'), id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
+  agentSnapshotSchema,
   documentCacheSchema,
   reviewWriteSchema,
   reviewProgressSchema,
