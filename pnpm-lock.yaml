@@ -172,18 +172,21 @@ importers:
 
   .:
     dependencies:
+      '@duckdb/duckdb-wasm':
+        specifier: 1.33.1-dev57.0
+        version: 1.33.1-dev57.0
       '@earendil-works/pi-agent-core':
         specifier: 1.5.2
         version: 1.5.2(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(supports-color@8.1.1)(undici@6.29.1)(ws@8.22.1)(zod@4.6.7)
       '@earendil-works/pi-ai':
         specifier: 1.5.2
         version: 1.5.2(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(supports-color@8.1.1)(undici@6.29.1)(ws@8.22.1)(zod@4.6.7)
+      '@earendil-works/pi-codemode':
+        specifier: 1.5.2
+        version: 1.5.2
       '@earendil-works/pi-schema':
         specifier: 1.5.2
         version: 1.5.2
-      '@duckdb/duckdb-wasm':
-        specifier: 1.33.1-dev57.0
-        version: 1.33.1-dev57.0
       '@noble/hashes':
         specifier: ^2.4.0
         version: 2.4.0
@@ -196,6 +199,9 @@ importers:
       aws4fetch:
         specifier: ^1.0.20
         version: 1.0.20
+      diff:
+        specifier: 8.0.2
+        version: 8.0.2
       dompurify:
         specifier: ^3.3.0
         version: 3.4.17
@@ -211,6 +217,9 @@ importers:
       protobufjs:
         specifier: 7.5.4
         version: 7.5.4
+      quickjs-wasi:
+        specifier: 3.6.2
+        version: 3.6.2
       yaml:
         specifier: ^2.8.1
         version: 2.9.1
@@ -1024,6 +1033,9 @@ packages:
     resolution: {integrity: sha512-IchNf6dN4tHoMFIn/7OE8LWZ19Y6q/67Bmf6vnGREv8RSbBVb9LPJxEcnwrcwX6ixSvaiGoomAUvu4YSxXrVgw==}
     engines: {node: '>=12'}
 
+  '@duckdb/duckdb-wasm@1.33.1-dev57.0':
+    resolution: {integrity: sha512-ndn5l2EHq1PEMvCg8G6lRV0vjhSUcbqdM/niNBTTqH4/PyyUUVKbge0uUyCnj27b9SF/CiqBwDsgKLTqBvaxdw==}
+
   '@earendil-works/pi-agent-core@1.5.2':
     resolution: {integrity: sha512-ie5mejS7mGfXt//9As7i3LfxVXdktZvF1JP4EQsUXTp4mU437h23MNGx7wXZ5VYs3YiG/Qnj3e7OZ2HC069OMw==}
     engines: {node: '>=22.19.0'}
@@ -1033,6 +1045,10 @@ packages:
     engines: {node: '>=22.19.0'}
     hasBin: true
 
+  '@earendil-works/pi-codemode@1.5.2':
+    resolution: {integrity: sha512-HoZQ40a9RgdZ1VgmrX6x8887cNXedaRJT1l+Ie5YRIMK4gY7v0EpsiNqf6dmixrKylZlTgUSyR+vE8xhjfkr+w==}
+    engines: {node: '>=22.19.0'}
+
   '@earendil-works/pi-schema@1.5.2':
     resolution: {integrity: sha512-hJoyCXWUhsSrXY5wJo2Q4kHXUsR51pNhkJHAMkWRwVMLDRtMDPkKNaa+JlVRVqTw1hjdSxcVVaFLSDbKlaTXEQ==}
     engines: {node: '>=22.19.0'}
@@ -1040,8 +1056,6 @@ packages:
   '@earendil-works/pi-telemetry@1.5.2':
     resolution: {integrity: sha512-m+cumjIqNh1aMISi/9ttcG3ZOwIdriPbz/eMyWmRMJCGa/WcgY1RX4lrb7HvsHhSfI/JUeBESA4nOCr8C3y5ow==}
     engines: {node: '>=22.19.0'}
-  '@duckdb/duckdb-wasm@1.33.1-dev57.0':
-    resolution: {integrity: sha512-ndn5l2EHq1PEMvCg8G6lRV0vjhSUcbqdM/niNBTTqH4/PyyUUVKbge0uUyCnj27b9SF/CiqBwDsgKLTqBvaxdw==}
 
   '@emnapi/core@1.11.0':
     resolution: {integrity: sha512-l9Oo58x0HOP5znGzVhYW9U3e5wVuA4LAZU2AGezTmkhO1CgQRFDhDg4nneHsu/t3WniXg9QrG2nIXL/ZS8ln8Q==}
@@ -3733,6 +3747,10 @@ packages:
     resolution: {integrity: sha512-PJWHUb1RFevKCwaFA9RlG5tCd+FO5iRh9A8HEtkmBH2Li03iJriB6m6JIN4rGz3K3JLawI7/veA1xzRKP6ISBw==}
     engines: {node: '>=0.3.1'}
 
+  diff@8.0.2:
+    resolution: {integrity: sha512-sSuxWU5j5SR9QQji/o2qMvqRNYRDOcBTgsJ/DeCf4iSN4gW+gNMXM7wFIP+fdXZxoNiAnHUTGjCr+TSWXdRDKg==}
+    engines: {node: '>=0.3.1'}
+
   diff@8.0.4:
     resolution: {integrity: sha512-DPi0FmjiSU5EvQV0++GFDOJ9ASQUVFh5kD+OzOnYdi7n3Wpm9hWWGfB/O2blfHcMVTL5WkQXSnRiK9makhrcnw==}
     engines: {node: '>=0.3.1'}
@@ -4580,6 +4598,7 @@ packages:
 
   json-bigint@1.0.0:
     resolution: {integrity: sha512-SiPv/8VpZuWbvLSMtTDU8hEfrZWg/mH/nV/b4o0CYbSxu1UIQPLdwKOCIyLQX+VIPO5vrLX3i8qtqFyhdPSUSQ==}
+
   json-bignum@0.0.3:
     resolution: {integrity: sha512-2WHyXj3OfHSgNyuzDbSxI1w2jgw5gkWSWhS7Qg4bWXx1nLk3jnbwfUeS0PSba3IzpTUWdHxBieELUzXRjQB2zg==}
     engines: {node: '>=0.8'}
@@ -5425,6 +5444,9 @@ packages:
 
   queue@6.0.2:
     resolution: {integrity: sha512-iHZWu+q3IdFZFX36ro/lKBkSvfkztY5Y7HMiPlOUjhupPcG2JMfst2KKEpu5XndviX/3UhFbRngUPNKtgvtZiA==}
+
+  quickjs-wasi@3.6.2:
+    resolution: {integrity: sha512-FCqGtGOrMgzUiIrMNMA2YnsOxCNwo31dzqXvclXUC6xeT35NJLKXQJsvbeCTjvoFAwZgEAPg8U6+KAPDGXn8Mg==}
 
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
@@ -7387,6 +7409,11 @@ snapshots:
     dependencies:
       '@jridgewell/trace-mapping': 0.3.9
 
+  '@duckdb/duckdb-wasm@1.33.1-dev57.0':
+    dependencies:
+      apache-arrow: 17.0.0
+      qs: 6.17.1
+
   '@earendil-works/pi-agent-core@1.5.2(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(supports-color@8.1.1)(undici@6.29.1)(ws@8.22.1)(zod@4.6.7)':
     dependencies:
       '@earendil-works/pi-ai': 1.5.2(@aws-sdk/credential-provider-node@3.972.97)(@smithy/signature-v4@5.7.5)(supports-color@8.1.1)(undici@6.29.1)(ws@8.22.1)(zod@4.6.7)
@@ -7429,13 +7456,13 @@ snapshots:
       - ws
       - zod
 
+  '@earendil-works/pi-codemode@1.5.2':
+    dependencies:
+      quickjs-wasi: 3.6.2
+
   '@earendil-works/pi-schema@1.5.2': {}
 
   '@earendil-works/pi-telemetry@1.5.2': {}
-  '@duckdb/duckdb-wasm@1.33.1-dev57.0':
-    dependencies:
-      apache-arrow: 17.0.0
-      qs: 6.17.1
 
   '@emnapi/core@1.11.0':
     dependencies:
@@ -10835,6 +10862,8 @@ snapshots:
 
   diff@7.0.0: {}
 
+  diff@8.0.2: {}
+
   diff@8.0.4: {}
 
   dir-glob@3.0.1:
@@ -11880,6 +11909,7 @@ snapshots:
   json-bigint@1.0.0:
     dependencies:
       bignumber.js: 9.3.1
+
   json-bignum@0.0.3: {}
 
   json-parse-better-errors@1.0.2: {}
@@ -12884,6 +12914,8 @@ snapshots:
   queue@6.0.2:
     dependencies:
       inherits: 2.0.4
+
+  quickjs-wasi@3.6.2: {}
 
   range-parser@1.2.1: {}
 

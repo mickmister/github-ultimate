@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
 import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit, verifiedGitBlobBytes, type GitBlob, type GitRead } from './git-reads';
+import { agentSnapshot } from './agent-snapshot';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import type { WorkspaceNavigation } from './workspace-navigation';
@@ -140,6 +141,12 @@ export class Connections {
       if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
+      if (request.operation === 'agentSnapshot') {
+        if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed.');
+        const repo = (await this.repositories(record)).find(item => item.full_name.toLowerCase() === request.repository.toLowerCase());
+        if (!repo) throw new ConnectionError('Repository is not available through this installation and user.');
+        return agentSnapshot(request, (path, limit) => { if (!isCurrent()) throw new ConnectionError('GitHub access changed.'); return this.api(record, path, limit, 'immutable'); });
+      }
       if (request.operation === 'agentRepositories' || request.operation === 'agentProbe') {
         if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed. Reconnect explicitly.');
         return request.operation === 'agentRepositories' ? this.repositories(record) : this.execute({ operation: 'probe', id: record.id, repository: request.repository });

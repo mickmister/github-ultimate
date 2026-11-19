@@ -1,12 +1,76 @@
 # Browser Pi agent proof of concept
 
-The static hosted `pi.html` page runs **`@earendil-works/pi-agent-core` 1.5.2**.
+The hosted app's `app/#/agent` screen and standalone `pi.html` page run
+**`@earendil-works/pi-agent-core` 1.5.2**. The standalone page retains the initial
+read-only transport proof; the app screen adds a persistent scratch workspace.
 The extension owns inference HTTP requests, optional secret headers, GitHub tokens
 and S3 SigV4 signing. There is no agent backend. This is an initial runnable slice
 of [issue #7](https://github.com/mickmister/github-ultimate/issues/7), not completion
 of its broader workspace/document/streaming milestone.
 
 ## Try it
+
+### Accepted next slice (2026-11-19)
+
+The user accepted an Agent screen inside the hosted app, retaining the standalone
+POC for focused testing. Scratch starts from a selected GitHub repository directory
+at an explicit pinned commit, or an empty workspace. The milestone is import,
+edit with codemode, inspect diff, create a scratch commit, then restore messages
+and workspace from S3. GitHub branch publication follows that round trip.
+These are decisions from this session's chat, not a submission or replacement of
+the historical `browser_pi_poc_decisions_v1` review form. Implementation and
+verification evidence are tracked separately in `task-alc`.
+
+### Hosted Agent screen
+
+Open **Agent** from Documents navigation, or `app/#/agent` within the same branch
+preview. Navigation preserves the selected workspace context and preselects its
+GitHub connection/repository. Load and choose approved inference, GitHub and S3
+connections; their grants must include the app directory, not just `pi/`.
+
+Choose **New empty workspace**, or enter a source repository, full 40-character
+commit SHA and directory (empty means root), then **Import pinned directory**.
+The broker checks the original page grant, current GitHub user/installation and
+repository access before pinned Git reads. Imports verify blob hashes and reject
+truncated trees, invalid UTF-8, symlinks, submodules and oversized inputs. Limits
+are 100 text files, 128 KiB per file and 512 KiB total working-tree bytes.
+
+The agent gets `codemode` and a separate `git_commit` tool. Codemode offers
+`list_files`, `read_file`, `search`, `write_file`, `delete_file`, `apply_patch`,
+`git_status`, `git_diff` and `git_log`, scoped to this session's scratch tree.
+Arguments are validated in their implementations, not just declared as schemas.
+Scripts use `await tools.read_file({path: "README.md"})` and `text(value)`.
+The UI also exposes script execution, diff, commit and history for direct testing.
+
+`@earendil-works/pi-codemode/portable` 1.5.2 runs QuickJS/WASM inside a dedicated
+browser Worker. Its WASM is self-hosted and gzip-decompressed locally. The VM
+receives scratch capabilities, no credentials or ambient network/shell/DOM. Each
+script uses a cloned tree and applies it only on success at the original revision.
+Failure, cancellation, timeout or concurrent change discards the overlay. The VM
+has a 32 MiB heap cap, 20,000 interrupt polls, 10-second execution deadline and a
+15-second outer worker timeout. Script source is limited to 32 KiB.
+
+Scratch commits use native Git blob/tree/commit encoding, with hashes checked
+against system Git in tests. They version the entire scratch tree and form an
+independent repository: importing a directory records its upstream pin as
+provenance, without pretending that the partial tree is a full upstream checkout.
+Scratch author identity is `Browser Pi <scratch@localhost>`. There is no GitHub
+push, branch mutation or PR creation in this slice.
+
+For this bounded slice, the S3 checkpoint contains the complete scratch state,
+including uncommitted files, history and HEAD, alongside messages. This single
+create-only object is the consistency boundary; no separate manifest can point
+to partially uploaded files. History is limited to 30 commits / 2 MiB serialized
+scratch state, within the unchanged 4 MiB total checkpoint cap. Successful manual
+scripts and commits save immediately; agent tools save with their settled prompt.
+Restore checks file paths, bounds and Git object integrity before enabling the
+session. Old transcript-only checkpoints remain readable by the app; the standalone
+page refuses workspace-bearing checkpoints rather than silently dropping files.
+
+Phone, tablet and desktop have separate views above the same session controller.
+Drafts, source selection and operation identity stay above presentation switches.
+
+### Standalone transport POC
 
 1. `pnpm install --frozen-lockfile`, `pnpm run build`, `pnpm run hosted:build`.
    Load `dist/` as an unpacked Chromium extension. `pnpm run pi:build` rebuilds
@@ -31,10 +95,11 @@ of its broader workspace/document/streaming milestone.
 
 ## Runtime and transport
 
-`hosted/pi-agent.ts` constructs the real Pi Agent with typed read-only tools:
+`hosted/pi-agent.ts` constructs the real Pi Agent with typed read-only GitHub tools:
 `github_repositories` and `github_probe` (repository metadata and default-branch
 commit identity). Tools bind the selected GitHub user and installation, which the
 broker checks before use. The existing repository authorization is rechecked.
+The hosted Agent screen supplies its additional scratch tools to this same runtime.
 
 `hosted/pi-transport.ts` implements Pi's `StreamFn` using a **non-streaming**
 OpenAI-compatible Chat Completions JSON reply. It preserves assistant tool calls,
@@ -61,6 +126,8 @@ The actual prefix is concatenated with its existing trailing slash. Each object
 contains the session/checkpoint/parent, creation time, versioned runtime identity,
 portable binding and completed Pi user/assistant/tool transcript. Tools/system
 instructions are rebuilt from this application, not executed from storage.
+The app screen additionally persists its optional versioned `scratch` state in
+the checkpoint object.
 Each save uses the broker's create-only `If-None-Match: *` upload and verifies a
 readback before claiming persistence. The session limit is 4 MiB (the general
 broker transfer limit remains 8 MiB).
@@ -103,7 +170,10 @@ cross-device running-stream handoff and interrupted-run recovery remain open.
 
 These mocks prove the local architecture and serialization, not successful access
 to a user's live inference endpoint, live S3 bucket, a second physical device or
-Safari's installed extension. The normal TanStack workspace Agent panel, verified
-document tools, model-accessible S3 resource tools, incremental token streaming,
-edit proposals and GitHub mutations from issue #7 are subsequent slices. Session
-uploads are the only automatic writes introduced by this POC.
+Safari's installed extension. The Agent screen's browser tests exercise the
+production-built static app, actual QuickJS worker, model/tool continuation,
+scratch commits, S3 reload/restore, failed-script rollback, infinite-loop limits
+and six presentation orientations. The remote bridge services are mocked.
+Verified workspace-document tools, model-accessible general S3 resource tools,
+incremental token streaming and GitHub mutations from issue #7 remain subsequent
+slices. Session uploads are the only remote writes introduced here.

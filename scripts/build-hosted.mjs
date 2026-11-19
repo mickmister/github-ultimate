@@ -42,5 +42,8 @@ await cp('webapp/node_modules/monaco-editor/LICENSE', 'hosted-dist/app/MONACO_LI
 await cp('webapp/node_modules/monaco-editor/ThirdPartyNotices.txt', 'hosted-dist/app/MONACO_THIRD_PARTY_NOTICES.txt');
 await cp('licenses/duckdb-wasm-MIT.txt', 'hosted-dist/app/DUCKDB_LICENSE.txt');
 await cp('node_modules/apache-arrow/LICENSE.txt', 'hosted-dist/app/ARROW_LICENSE.txt');
+await cp('licenses/pi-MIT.txt', 'hosted-dist/app/PI_LICENSE.txt');
+await cp('node_modules/quickjs-wasi/LICENSE', 'hosted-dist/app/QUICKJS_LICENSE.txt');
+await cp('node_modules/diff/LICENSE', 'hosted-dist/app/DIFF_LICENSE.txt');
 if (await payloadSize('hosted-dist') > previewLimit) throw new Error('Hosted pages exceed the branch preview payload limit.');
 console.log(`Built hosted page for ${metadata.branch} at ${metadata.sha}`);

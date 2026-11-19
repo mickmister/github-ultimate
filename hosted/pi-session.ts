@@ -2,6 +2,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import { z } from 'zod';
 import type { PublicS3Connection, S3Object } from '../src/s3-protocol';
 import type { PiBridge } from './pi-transport';
+import { Scratch, scratchSchema, type ScratchState } from '../src/scratch';
 
 const text = z.object({ type: z.literal('text'), text: z.string().max(2 * 1024 * 1024) }).strict();
 const toolCall = z.object({ type: z.literal('toolCall'), id: z.string().min(1).max(200), name: z.string().min(1).max(100), arguments: z.record(z.string(), z.json()) }).strict();
@@ -18,7 +19,7 @@ const message = z.discriminatedUnion('role', [
 // local connection UUIDs. Each request still uses that device's current revision.
 export const sessionBindingSchema = z.object({ runtime: z.literal('earendil-pi-1.5.2-text-v1'), inferenceModel: z.string().min(1).max(200), githubAppId: z.number().int().positive(), githubUserId: z.number().int().positive(), installationId: z.number().int().positive(), storageEndpoint: z.string().max(2000), storageBucket: z.string().max(63), storagePrefix: z.string().max(1024), storageRegion: z.string().max(100), storageAddressing: z.enum(['path', 'virtual']) }).strict();
 export type SessionBinding = z.infer<typeof sessionBindingSchema>;
-export const checkpointSchema = z.object({ kind: z.literal('browser-pi-checkpoint'), schema_version: z.literal(1), session_id: z.string().uuid(), checkpoint_id: z.string().uuid(), parent: z.string().nullable(), created_at: z.string().datetime(), binding: sessionBindingSchema, messages: z.array(message).max(2000) }).strict();
+export const checkpointSchema = z.object({ kind: z.literal('browser-pi-checkpoint'), schema_version: z.literal(1), session_id: z.string().uuid(), checkpoint_id: z.string().uuid(), parent: z.string().nullable(), created_at: z.string().datetime(), binding: sessionBindingSchema, messages: z.array(message).max(2000), scratch: scratchSchema.optional() }).strict();
 export type PiCheckpoint = z.infer<typeof checkpointSchema>;
 export function validateTranscript(messages: PiCheckpoint['messages']) {
   const pending = new Map<string, string>(), seen = new Set<string>();
@@ -44,9 +45,10 @@ function encode(text: string) {
 export class PiSessions {
   constructor(private bridge: PiBridge, private storage: PublicS3Connection) {}
   prefix(sessionId: string) { return `${this.storage.prefix}pi-sessions/${z.string().uuid().parse(sessionId)}/`; }
-  async save(sessionId: string, binding: SessionBinding, messages: AgentMessage[], parent: string | null) {
+  async save(sessionId: string, binding: SessionBinding, messages: AgentMessage[], parent: string | null, scratch?: ScratchState) {
     if (!this.storage.allowRead || !this.storage.allowUpload || this.storage.allowOverwrite) throw new Error('Choose S3 storage with reads/uploads enabled and overwrites disabled.');
-    const checkpoint = checkpointSchema.parse({ kind: 'browser-pi-checkpoint', schema_version: 1, session_id: sessionId, checkpoint_id: crypto.randomUUID(), parent, created_at: new Date().toISOString(), binding, messages: messages.filter(message => message.role !== 'system') });
+    if (scratch) new Scratch(scratch);
+    const checkpoint = checkpointSchema.parse({ kind: 'browser-pi-checkpoint', schema_version: 1, session_id: sessionId, checkpoint_id: crypto.randomUUID(), parent, created_at: new Date().toISOString(), binding, messages: messages.filter(message => message.role !== 'system'), ...(scratch ? { scratch } : {}) });
     validateTranscript(checkpoint.messages);
     const key = `${this.prefix(sessionId)}${checkpoint.created_at.replace(/[:.]/g, '-')}-${checkpoint.checkpoint_id}.json`;
     const json = JSON.stringify(checkpoint);
@@ -66,6 +68,7 @@ export class PiSessions {
     const checkpoint = checkpointSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
     if (checkpoint.session_id !== sessionId || Object.keys(binding).some(key => binding[key as keyof SessionBinding] !== checkpoint.binding[key as keyof SessionBinding])) throw new Error('Checkpoint belongs to different connections or configuration. No fallback was used.');
     validateTranscript(checkpoint.messages);
+    if (checkpoint.scratch) new Scratch(checkpoint.scratch);
     return checkpoint;
   }
 }

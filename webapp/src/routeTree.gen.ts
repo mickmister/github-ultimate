@@ -10,6 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AgentRouteImport } from './routes/agent'
 import { Route as BeadsRouteImport } from './routes/beads'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ReviewsRouteImport } from './routes/reviews'
@@ -20,6 +21,11 @@ import { Route as ReviewsRequestIdRouteImport } from './routes/reviews.$requestI
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AgentRoute = AgentRouteImport.update({
+  id: '/agent',
+  path: '/agent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const BeadsRoute = BeadsRouteImport.update({
@@ -55,6 +61,7 @@ const ReviewsRequestIdRoute = ReviewsRequestIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/agent': typeof AgentRoute
   '/beads': typeof BeadsRoute
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
@@ -64,6 +71,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/agent': typeof AgentRoute
   '/beads': typeof BeadsRoute
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
@@ -74,6 +82,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/agent': typeof AgentRoute
   '/beads': typeof BeadsRoute
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
@@ -85,6 +94,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/agent'
     | '/beads'
     | '/documents'
     | '/reviews'
@@ -94,6 +104,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/agent'
     | '/beads'
     | '/documents'
     | '/reviews'
@@ -103,6 +114,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/'
+    | '/agent'
     | '/beads'
     | '/documents'
     | '/reviews'
@@ -113,6 +125,7 @@ export interface FileRouteTypes {
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AgentRoute: typeof AgentRoute
   BeadsRoute: typeof BeadsRoute
   DocumentsRoute: typeof DocumentsRouteWithChildren
   ReviewsRoute: typeof ReviewsRouteWithChildren
@@ -126,6 +139,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/agent': {
+      id: '/agent'
+      path: '/agent'
+      fullPath: '/agent'
+      preLoaderRoute: typeof AgentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/beads': {
@@ -198,6 +218,7 @@ const ReviewsRouteWithChildren =
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AgentRoute: AgentRoute,
   BeadsRoute: BeadsRoute,
   DocumentsRoute: DocumentsRouteWithChildren,
   ReviewsRoute: ReviewsRouteWithChildren,
