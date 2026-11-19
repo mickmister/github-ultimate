@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { ConnectionError } from './connections';
 import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import { trustedOrigin } from './hosted-protocol';
-import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
+import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, s3ConfigurationSchema, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 
 export type S3ConnectionRecord = S3Configuration & { id: string; revision: string; hostedGrants: HostedGrant[] };
@@ -59,7 +59,12 @@ export class S3Connections {
       if (request.operation === 'add' || request.operation === 'update') {
         const existing = request.operation === 'update' ? await this.store.get(request.id) : undefined;
         if (request.operation === 'update' && !existing) throw new ConnectionError('S3 connection no longer exists.');
-        const { operation: _, ...config } = request;
+        const fields: Record<string, unknown> = { ...request }; delete fields.operation; delete fields.id;
+        const config = s3ConfigurationSchema.parse({ ...fields,
+          accessKeyId: request.accessKeyId ?? existing?.accessKeyId,
+          secretAccessKey: request.secretAccessKey ?? existing?.secretAccessKey,
+          sessionToken: request.sessionToken ?? existing?.sessionToken,
+        });
         const target = s3BucketURL(config);
         if (!await this.hasHostAccess(target.origin)) throw new ConnectionError('Browser host access to the S3 endpoint was not granted.');
         const record: S3ConnectionRecord = { ...config, endpoint: new URL(config.endpoint).href, prefix: s3Prefix(config.prefix), id: existing?.id ?? crypto.randomUUID(), revision: crypto.randomUUID(), hostedGrants: existing?.hostedGrants ?? [] };

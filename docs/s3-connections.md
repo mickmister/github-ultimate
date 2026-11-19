@@ -26,9 +26,13 @@ No personal endpoint, bucket or key prefix is built into the extension.
   Your service must support that conditional request. An existing key returns
   an error; there is no retry that silently drops the condition. Enabling
   replacement explicitly permits ordinary PUT replacement at the service.
-- Editing a connection requires re-entering its credentials and retains its
-  hosted grants. Each configuration edit changes a revision: open pages must
-  reconnect before operating on changed endpoints, buckets, prefixes or rights.
+- Editing a connection leaves credential fields blank. Blank fields retain their
+  saved values inside the broker; enter a value only to replace that credential.
+  Use **Remove saved S3 session token** to clear a temporary token explicitly.
+  New connections still require an access key ID and secret. Saved credentials
+  are never populated into the form or returned to settings/hosted pages.
+  Edits retain hosted grants. Each configuration edit changes a revision: open
+  pages must reconnect before operating on changed endpoints, buckets, prefixes or rights.
   An old page cannot silently upload to a newly configured destination.
 - Removing a connection removes its locally stored credentials and grants. It
   does not revoke credentials at the storage provider.
@@ -90,11 +94,13 @@ or service credentials still determine actual bucket/object access.
 
 Unit fixtures verify signed requests, literal key encoding, pagination, binary
 uploads, operation/prefix denial, transfer bounds, create-only replacement,
-configuration revisions and credential rotation. Packaged Chromium tests use
-the real extension relay, settings, IndexedDB and hosted browser with simulated
+configuration revisions, credential retention and rotation. Packaged Chromium
+tests use the real extension relay, settings, IndexedDB and hosted browser with simulated
 S3 network responses. They cover upload/read, inert previews, remembered
 selection, restart persistence, sibling-path denial, open-tab revocation and
-upgrading existing GitHub credential storage without losing its records.
+upgrading existing GitHub credential storage without losing its records. They also
+edit connection rights with blank credential fields, verify stored values remain
+private, clear a session token explicitly, and retain required fields for new keys.
 
 Those fixtures are not live acceptance for every S3-compatible vendor. Verify
 the target service's endpoint, region, addressing and conditional-write behavior

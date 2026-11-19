@@ -93,6 +93,24 @@ test('create-only upload never retries an existing key; explicit connection upda
   await broker.handle({ operation: 'revokeOrigin', id: record.id, origin, subpath: '/storage/' });
   await expect(broker.handleHosted(documentURL, request)).rejects.toThrow('not approved');
 });
+test('config-only edits retain private credentials, preserve grants and invalidate the old revision', async () => {
+  const record = await connect();
+  await broker.handle({ operation: 'update', id: record.id, ...config, sessionToken: 'saved-private-session-token' });
+  const { accessKeyId: _key, secretAccessKey: _secret, ...publicConfig } = config;
+  const updated = await broker.handle({ operation: 'update', id: record.id, ...publicConfig, allowOverwrite: true, name: 'Renamed storage' }) as PublicS3Connection;
+  expect(await store.get(record.id)).toMatchObject({ accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey, sessionToken: 'saved-private-session-token', allowOverwrite: true, name: 'Renamed storage' });
+  expect(updated.hostedGrants).toHaveLength(1); expect(updated.revision).not.toBe(record.revision);
+  expect(JSON.stringify([updated, await broker.handle({ operation: 'list' }), await broker.handleHosted(documentURL, { operation: 's3Connections' })])).not.toMatch(/EXAMPLEACCESS|private-s3-secret|saved-private-session-token/);
+  await expect(broker.handleHosted(documentURL, { operation: 's3Read', ...scope(record), key: 'workspace-a/note %.md' })).rejects.toThrow('configuration changed');
+  await broker.handleHosted(documentURL, { operation: 's3Read', ...scope(updated), key: 'workspace-a/note %.md' });
+  expect(calls.at(-1)!.headers.get('X-Amz-Security-Token')).toBe('saved-private-session-token');
+  await broker.handle({ operation: 'update', id: record.id, ...publicConfig, secretAccessKey: 'rotated-only-secret' });
+  expect(await store.get(record.id)).toMatchObject({ accessKeyId: config.accessKeyId, secretAccessKey: 'rotated-only-secret', sessionToken: 'saved-private-session-token' });
+  await broker.handle({ operation: 'update', id: record.id, ...publicConfig, sessionToken: '' });
+  expect((await store.get(record.id))!.sessionToken).toBe('');
+  expect(() => broker.handle({ operation: 'add', ...publicConfig })).toThrow();
+  expect(() => broker.handle({ operation: 'update', id: record.id, ...publicConfig, secretAccessKey: '' })).toThrow();
+});
 test('read-only and upload-only connections enforce operation grants', async () => {
   const record = await connect();
   const readOnly = await broker.handle({ operation: 'update', id: record.id, ...config, allowUpload: false }) as PublicS3Connection;

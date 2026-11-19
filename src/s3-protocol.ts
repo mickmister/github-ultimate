@@ -24,7 +24,12 @@ const pair = z.object({ origin: z.string().max(300), subpath: z.string().max(100
 export const s3SettingsSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('list') }).strict(),
   s3ConfigurationSchema.extend({ operation: z.literal('add') }).strict(),
-  s3ConfigurationSchema.extend({ operation: z.literal('update'), id }).strict(),
+  s3ConfigurationSchema.extend({ operation: z.literal('update'), id,
+    accessKeyId: s3ConfigurationSchema.shape.accessKeyId.optional(),
+    secretAccessKey: s3ConfigurationSchema.shape.secretAccessKey.optional(),
+    // Omitted preserves the saved token; an explicit empty string removes it.
+    sessionToken: s3ConfigurationSchema.shape.sessionToken,
+  }).strict(),
   z.object({ operation: z.literal('remove'), id }).strict(),
   z.object({ operation: z.enum(['grantOrigin', 'revokeOrigin']), id, ...pair.shape, replace: pair.optional() }).strict(),
 ]);

@@ -27,6 +27,7 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <label>S3 access key ID<input name="accessKeyId" required autocomplete="off"></label>
 <label>S3 secret access key<input name="secretAccessKey" type="password" required autocomplete="off"></label>
 <label>S3 session token (optional)<input name="sessionToken" type="password" autocomplete="off"></label>
+<div id="s3-clear-session-token" hidden><label><input name="clearSessionToken" type="checkbox">Remove saved S3 session token</label></div>
 <label><input name="allowRead" type="checkbox" checked>Allow reads and listing</label>
 <label><input name="allowUpload" type="checkbox" checked>Allow uploads</label>
 <label><input name="allowOverwrite" type="checkbox">Allow replacing existing objects</label>

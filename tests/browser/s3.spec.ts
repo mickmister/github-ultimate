@@ -123,3 +123,42 @@ test('packaged S3 connection signs private reads and uploads, remembers selectio
   await expect(page.getByRole('status')).toContainText('not approved');
   expect(await context.serviceWorkers()[0].evaluate(() => (globalThis as typeof globalThis & { __s3Calls: unknown[] }).__s3Calls.length)).toBe(before);
 });
+
+test('editing packaged S3 settings keeps blank credentials private and supports explicit token removal', async () => {
+  const id = await launch(), settings = await context.newPage(); await settings.goto(`chrome-extension://${id}/connections.html`);
+  await expect(settings.getByLabel('Remove saved S3 session token')).toBeHidden();
+  await settings.getByLabel('S3 connection name').fill('Agent sessions');
+  await settings.getByLabel('S3 endpoint', { exact: true }).fill('https://storage.example.test');
+  await settings.getByLabel('S3 bucket', { exact: true }).fill('staging-bucket');
+  await settings.getByLabel('S3 signing region').fill('auto');
+  await settings.getByLabel('S3 access key ID').fill('EXAMPLEACCESS');
+  await settings.getByLabel('S3 secret access key').fill('private-S3-secret');
+  await settings.getByLabel('S3 session token (optional)').fill('private-session-token');
+  await settings.getByRole('button', { name: 'Save S3 connection', exact: true }).click();
+  const card = settings.getByRole('article', { name: 'Agent sessions', exact: true }); await expect(card).toBeVisible();
+  await card.getByRole('button', { name: 'Edit S3 connection' }).click();
+  await expect(settings.getByLabel('Remove saved S3 session token')).toBeVisible();
+  await expect(settings.getByLabel('S3 access key ID')).toHaveValue(''); await expect(settings.getByLabel('S3 access key ID')).not.toHaveAttribute('required');
+  await expect(settings.getByLabel('S3 secret access key')).toHaveValue(''); await expect(settings.getByLabel('S3 session token (optional)')).toHaveValue('');
+  await settings.getByLabel('Allow replacing existing objects').check();
+  await settings.getByRole('button', { name: 'Save S3 connection', exact: true }).click();
+  await expect(card).toContainText('Replacement: allowed');
+  await expect(settings.getByLabel('Remove saved S3 session token')).toBeHidden();
+  const savedCredentialsMatch = async (cleared: boolean) => context.serviceWorkers()[0].evaluate(async cleared => {
+    const db = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('github-ultimate-credentials', 4); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+    const records = await new Promise<any[]>((resolve, reject) => { const request = db.transaction('s3Connections').objectStore('s3Connections').getAll(); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); }); db.close();
+    return records.length === 1 && records[0].accessKeyId === 'EXAMPLEACCESS' && records[0].secretAccessKey === 'private-S3-secret' && records[0].sessionToken === (cleared ? '' : 'private-session-token');
+  }, cleared);
+  expect(await savedCredentialsMatch(false)).toBe(true);
+  await expect(settings.getByLabel('S3 access key ID')).toHaveAttribute('required');
+  await card.getByRole('button', { name: 'Edit S3 connection' }).click();
+  await settings.getByLabel('Remove saved S3 session token').check();
+  await settings.getByLabel('Allow replacing existing objects').uncheck();
+  await settings.getByRole('button', { name: 'Save S3 connection', exact: true }).click();
+  await expect(card).toContainText('Replacement: not allowed'); expect(await savedCredentialsMatch(true)).toBe(true);
+  await settings.reload(); await expect(card).toBeVisible(); await card.getByRole('button', { name: 'Edit S3 connection' }).click();
+  await expect(settings.getByLabel('S3 secret access key')).toHaveValue('');
+  await expect(settings.locator('body')).not.toContainText('private-S3-secret');
+  await settings.getByRole('button', { name: 'Cancel S3 edit', exact: true }).click();
+  await expect(settings.getByLabel('S3 access key ID')).toHaveAttribute('required');
+});
