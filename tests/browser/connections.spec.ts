@@ -319,7 +319,6 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(modern.getByLabel('Document content')).toContainText('Explore product requirements');
   await modern.getByRole('button', { name: 'Back to documents' }).click();
   await expect(modern.getByRole('tree', { name: 'Documents', exact: true })).toBeVisible();
-  await modern.getByText('Change workspace', { exact: true }).click();
   await expect(modern.getByLabel('Stored workspace')).toHaveValue('workspace-a');
   await expect(modern.getByLabel('Storage repository')).toHaveValue('mickmister/workspace-storage');
   await modern.getByRole('button', { name: 'Forget saved workspace', exact: true }).click();
