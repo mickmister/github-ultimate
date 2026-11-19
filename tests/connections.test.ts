@@ -46,6 +46,19 @@ async function login(client = defaultClient) {
   return connection;
 }
 
+test('Pi repository tools reject a changed GitHub identity or installation before issuing API reads', async () => {
+  const connection = await login();
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin: 'https://example.test', subpath: '/app/' });
+  const request = { operation: 'agentProbe', id: connection.id, installationId: 1, userId: 1, repository: 'mickmister/workspace-storage' };
+  expect(await broker.handleHosted('https://example.test/app/pi.html', request)).toMatchObject({ headOid: 'a'.repeat(40) });
+  const count = calls.length;
+  for (const patch of [{ userId: 99 }, { installationId: 99 }, { repository: 'outside/repo' }]) await expect(broker.handleHosted('https://example.test/app/pi.html', { ...request, ...patch })).rejects.toThrow();
+  // Identity mismatches never send HTTP; denied repositories may refresh the
+  // authorized repository list, but never request the outside repository.
+  expect(calls.slice(count).every(call => !call.url.includes('/repos/outside/'))).toBe(true);
+});
+
 async function nativeReads() {
   const connection = await login(), origin = 'https://example.test';
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });

@@ -93,7 +93,7 @@ test('complete pinned review links skip repository and workspace discovery', asy
 for (const process of [false, true]) {
   test(`explains ${process ? 'process workflow dispatch' : 'feedback-only submission'} before review and form submission`, async ({ page }) => {
     await page.goto(`/iframe.html?id=web-app-reviews--${process ? 'process-context' : 'focused'}&viewMode=story`);
-    const notice = process ? 'Submitting saves your response, then attempts to start the configured GitHub workflow for process hosted-pilot.' : 'This request saves feedback only. Submitting will not start a GitHub workflow.';
+    const notice = process ? 'Saves feedback and requests a workflow run for hosted-pilot.' : 'Saves feedback; no GitHub workflow run.';
     await expect(page.locator('.review-submit')).toContainText(notice);
     await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
     while (await page.getByRole('button', { name: 'Next question', exact: true }).count()) await page.getByRole('button', { name: 'Next question', exact: true }).click();

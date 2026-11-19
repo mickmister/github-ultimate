@@ -19,6 +19,7 @@
     "lint:tsx-view-boundary:last-commit": "OPENLINT_POLICY_DIR=.github/openlint ol check --last-commit --preset tsx-view-boundary --target .",
     "lint:ui-customization-fences": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset ui-customization-fences --target . src hosted webapp/src",
     "hosted:build": "node scripts/build-hosted.mjs",
+    "pi:build": "node scripts/build-pi.mjs",
     "hosted:storybook:stage": "node scripts/stage-hosted-storybook.mjs",
     "pages:build": "pnpm run hosted:build && pnpm run webapp:storybook:build && pnpm run hosted:storybook:stage",
     "form": "node --experimental-strip-types cli/form.ts",
@@ -44,6 +45,9 @@
     "package": "pnpm run build && node scripts/package.mjs"
   },
   "dependencies": {
+    "@earendil-works/pi-agent-core": "1.5.2",
+    "@earendil-works/pi-ai": "1.5.2",
+    "@earendil-works/pi-schema": "1.5.2",
     "@noble/hashes": "^2.4.0",
     "@tanstack/query-core": "^5.107.1",
     "aws4fetch": "^1.0.20",
