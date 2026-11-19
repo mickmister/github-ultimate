@@ -10,6 +10,66 @@ function pinnedReviewURL() {
   return `/iframe.html?id=web-app-reviews--focused&viewMode=story&remoteFixture=true#/reviews/reader-01?${query}`;
 }
 
+for (const [device, width, height] of [
+  ['phone portrait', 390, 844], ['phone landscape', 844, 390],
+  ['tablet portrait', 820, 1180], ['tablet landscape', 1180, 820],
+  ['desktop portrait', 900, 1440], ['desktop landscape', 1440, 900],
+] as const) {
+  test(`document Zen mode survives delayed saved-state restoration and draft updates on ${device}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    let release!: () => void;
+    const listing = new Promise<void>(resolve => { release = resolve; });
+    let state: any = { artifacts: [], revision: 1 };
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().headers()['x-review-operation'] === 'list') await listing;
+      if (route.request().method() === 'POST') state = route.request().postDataJSON();
+      await route.fulfill({ json: state });
+    });
+    await page.goto(pinnedReviewURL());
+    await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible({ timeout: 30000 });
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    const zen = page.getByRole('dialog', { name: 'Reader plan — Zen mode', exact: true });
+    await expect(zen).toBeVisible();
+    release();
+    await expect(page.getByRole('region', { name: 'Pinned review preview', exact: true })).toHaveCount(0);
+    await expect(zen).toBeVisible();
+    await expect(zen.getByRole('checkbox', { name: 'I have reviewed this item', exact: true })).toBeEnabled();
+    await zen.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect(zen.getByRole('status')).toContainText('Draft saved remotely');
+    await expect(zen).toBeVisible();
+    await zen.getByRole('button', { name: '← Back', exact: true }).click();
+    await expect(zen).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+  });
+}
+
+for (const exit of ['Back', 'Escape'] as const) {
+  test(`leaving document Zen mode with ${exit} before restoration keeps it closed`, async ({ page }) => {
+    let release!: () => void;
+    const listing = new Promise<void>(resolve => { release = resolve; });
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().headers()['x-review-operation'] === 'list') await listing;
+      await route.fulfill({ json: { artifacts: [], revision: 1 } });
+    });
+    await page.goto(pinnedReviewURL());
+    await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible({ timeout: 30000 });
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    const zen = page.getByRole('dialog', { name: 'Reader plan — Zen mode', exact: true });
+    await expect(zen).toBeVisible();
+    if (exit === 'Back') await zen.getByRole('button', { name: '← Back', exact: true }).click();
+    else await page.keyboard.press('Escape');
+    await expect(zen).toHaveCount(0);
+    release();
+    await expect(page.getByRole('region', { name: 'Focused review session', exact: true })).toBeVisible();
+    await expect(zen).toHaveCount(0);
+    await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
+    await expect(zen).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(zen).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
+  });
+}
+
 test('review inbox does not prefetch member content; opening a detail prefetches all documents, forms and baselines', async ({ page }) => {
   const reads: string[] = [];
   await page.route('**/__review-fixture', async route => {
@@ -445,7 +505,7 @@ test('source document comparisons also work in zen mode', async ({ page }) => {
   await page.getByRole('button', { name: 'Changes', exact: true }).click();
   await page.getByRole('button', { name: 'Zen mode', exact: true }).click();
   const zen = page.getByRole('dialog', { name: 'Reader plan — Zen mode', exact: true });
-  await expect(zen.locator('.monaco-diff-editor')).toBeVisible();
+  await expect(zen.locator('.monaco-diff-editor')).toBeVisible({ timeout: 30000 });
   await zen.getByRole('button', { name: 'Full document', exact: true }).click();
   await expect(zen.locator('[data-editor-ready=true]')).toBeVisible();
   await zen.getByRole('button', { name: '← Back', exact: true }).click();

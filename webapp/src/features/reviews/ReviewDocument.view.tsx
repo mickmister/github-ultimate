@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { ReviewDocumentProps } from './ReviewDocument';
 
 export function ReviewDocumentView({ title, children, busy, onSaveDraft, formStatus, zen, onZen, dialog, zenButton, heading }: ReviewDocumentProps & {
-  zen: boolean; onZen(value: boolean): void; dialog: RefObject<HTMLDialogElement | null>;
+  dialog: RefObject<HTMLDialogElement | null>;
   zenButton: RefObject<HTMLButtonElement | null>; heading: RefObject<HTMLHeadingElement | null>;
 }) {
   return zen ? createPortal(<dialog ref={dialog} className="review-zen" aria-label={`${title} — Zen mode`} onCancel={event => { event.preventDefault(); onZen(false); }}>
