@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Browser Pi agent POC</title><link rel="stylesheet" href="./pi-FTL52YNM.css"></head>
+<body><header><a href="../index.html">Workspaces</a> · <a href="../settings.html">Connection settings</a><h1>Browser Pi agent POC</h1></header>
+<p>The page runs Pi. The extension owns inference headers, GitHub access and S3 signing. Text responses arrive as complete messages.</p>
+<button id="connect">Load approved connections</button><section id="setup">
+<label for="inference">Inference connection</label><select id="inference"></select>
+<label for="github">GitHub connection</label><select id="github"></select>
+<label for="storage">S3 session storage</label><select id="storage"></select>
+<label>Session ID<input id="session" autocomplete="off"></label>
+<button id="new-session">New session</button><button id="list-checkpoints">List checkpoints</button>
+<label for="checkpoint">Saved checkpoint</label><select id="checkpoint"></select><button id="more-checkpoints" hidden>Load more checkpoints</button><button id="restore">Restore checkpoint</button>
+</section><p id="pi-status" role="status" aria-live="polite"></p>
+<pre id="transcript" aria-label="Agent transcript"></pre>
+<form id="prompt-form"><label>Message<textarea id="prompt" required rows="4" maxlength="16000"></textarea></label><button id="send" disabled>Send</button><button id="stop" type="button" disabled>Stop</button><button id="retry-save" type="button" hidden>Retry session save</button></form>
+<script type="module" src="./pi-3ZW5QB7N.js"></script></body></html>
