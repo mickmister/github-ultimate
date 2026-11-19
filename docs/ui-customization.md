@@ -68,8 +68,26 @@ webapp and original renderer. The webapp additionally exposes `form-question`,
 `review-workspace`, and `customization-panel`. Target these hooks rather than
 generated component structure. CSS executes within the current document or
 Shadow Root: `:root` and `body` selectors are document-specific, while `:host`
-is shadow-specific. Component selectors work in both. Native app settings/screens
-are outside this web stylesheet contract.
+is shadow-specific. Component selectors work in both.
+
+## Mobile shell colors
+
+The mobile shell follows the active web palette: background/safe areas, toolbar,
+native settings text and inputs, buttons, switches, borders and error messages.
+Status-bar icon brightness follows the background. Preview, cancel, save, import,
+reset and system light/dark changes update the shell too. Saved colors return when
+the hosted page restores its device-local customization; before the page connects,
+the shell uses the device's light/dark default palette.
+
+The page resolves the eight semantic color variables into RGB, including named
+CSS colors and custom CSS overrides of those variables. The native bridge accepts
+only those concrete colors from the current main document. It does not require
+fixture or page-storage approval for transient color updates. Arbitrary CSS,
+typography and layout rules remain web-only. Both the hosted page and the mobile
+JavaScript bundle need the shell-theme update; the bridge uses existing native
+messaging and adds no native dependency.
+
+## Migration coverage
 
 The initial token migration covers shared colors, base typography, native
 controls, review choices, page width/spacing and document/review sidebar widths.

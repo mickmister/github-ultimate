@@ -3,6 +3,7 @@
 import { pageKVBytes, PageKVService, type PageKVStore } from './page-kv';
 import type { MobileGitHub } from './mobile-github';
 import { mobileReviewTransferMethod } from './mobile-transfer-protocol';
+import { parseShellTheme, type ShellTheme } from './mobile-theme';
 export const mobileProtocol = 1;
 export const alohakScheme = 'alohak';
 export const maxMobileMessageBytes = 16 * 1024;
@@ -68,7 +69,7 @@ export class MobileFixtureBroker {
   private fixtureEpoch = 0;
   private documentEpoch = 0;
   private pendingFixtures = 0;
-  constructor(store?: PageKVStore, private github?: MobileGitHub) {
+  constructor(store?: PageKVStore, private github?: MobileGitHub, private onTheme?: (theme: ShellTheme) => void) {
     if (store) this.storage = new PageKVService(store, url => Boolean(this.storageGrant && matchesMobileGrant(this.storageGrant, url)));
   }
   approveStorage(grant?: MobileGrant) { this.storageGrant = grant && { ...grant }; }
@@ -79,12 +80,17 @@ export class MobileFixtureBroker {
     if (pageKVBytes(raw) > maxMobileMessageBytes) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Message exceeds 16 KiB.' } };
     let input: Record<string, unknown>;
     try { input = JSON.parse(raw); } catch { return this.handle(context, raw); }
-    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== mobileReviewTransferMethod && input.method !== 'fixture.delay') return this.handle(context, raw);
+    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== mobileReviewTransferMethod && input.method !== 'fixture.delay' && input.method !== 'theme.set') return this.handle(context, raw);
     const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
     const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
     const epoch = this.documentEpoch;
     const current = () => epoch === this.documentEpoch && this.isCurrent(context);
     if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive native RPC.');
+    if (input.method === 'theme.set') {
+      if (!current() || !this.onTheme) return error('Native theme or document unavailable.');
+      try { this.onTheme(parseShellTheme(input.params)); return { jsonrpc: '2.0', id, result: {} }; }
+      catch { return error('Invalid shell theme colors.'); }
+    }
     if (input.method === 'fixture.delay') {
       const denied = this.handle(context, JSON.stringify({ jsonrpc: '2.0', id, method: 'fixture.echo', params: { text: '' } })).error;
       if (denied) return { jsonrpc: '2.0', id, error: denied };

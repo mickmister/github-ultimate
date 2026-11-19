@@ -1,5 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Button, Linking, Platform, ScrollView, StyleSheet, Switch, Text, TextInput, View } from 'react-native';
+import { AppState, Linking, Platform, ScrollView, StatusBar, StyleSheet, useColorScheme } from 'react-native';
+import { Button, Switch, Text, TextInput, View, ShellThemeContext } from './Theme';
+import { darkShell, shellPalettes, type ShellTheme } from '../src/mobile-theme';
 import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
@@ -14,6 +16,9 @@ import { MobileSettingsStore, type MobileSettings } from '../src/mobile-settings
 import { MobileLifecycle } from '../src/mobile-lifecycle';
 
 export default function App() {
+  const systemMode = useColorScheme();
+  const [shellTheme, setShellTheme] = useState<ShellTheme>();
+  const theme = shellTheme ?? shellPalettes[systemMode === 'dark' ? 'dark' : 'light'];
   const [input, setInput] = useState(String(Constants.expoConfig?.extra?.entryURL ?? ''));
   const [entry, setEntry] = useState('');
   const [route, setRoute] = useState('');
@@ -27,7 +32,7 @@ export default function App() {
   const [navigation, setNavigation] = useState({ key: '', back: false, forward: false });
   const [settingsBusy, setSettingsBusy] = useState(true);
   const settings = useRef(new MobileSettingsStore(AsyncStorage)).current;
-  const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage), github)).current;
+  const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage), github, setShellTheme)).current;
   const webView = useRef<AlohakWebViewHandle>(null);
   const viewKey = `${entry}:${reload}`;
   const currentViewKey = useRef(viewKey); currentViewKey.current = viewKey;
@@ -37,6 +42,7 @@ export default function App() {
   const lastLink = useRef<string | undefined>(undefined);
   const openLink = useRef((url: string) => {});
   function applySettings(value: MobileSettings) {
+    setShellTheme(undefined);
     const url = value.entryURL, grant = grantForEntry(url);
     lifecycle.reset(); broker.approve(value.fixtureApproved ? grant : undefined); broker.approveStorage(value.storageApproved ? grant : undefined);
     setInput(url); setEntry(url); entryRef.current = url; setRoute(url);
@@ -108,8 +114,9 @@ export default function App() {
     if (event.state === 'error') setError(event.message ?? 'WebView load failed.');
   }
   const grant = entry ? grantForEntry(entry) : undefined;
-  return <SafeAreaProvider><SafeAreaView style={styles.screen}>
-    <View style={styles.toolbar}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
+  return <ShellThemeContext.Provider value={theme}><SafeAreaProvider><SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
+    <StatusBar barStyle={darkShell(theme) ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
+    <View style={[styles.toolbar, { backgroundColor: theme.surface }]}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
       <Button title="Back" disabled={navigation.key !== viewKey || !navigation.back} onPress={() => webView.current?.goBack()} />
       <Button title="Forward" disabled={navigation.key !== viewKey || !navigation.forward} onPress={() => webView.current?.goForward()} />
       <Button title="Reload" disabled={!entry} onPress={() => { lifecycle.reset(); setBootstrap(''); webView.current?.reload(); }} /></View>
@@ -129,8 +136,8 @@ export default function App() {
       <VdConnections grant={grant} />
       <CacheSettings />
     </ScrollView>}
-    {error ? <Text accessibilityRole="alert" style={styles.error}>{error}</Text> : null}
-    {entry && <AlohakWebView ref={webView} key={viewKey} style={styles.webview} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap}
+    {error ? <Text accessibilityRole="alert" style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
+    {entry && <AlohakWebView ref={webView} key={viewKey} style={[styles.webview, { backgroundColor: theme.background }]} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap}
       onNavigation={(back, forward) => { if (currentViewKey.current === viewKey) setNavigation({ key: viewKey, back, forward }); }}
       onDocument={({ nativeEvent }) => { if (currentViewKey.current === viewKey) onDocument(nativeEvent); }}
       onMessage={({ nativeEvent }) => {
@@ -145,10 +152,10 @@ export default function App() {
           // bounded timeout and never retries ambiguous operations implicitly.
         });
       }} />}
-  </SafeAreaView></SafeAreaProvider>;
+  </SafeAreaView></SafeAreaProvider></ShellThemeContext.Provider>;
 }
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: '#fff' }, toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: 8 },
+  screen: { flex: 1 }, toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: 8 },
   settings: { flexGrow: 0, maxHeight: 300, padding: 12 }, input: { borderWidth: 1, padding: 12, fontSize: 16, marginVertical: 12 },
-  error: { color: '#a00', padding: 12 }, webview: { flex: 1 },
+  error: { padding: 12 }, webview: { flex: 1 },
 });
