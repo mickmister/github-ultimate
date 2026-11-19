@@ -97,6 +97,9 @@ test('Storybook staging replaces stale assets, preserves app files and binds pub
     const metadata = { branch: 'feature/storybook', sha: 'a'.repeat(40) };
     await writeFile(join(output, 'build.json'), JSON.stringify(metadata));
     await writeFile(join(output, 'app/index.html'), 'existing app');
+    await mkdir(join(source, 'assets')); await mkdir(join(output, 'app/assets'));
+    for (const directory of [join(source, 'assets'), join(output, 'app/assets')]) await writeFile(join(directory, 'mermaid.tiny-ABC.js'), 'window.mermaid = {};');
+    await writeFile(join(source, 'assets/diagram.js'), 'const url = new URL("mermaid.tiny-ABC.js", import.meta.url).href;');
     for (const name of ['MONACO_LICENSE.txt', 'MONACO_THIRD_PARTY_NOTICES.txt']) await writeFile(join(output, 'app', name), name);
     await mkdir(join(output, 'storybook')); await writeFile(join(output, 'storybook/obsolete.js'), 'old');
     await stageHostedStorybook({ source, output });
@@ -105,5 +108,8 @@ test('Storybook staging replaces stale assets, preserves app files and binds pub
     const files = await readdir(join(output, 'storybook'));
     expect(files).toContain('asset.js'); expect(files).toContain('MONACO_LICENSE.txt');
     expect(files).not.toContain('obsolete.js'); expect(files).not.toContain('asset.js.map'); expect(files).not.toContain('project.json');
+    expect(await readdir(join(output, 'storybook/assets'))).not.toContain('mermaid.tiny-ABC.js');
+    expect(await readFile(join(output, 'storybook/assets/diagram.js'), 'utf8')).toContain('new URL("../../app/assets/mermaid.tiny-ABC.js", import.meta.url)');
+    expect(await readFile(join(output, 'app/assets/mermaid.tiny-ABC.js'), 'utf8')).toBe('window.mermaid = {};');
   } finally { await rm(root, { recursive: true, force: true }); }
 });
