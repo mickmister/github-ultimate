@@ -1,3 +1,4 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
+import { createFileRoute } from '@tanstack/react-router';
+import { Home } from '../features/home/Home';
 
-export const Route = createFileRoute('/')({ ssr: false, beforeLoad: () => { throw redirect({ to: '/documents', replace: true }); } });
+export const Route = createFileRoute('/')({ ssr: false, component: Home });

@@ -1,0 +1,35 @@
+import { useEffect, useState, useSyncExternalStore } from 'react';
+import type { AppHooksV1 } from '../../app-hooks/contracts';
+import { createHostedAppHooks } from '../../app-hooks/host';
+import { createHomeController } from './Home.controller';
+import type { HomeModel } from './Home.model';
+
+function useHomeSession(appHooks?: AppHooksV1) {
+  const [controller, setController] = useState<ReturnType<typeof createHomeController> | null>(null);
+  useEffect(() => {
+    const next = createHomeController(appHooks ?? createHostedAppHooks());
+    setController(next);
+    void next.actions.connect();
+    return () => next.dispose();
+  }, [appHooks]);
+  return controller;
+}
+export function useHomeFeature(appHooks?: AppHooksV1): HomeModel {
+  const controller = useHomeSession(appHooks);
+  const [connectionId, setConnectionId] = useState('');
+  const [repository, setRepository] = useState('');
+  const [waitingOnly, setWaitingOnly] = useState(true);
+  const state = useSyncExternalStore(controller?.subscribe ?? emptySubscribe, controller?.getSnapshot ?? emptySnapshot, emptySnapshot);
+  return {
+    state, connectionId, repository, waitingOnly,
+    actions: {
+      setConnectionId, setRepository, setWaitingOnly,
+      reconnect: () => controller?.actions.connect(),
+      retry: (id: string) => controller?.actions.retry(id),
+      addRepository: () => controller?.actions.addRepository(connectionId || state.connections[0]?.id, repository),
+    },
+  };
+}
+const emptySubscribe = () => () => {};
+const initial = { busy: true, error: '', connections: [], sources: [], canEnumerate: true, supported: true };
+const emptySnapshot = () => initial;
