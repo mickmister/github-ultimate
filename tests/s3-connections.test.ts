@@ -163,3 +163,27 @@ test('S3 cache survives broker replacement, revalidates ETags, enforces grants a
   await expect(broker.handleHosted(documentURL, { ...read, cacheOnly: true })).rejects.toThrow('No persisted');
   expect(hits).toBe(3);
 });
+
+test('Backblaze checkpoints use broker-owned unique keys without conditional PUT, and pin exact versions on read/list', async () => {
+  const record = await broker.handle({ operation: 'add', ...config, endpoint: 'https://s3.us-west-004.backblazeb2.com/' }) as PublicS3Connection;
+  await broker.handle({ operation: 'grantOrigin', id: record.id, origin, subpath: '/storage/' });
+  const sessionId = crypto.randomUUID(), payload = btoa(JSON.stringify({ kind: 'browser-pi-checkpoint', session_id: sessionId }));
+  override = request => {
+    const url = new URL(request.url);
+    if (request.method === 'PUT') { expect(request.headers.has('If-None-Match')).toBe(false); expect(url.pathname).toContain(`/workspace-a/pi-sessions/${sessionId}/`); return new Response(null, { headers: { 'x-amz-version-id': 'version-one' } }); }
+    if (url.searchParams.has('versions')) return new Response(`<ListVersionsResult><EncodingType>url</EncodingType><IsTruncated>true</IsTruncated><NextKeyMarker>${encodeURIComponent(`workspace-a/pi-sessions/${sessionId}/key.json`)}</NextKeyMarker><NextVersionIdMarker>version-one</NextVersionIdMarker><Version><Key>${encodeURIComponent(`workspace-a/pi-sessions/${sessionId}/key.json`)}</Key><VersionId>version-one</VersionId><Size>2</Size></Version></ListVersionsResult>`);
+    expect(url.searchParams.get('versionId')).toBe('version-one'); return new Response('{}', { headers: { 'x-amz-version-id': 'version-one' } });
+  };
+  const first = await broker.handleHosted(documentURL, { operation: 's3Checkpoint', ...scope(record), sessionId, base64: payload }) as { key: string; sha256: string; versionId: string };
+  const second = await broker.handleHosted(documentURL, { operation: 's3Checkpoint', ...scope(record), sessionId, base64: payload }) as { key: string };
+  expect(first.key).not.toBe(second.key); expect(first.key).toMatch(new RegExp(`-${first.sha256}\\.json$`)); expect(first.versionId).toBe('version-one');
+  expect(await broker.handleHosted(documentURL, { operation: 's3Read', ...scope(record), key: first.key, versionId: first.versionId })).toMatchObject({ versionId: 'version-one' });
+  const listing = await broker.handleHosted(documentURL, { operation: 's3List', ...scope(record), prefix: `workspace-a/pi-sessions/${sessionId}/`, versions: true }) as S3Listing;
+  expect(listing.objects[0].versionId).toBe('version-one');
+  await broker.handleHosted(documentURL, { operation: 's3List', ...scope(record), prefix: `workspace-a/pi-sessions/${sessionId}/`, versions: true, continuationToken: listing.continuationToken });
+  expect(new URL(calls.at(-1)!.url).searchParams.get('version-id-marker')).toBe('version-one');
+  override = () => new Response(null);
+  await expect(broker.handleHosted(documentURL, { operation: 's3Checkpoint', ...scope(record), sessionId, base64: payload })).rejects.toThrow('version ID');
+  override = () => new Response('{}', { headers: { 'x-amz-version-id': 'wrong-version' } });
+  await expect(broker.handleHosted(documentURL, { operation: 's3Read', ...scope(record), key: first.key, versionId: first.versionId })).rejects.toThrow('different object version');
+});

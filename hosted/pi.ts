@@ -4,6 +4,7 @@ import { PiSessions, type SessionBinding } from './pi-session';
 import type { HostedConnection } from '../src/hosted-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
 import type { PublicS3Connection, S3Listing } from '../src/s3-protocol';
+import { backblaze, checkpointReference } from '../src/s3-protocol';
 import './dashboard.css';
 
 const select = (id: string) => document.getElementById(id) as HTMLSelectElement;
@@ -50,6 +51,8 @@ function action(id: string, work: () => Promise<void>) {
   button(id).addEventListener('click', async () => { try { busy = true; controls(); await work(); } catch (error) { report(error instanceof Error ? error.message : 'Operation failed.'); } finally { busy = false; controls(); } });
 }
 action('connect', async () => {
+  const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
+  if (!support.capabilities.includes('s3Checkpoint')) throw Error('Update and reload the extension/native host for checkpoint uploads, then reload this page.');
   [inferences, githubs, stores] = await Promise.all([bridgeRequest<PublicInferenceConnection[]>({ operation: 'inferenceConnections' }), bridgeRequest<HostedConnection[]>({ operation: 'connections' }), bridgeRequest<PublicS3Connection[]>({ operation: 's3Connections' })]);
   options('inference', inferences); options('github', githubs); options('storage', stores); runtime = undefined;
   report('Choose all three connections, then create or restore a session.');
@@ -59,13 +62,13 @@ action('new-session', async () => { session.value = crypto.randomUUID(); parent 
 async function list(more = false) {
   const { storage } = configure();
   if (!more) { token = undefined; select('checkpoint').replaceChildren(); }
-  const listing = await bridgeRequest<S3Listing>({ operation: 's3List', id: storage.id, revision: storage.revision, prefix: sessions!.prefix(session.value), continuationToken: token });
-  for (const object of listing.objects.filter(object => object.key.endsWith('.json'))) select('checkpoint').append(new Option(object.key, object.key));
+  const listing = await bridgeRequest<S3Listing>({ operation: 's3List', id: storage.id, revision: storage.revision, prefix: sessions!.prefix(session.value), continuationToken: token, versions: backblaze(storage.endpoint) });
+  for (const object of listing.objects.filter(object => object.key.endsWith('.json'))) { const reference = checkpointReference(object.key, object.versionId); select('checkpoint').append(new Option(reference, reference)); }
   token = listing.continuationToken; button('more-checkpoints').hidden = !token;
   report('Select an exact checkpoint to restore. Separate tabs create separate branches, not a shared mutable head.');
 }
 action('list-checkpoints', () => list()); action('more-checkpoints', () => list(true));
-action('restore', async () => { configure(); const key = select('checkpoint').value; const checkpoint = await sessions!.read(key, session.value, binding!); if (checkpoint.scratch) throw Error('This checkpoint contains a scratch workspace. Restore it in the hosted app Agent screen.'); start(checkpoint.messages); parent = key; report(`Restored ${key}. No tools were replayed.`); });
+action('restore', async () => { configure(); const key = select('checkpoint').value; const checkpoint = await sessions!.read(key, session.value, binding!); if (checkpoint.scratch || checkpoint.beads) throw Error('This checkpoint contains workspace state. Restore it in the hosted app Agent screen.'); start(checkpoint.messages); parent = key; report(`Restored ${key}. No tools were replayed.`); });
 action('retry-save', save);
 button('stop').addEventListener('click', () => { runtime?.agent.abort(); report('Stopping inference. Completed read-only tool results will be saved.'); });
 document.getElementById('prompt-form')!.addEventListener('submit', async event => {

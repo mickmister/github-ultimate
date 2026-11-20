@@ -1,6 +1,6 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import { Connections, type ConnectionRecord, type ConnectionStore, type PublicConnection } from '../src/connections';
-import { gitObject } from '../src/scratch';
+import { gitObject, gitTreeEntries } from '../src/scratch';
 
 const defaultClient = { name: 'Example client', appId: 12345, clientId: 'Iv23ExampleClient' };
 
@@ -48,14 +48,17 @@ async function login(client = defaultClient) {
 }
 
 test('scratch imports enforce original page, user, installation and repository before reading pinned files', async () => {
-  const connection = await login(), commit = 'a'.repeat(40), tree = 'b'.repeat(40), blob = gitObject('blob', 'Pinned\n');
+  const connection = await login(), commit = 'a'.repeat(40), blob = gitObject('blob', 'Pinned\n');
+  const entries = [{ name: 'README.md', mode: '100644' as const, type: 'blob' as const, oid: blob, size: 7 }], tree = gitTreeEntries(entries);
   await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
   await broker.handle({ operation: 'grantOrigin', id: connection.id, origin: 'https://example.test', subpath: '/app/' });
   gitResponses.set(`commits/${commit}`, { sha: commit, tree: { sha: tree } });
   gitResponses.set(`trees/${tree}?recursive=1`, { sha: tree, truncated: false, tree: [{ path: 'README.md', mode: '100644', type: 'blob', sha: blob, size: 7 }] });
   gitResponses.set(`blobs/${blob}`, { sha: blob, encoding: 'base64', size: 7, content: Buffer.from('Pinned\n').toString('base64') });
   const request = { operation: 'agentSnapshot', id: connection.id, userId: 1, installationId: 1, repository: 'mickmister/workspace-storage', commit, directory: '' };
-  expect(await broker.handleHosted('https://example.test/app/', request)).toMatchObject({ files: [{ path: 'README.md', content: 'Pinned\n' }] });
+  apiOverride = url => url.endsWith('/graphql') ? Response.json({ data: { repository: { object: { oid: tree, entries: entries.map(e => ({ ...e, mode: parseInt(e.mode, 8) })) } } } }) : undefined;
+  expect(await broker.handleHosted('https://example.test/app/', request)).toMatchObject({ files: [], base: { tree } });
+  expect(calls.some(c => c.url.includes('/blobs/'))).toBe(false);
   const count = calls.length;
   for (const patch of [{ userId: 9 }, { installationId: 9 }, { repository: 'other/private' }]) await expect(broker.handleHosted('https://example.test/app/', { ...request, ...patch })).rejects.toThrow();
   await expect(broker.handleHosted('https://example.test/elsewhere/', request)).rejects.toThrow('approved');
@@ -73,6 +76,21 @@ test('Pi repository tools reject a changed GitHub identity or installation befor
   // Identity mismatches never send HTTP; denied repositories may refresh the
   // authorized repository list, but never request the outside repository.
   expect(calls.slice(count).every(call => !call.url.includes('/repos/outside/'))).toBe(true);
+});
+
+test('GraphQL broker validates operation AST before HTTP and preserves query variables and partial errors', async () => {
+  const connection = await login();
+  await broker.handle({ operation: 'selectInstallation', id: connection.id, installationId: 1 });
+  await broker.handle({ operation: 'grantOrigin', id: connection.id, origin: 'https://example.test', subpath: '/app/' });
+  const request = { operation: 'agentGraphql', id: connection.id, userId: 1, installationId: 1, query: 'query($name:String!){ repository(owner:"other",name:$name){... Fields} } fragment Fields on Repository { name }', variables: { name: 'accessible-repo' } };
+  const partial = { data: { repository: null }, errors: [{ message: 'Repository not found' }] };
+  apiOverride = (url, init) => { if (!url.endsWith('/graphql')) return; expect(init.method).toBe('POST'); expect(JSON.parse(String(init.body))).toEqual({ query: request.query, variables: request.variables }); expect(new Headers(init.headers).get('Authorization')).toBe('Bearer ghu_access_one'); return Response.json(partial); };
+  expect(await broker.handleHosted('https://example.test/app/', request)).toEqual(partial);
+  const before = calls.length;
+  for (const query of ['# query disguise\n mutation { deleteIssue(input:{id:"x"}){clientMutationId} }', 'query A{viewer{login}} mutation B{deleteIssue(input:{id:"x"}){clientMutationId}}', 'query A{viewer{login}} query B{viewer{login}}', 'subscription { viewer { login } }', '{ broken']) await expect(broker.handleHosted('https://example.test/app/', { ...request, query })).rejects.toThrow();
+  await expect(broker.handleHosted('https://example.test/app/', { ...request, userId: 99 })).rejects.toThrow('changed');
+  await expect(broker.handleHosted('https://example.test/other/', request)).rejects.toThrow('approved');
+  expect(calls).toHaveLength(before);
 });
 
 test('Actions reads enforce installation, repository, Actions permission and original page grant', async () => {

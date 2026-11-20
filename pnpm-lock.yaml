@@ -211,6 +211,9 @@ importers:
       fflate:
         specifier: 0.8.3
         version: 0.8.3
+      graphql:
+        specifier: 16.11.0
+        version: 16.11.0
       marked:
         specifier: ^17.0.0
         version: 17.0.6
@@ -4303,6 +4306,10 @@ packages:
     engines: {node: '>=10'}
     peerDependencies:
       graphql: ^0.9.0 || ^0.10.0 || ^0.11.0 || ^0.12.0 || ^0.13.0 || ^14.0.0 || ^15.0.0 || ^16.0.0
+
+  graphql@16.11.0:
+    resolution: {integrity: sha512-mS1lbMsxgQj6hge1XZ6p7GPhbrtFwUFYi3wRzXAC/FmYnyXMTvvI3td3rjmQ2u8ewXueaSvRPWaEcgVVOT9Jnw==}
+    engines: {node: ^12.22.0 || ^14.16.0 || ^16.0.0 || >=17.0.0}
 
   graphql@16.8.1:
     resolution: {integrity: sha512-59LZHPdGZVh695Ud9lRzPBVTtlX9ZCV150Er2W43ro37wVof0ctenSaskPPjN7lVTIN8mSZt8PHUNKZuNQUuxw==}
@@ -11599,6 +11606,8 @@ snapshots:
     dependencies:
       graphql: 16.8.1
       tslib: 2.6.2
+
+  graphql@16.11.0: {}
 
   graphql@16.8.1: {}
 

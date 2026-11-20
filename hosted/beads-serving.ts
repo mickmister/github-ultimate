@@ -26,8 +26,8 @@ export async function resolveBeadsServing(reader: WorkspaceReader, source: Snaps
 }
 
 /** Resolve data only; workspace metadata never selects executable engine code. */
-export async function selectBeadsServing(reader: WorkspaceReader, source: Snapshot, workspace: string, signal: AbortSignal) {
-  const pack = await reader.beadsServingSnapshot();
+export async function selectBeadsServing(reader: WorkspaceReader, source: Snapshot, workspace: string, signal: AbortSignal, pinnedPack?: Snapshot | null) {
+  const pack = pinnedPack === undefined ? await reader.beadsServingSnapshot() : pinnedPack;
   signal.throwIfAborted();
   if (!pack) return undefined;
   const entry = pack.tree.tree.find(value => value.path === 'serving.json');

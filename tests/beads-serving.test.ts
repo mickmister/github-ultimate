@@ -40,7 +40,7 @@ function fixture() {
     const refresh = vi.fn(async () => fresh);
     return { result: await resolveBeadsServing(reader, source, 'selected', signal, refresh), refresh };
   };
-  return { source, descriptor, tree, send, select, resolve, noPack: () => { refs = []; } };
+  return { source, descriptor, tree, send, reader, select, resolve, noPack: () => { refs = []; } };
 }
 
 test('selects only the pinned compact native pack even when canonical storage exceeds 64 MiB', async () => {
@@ -81,4 +81,13 @@ test('still rejects a genuinely stale pack after bounded reconciliation, with re
   const value = fixture(); value.descriptor.sourceGitCommit = 'e'.repeat(40);
   await expect(value.resolve(value.source)).rejects.toThrow(`Canonical: ${value.source.commit}; pack source: ${value.descriptor.sourceGitCommit}`);
   expect(value.send.mock.calls.filter(([request]) => request.operation === 'gitRefs')).toHaveLength(2);
+});
+
+test('an explicit restored serving snapshot does not follow a changed or removed current ref', async () => {
+  const value = fixture(); await value.select();
+  const pinned = await value.reader.snapshot('b'.repeat(40)); value.noPack();
+  const before = value.send.mock.calls.length;
+  const selected = await selectBeadsServing(value.reader, value.source, 'selected', new AbortController().signal, pinned);
+  expect(selected?.gitCommit).toBe(pinned.commit);
+  expect(value.send.mock.calls.slice(before).every(([request]) => request.operation !== 'gitRefs')).toBe(true);
 });

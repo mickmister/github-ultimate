@@ -1,10 +1,13 @@
 import { AwsClient } from 'aws4fetch';
 import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { utf8Text } from './utf8';
 import { ConnectionError } from './connections';
 import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import { trustedOrigin } from './hosted-protocol';
-import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, s3ConfigurationSchema, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
+import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, s3ConfigurationSchema, backblaze, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 
 export type S3ConnectionRecord = S3Configuration & { id: string; revision: string; hostedGrants: HostedGrant[] };
@@ -15,7 +18,7 @@ export interface S3ConnectionStore {
   remove(id: string): Promise<void>;
 }
 const cachedObjectSchema = z.object({ key: z.string().max(1024), size: z.number().int().min(0).max(maxS3ObjectBytes), contentType: z.string().max(1000), base64: z.string().max(Math.ceil(maxS3ObjectBytes / 3) * 4).regex(/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/), etag: z.string().optional(), versionId: z.string().optional() });
-const cachedListingSchema = z.object({ objects: z.array(z.object({ key: z.string().max(1024), size: z.number().int().nonnegative(), etag: z.string().optional() })).max(100), continuationToken: z.string().max(8192).optional() });
+const cachedListingSchema = z.object({ objects: z.array(z.object({ key: z.string().max(1024), size: z.number().int().nonnegative(), etag: z.string().optional(), versionId: z.string().optional() })).max(100), continuationToken: z.string().max(8192).optional() });
 function publicConnection(record: S3ConnectionRecord): PublicS3Connection {
   const { id, revision, name, endpoint, region, bucket, addressing, prefix, allowRead, allowUpload, allowOverwrite, hostedGrants } = record;
   return { id, revision, name, endpoint, region, bucket, addressing, prefix, allowRead, allowUpload, allowOverwrite, hostedGrants };
@@ -91,19 +94,38 @@ export class S3Connections {
       const record = approved.find(item => item.id === request.id);
       if (!record) throw new ConnectionError('S3 connection is not approved for the original document path.');
       if (record.revision !== request.revision) throw new ConnectionError('S3 configuration changed. Reconnect storage before reading or uploading; no fallback was used.');
-      if (request.operation === 's3Upload' ? !record.allowUpload : !record.allowRead) throw new ConnectionError('This S3 operation is not enabled for the connection.');
+      const upload = request.operation === 's3Upload' || request.operation === 's3Checkpoint';
+      if (upload ? !record.allowUpload : !record.allowRead) throw new ConnectionError('This S3 operation is not enabled for the connection.');
       const url = s3BucketURL(record);
       if (!await this.hasHostAccess(url.origin)) throw new ConnectionError('Browser host access to the S3 endpoint was revoked.');
+      if (request.operation === 's3Checkpoint') {
+        if (record.allowOverwrite || !record.allowRead) throw new ConnectionError('Checkpoints require reads/uploads enabled and overwrites disabled.');
+        const bytes = Uint8Array.from(atob(request.base64), char => char.charCodeAt(0));
+        if (base64(bytes) !== request.base64 || bytes.length > 4 * 1024 * 1024) throw new ConnectionError('Invalid checkpoint bytes or exceeds 4 MiB.');
+        const header = z.object({ kind: z.literal('browser-pi-checkpoint'), session_id: z.literal(request.sessionId) }).safeParse(JSON.parse(utf8Text(bytes)));
+        if (!header.success) throw new ConnectionError('Checkpoint session identity mismatch.');
+        const digest = bytesToHex(sha256(bytes));
+        const key = s3Key(`${record.prefix}pi-sessions/${request.sessionId}/${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}-${digest}.json`);
+        url.pathname += key.split('/').map(encodeURIComponent).join('/');
+        const versioned = backblaze(record.endpoint);
+        const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': 'application/json', ...(!versioned ? { 'If-None-Match': '*' } : {}) } });
+        await response.body?.cancel();
+        const rawVersionId = response.headers.get('x-amz-version-id');
+        const versionId = rawVersionId && rawVersionId !== 'null' ? rawVersionId : undefined;
+        if (versioned && (!versionId || versionId === 'null')) throw new ConnectionError('Backblaze did not return a checkpoint version ID. Save was not verified.');
+        await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});
+        return { key, size: bytes.length, versionId, sha256: digest };
+      }
       const path = s3Key(request.operation === 's3List' ? request.prefix ?? record.prefix : request.key);
       if (!path.startsWith(record.prefix)) throw new ConnectionError('The object key or listing prefix is outside this connection’s allowed prefix.');
       const scope: CacheScope = { connection: `s3:${record.id}`, account: 0, installation: 0, generation: record.revision, repository: record.endpoint + record.bucket, workspace: record.prefix, namespace: 'metadata' };
-      const resource = JSON.stringify([request.operation, path, request.operation === 's3List' ? request.continuationToken ?? '' : '']);
-      const candidate = request.operation === 's3Upload' ? undefined : await this.cache?.get(scope, resource);
+      const resource = JSON.stringify([request.operation, path, request.operation === 's3List' ? request.versions ? ['versions', request.continuationToken ?? ''] : request.continuationToken ?? '' : request.operation === 's3Read' && request.versionId ? ['version', request.versionId] : '']);
+      const candidate = upload ? undefined : await this.cache?.get(scope, resource);
       const parsed = z.object({ result: request.operation === 's3List' ? cachedListingSchema : cachedObjectSchema, etag: z.string().max(8192).optional() }).safeParse(candidate);
       let cached = parsed.success ? parsed.data : undefined;
       if (cached) {
         const result = cached.result;
-        if ('objects' in result ? result.objects.some(object => !object.key.startsWith(path)) : result.key !== path || result.base64.length / 4 * 3 - (result.base64.endsWith('==') ? 2 : result.base64.endsWith('=') ? 1 : 0) !== result.size) cached = undefined;
+        if ('objects' in result ? result.objects.some(object => !object.key.startsWith(path)) : result.key !== path || request.operation === 's3Read' && request.versionId && request.versionId !== result.versionId || result.base64.length / 4 * 3 - (result.base64.endsWith('==') ? 2 : result.base64.endsWith('=') ? 1 : 0) !== result.size) cached = undefined;
       }
       if (candidate !== undefined && !cached) await this.cache?.remove(scope, resource).catch(() => {});
       if (request.operation !== 's3Upload' && request.cacheOnly) {
@@ -111,6 +133,24 @@ export class S3Connections {
         return cached.result;
       }
       if (request.operation === 's3List') {
+        if (request.versions) {
+          url.searchParams.set('versions', ''); url.searchParams.set('max-keys', '100'); url.searchParams.set('prefix', path); url.searchParams.set('encoding-type', 'url');
+          if (request.continuationToken) {
+            const marker = z.object({ key: z.string().max(1024), version: z.string().max(2000) }).strict().parse(JSON.parse(request.continuationToken));
+            if (!marker.key.startsWith(path)) throw new ConnectionError('Invalid version-list continuation.');
+            url.searchParams.set('key-marker', marker.key); url.searchParams.set('version-id-marker', marker.version);
+          }
+          const response = await this.send(record, url);
+          const xml = new TextDecoder('utf-8', { fatal: true }).decode(await boundedBytes(response, 2 * 1024 * 1024));
+          if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new ConnectionError('Unsupported S3 XML response.');
+          const raw = new XMLParser({ ignoreAttributes: true, removeNSPrefix: true, parseTagValue: false, trimValues: false, isArray: name => name === 'Version' || name === 'DeleteMarker' }).parse(xml);
+          const data = z.object({ ListVersionsResult: z.object({ EncodingType: z.string().optional(), IsTruncated: z.enum(['true', 'false']), NextKeyMarker: z.string().optional(), NextVersionIdMarker: z.string().optional(), Version: z.array(z.object({ Key: z.string(), VersionId: z.string().min(1).max(2000), Size: z.string().regex(/^\d+$/), ETag: z.string().optional() })).max(100).default([]) }) }).parse(raw).ListVersionsResult;
+          const decode = (key: string) => data.EncodingType === 'url' ? decodeURIComponent(key) : key;
+          const objects = data.Version.map(v => ({ key: decode(v.Key), versionId: v.VersionId, size: Number(v.Size), etag: v.ETag }));
+          if (objects.some(o => !o.key.startsWith(path) || !Number.isSafeInteger(o.size) || o.versionId === 'null')) throw new ConnectionError('Invalid version listing.');
+          if (data.IsTruncated === 'true' && (!data.NextKeyMarker || !data.NextVersionIdMarker)) throw new ConnectionError('Incomplete version listing.');
+          return { objects, ...(data.IsTruncated === 'true' ? { continuationToken: JSON.stringify({ key: decode(data.NextKeyMarker!), version: data.NextVersionIdMarker }) } : {}) } satisfies S3Listing;
+        }
         url.searchParams.set('list-type', '2'); url.searchParams.set('max-keys', '100'); url.searchParams.set('prefix', path); url.searchParams.set('encoding-type', 'url');
         if (request.continuationToken) url.searchParams.set('continuation-token', request.continuationToken);
         const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} });
@@ -138,10 +178,12 @@ export class S3Connections {
       // are rejected before URL construction so they cannot escape the bucket.
       url.pathname += path.split('/').map(encodeURIComponent).join('/');
       if (request.operation === 's3Read') {
+        if (request.versionId) url.searchParams.set('versionId', request.versionId);
         const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} });
         if (response.status === 304 && cached) return cached.result;
         const bytes = await boundedBytes(response, maxS3ObjectBytes);
         const result = { key: path, size: bytes.length, contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', base64: base64(bytes), etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined } satisfies S3Object;
+        if (request.versionId && result.versionId !== request.versionId) throw new ConnectionError('S3 returned a different object version.');
         if (epoch === this.epoch) await this.cache?.put(scope, resource, { result, etag: result.etag });
         return result;
       }

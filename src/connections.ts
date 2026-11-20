@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { hostedRequestSchema, trustedOrigin, type HostedConnection } from './hosted-protocol';
 import { boundedJSON, gitReadSchema, maxMetadataBytes, readGit, verifiedGitBlobBytes, type GitBlob, type GitRead } from './git-reads';
-import { agentSnapshot } from './agent-snapshot';
+import { agentSnapshot, agentTree } from './agent-snapshot';
+import { readOnlyGraphql } from './agent-graphql';
 import { ApiReadCache, responseCooldown, type ApiCooldown } from './github-rate-limit';
 import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import type { WorkspaceNavigation } from './workspace-navigation';
@@ -111,7 +112,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'actionsRead', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'agentGraphql', 'agentSnapshot', 'agentTree', 'agentBlob', 's3Checkpoint', 's3Versions', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'actionsRead', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       if (request.operation === 'vdConnections') return this.vd?.publicConnections(documentURL) ?? [];
       const navigationSource = source.origin + source.pathname;
@@ -141,11 +142,31 @@ export class Connections {
       if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
-      if (request.operation === 'agentSnapshot') {
+      if (request.operation === 'agentGraphql') {
+        if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed.');
+        let body: ReturnType<typeof readOnlyGraphql>;
+        try { body = readOnlyGraphql(request.query, request.variables); }
+        catch (error) { throw new ConnectionError(error instanceof Error ? error.message : 'Invalid GraphQL query.'); }
+        return this.api(record, '/graphql', maxMetadataBytes, 'none', { method: 'POST', body, isCurrent });
+      }
+      if (request.operation === 'agentSnapshot' || request.operation === 'agentTree' || request.operation === 'agentBlob') {
         if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed.');
         const repo = (await this.repositories(record)).find(item => item.full_name.toLowerCase() === request.repository.toLowerCase());
         if (!repo) throw new ConnectionError('Repository is not available through this installation and user.');
-        return agentSnapshot(request, (path, limit) => { if (!isCurrent()) throw new ConnectionError('GitHub access changed.'); return this.api(record, path, limit, 'immutable'); });
+        const api = (path: string, limit?: number) => { if (!isCurrent()) throw new ConnectionError('GitHub access changed.'); return this.api(record, path, limit, 'immutable'); };
+        const graphql = async (query: string, variables: Record<string, unknown>) => {
+          const value = await this.api(record, '/graphql', maxMetadataBytes, 'none', { method: 'POST', body: readOnlyGraphql(query, variables), isCurrent });
+          return value;
+        };
+        try {
+          if (request.operation === 'agentTree') return await agentTree(request.repository, request.oid, graphql);
+          if (request.operation === 'agentBlob') {
+            const value = await api(`/repos/${repo.full_name}/git/blobs/${request.oid}`, 192 * 1024);
+            const blob = z.object({ sha: z.literal(request.oid), size: z.number().int().min(0).max(128 * 1024), encoding: z.literal('base64'), content: z.string().max(192 * 1024) }).parse(value);
+            verifiedGitBlobBytes(blob); return blob;
+          }
+          return await agentSnapshot(request, api, graphql);
+        } catch (error) { throw new ConnectionError(error instanceof Error ? error.message : 'Workspace read failed.'); }
       }
       if (request.operation === 'agentRepositories' || request.operation === 'agentProbe') {
         if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed. Reconnect explicitly.');

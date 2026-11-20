@@ -4,6 +4,7 @@ import { PiSessions, type SessionBinding } from '../hosted/pi-session';
 import type { PiBridge } from '../hosted/pi-transport';
 import type { PublicS3Connection, S3Object } from '../src/s3-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
+import { createHash } from 'node:crypto';
 
 const inference: PublicInferenceConnection = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Provider', model: 'test-model', hostedGrants: [] };
 const github = { id: crypto.randomUUID(), name: 'GitHub', appId: 123, user: { id: 42, login: 'tester' }, installation: { id: 456, account: 'tester' } };
@@ -18,10 +19,10 @@ function fixture() {
       return { choices: [{ finish_reason: calls === 1 ? 'tool_calls' : 'stop', message: calls === 1 ? { content: null, tool_calls: [{ id: 'call-1', type: 'function', function: { name: 'github_probe', arguments: JSON.stringify({ repository: 'owner/repo' }) } }] } : { content: 'The repository head is abc. Café 🌴' } }] } as T;
     }
     if (request.operation === 'agentProbe') { expect(request).toMatchObject({ installationId: 456, userId: 42 }); return { headOid: 'abc' } as T; }
-    if (request.operation === 's3Upload') {
-      if (objects.has(request.key)) throw new Error('412');
-      objects.set(request.key, { key: request.key, size: atob(request.base64).length, contentType: request.contentType, base64: request.base64 });
-      return { key: request.key } as T;
+    if (request.operation === 's3Checkpoint') {
+      const sha256 = createHash('sha256').update(Buffer.from(request.base64, 'base64')).digest('hex'), key = `private/pi-sessions/${request.sessionId}/${crypto.randomUUID()}-${sha256}.json`;
+      objects.set(key, { key, size: atob(request.base64).length, contentType: 'application/json', base64: request.base64 });
+      return { key, sha256 } as T;
     }
     if (request.operation === 's3Read') return objects.get(request.key) as T;
     throw new Error(`Unexpected ${request.operation}`);
@@ -53,6 +54,15 @@ it('fails closed on mismatched identity and corrupt readback', async () => {
   await expect(sessions.read(key, id, { ...binding, githubUserId: 99 })).rejects.toThrow('different connections');
   objects.get(key)!.base64 = btoa('{}');
   await expect(sessions.read(key, id, binding)).rejects.toThrow();
+});
+it('persists Beads pins and context, rejects a different workspace, and reads legacy sessions in selected context', async () => {
+  const { bridge } = fixture(), sessions = new PiSessions(bridge, storage), id = crypto.randomUUID();
+  const contextual = { ...binding, beads: { repository: 'owner/storage', workspace: 'selected' } }, beads = { gitCommit: 'a'.repeat(40), doltCommit: '0'.repeat(32), servingCommit: 'b'.repeat(40) };
+  const key = await sessions.save(id, contextual, [], null, undefined, beads);
+  expect((await sessions.read(key, id, contextual)).beads).toEqual(beads);
+  await expect(sessions.read(key, id, { ...contextual, beads: { ...contextual.beads, workspace: 'other' } })).rejects.toThrow('different connections');
+  const legacy = await sessions.save(id, binding, [], null);
+  expect((await sessions.read(legacy, id, contextual)).beads).toBeUndefined();
 });
 it('turns malformed/truncated tool arguments into a Pi error without invoking tools', async () => {
   for (const finish_reason of ['tool_calls', 'length']) {

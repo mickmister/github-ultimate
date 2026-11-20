@@ -4,7 +4,7 @@ import { BrowserAgent, type AgentFields } from '../../../../hosted/browser-agent
 import type { AgentProps } from './Agent.view';
 export function useAgentLocation() { return useRouterState({ select: state => state.location.search as Record<string, unknown> }); }
 export function useAgentFeature(location: Record<string, unknown> = {}, injected?: BrowserAgent): AgentProps {
-  const [model] = useState(() => { const service = injected ?? new BrowserAgent(); service.fields.github = typeof location.connection === 'string' ? location.connection : ''; service.fields.repository = typeof location.repository === 'string' ? location.repository : ''; return service; });
+  const [model] = useState(() => { const context = typeof location.repository === 'string' && typeof location.workspace === 'string' ? { repository: location.repository, workspace: location.workspace } : undefined; const service = injected ?? new BrowserAgent(undefined, context); service.fields.github = typeof location.connection === 'string' ? location.connection : ''; service.fields.repository = typeof location.repository === 'string' ? location.repository : ''; return service; });
   const [, refresh] = useState(0);
   useEffect(() => {
     const unsubscribe = model.subscribe(() => refresh(value => value + 1));
@@ -15,6 +15,6 @@ export function useAgentFeature(location: Record<string, unknown> = {}, injected
   const invoke = (work: () => Promise<void>) => { void model.run(work); };
   const query = new URLSearchParams(Object.entries(location).filter((entry): entry is [string, string] => ['connection', 'repository', 'workspace'].includes(entry[0]) && typeof entry[1] === 'string')).toString();
   return { model, documentsHref: `#/documents?${query}`, actions: {
-    edit: (key: keyof AgentFields, value: string) => model.edit(key, value), connect: () => invoke(() => model.connect()), create: (imported: boolean) => invoke(() => model.create(imported)), list: (more: boolean) => invoke(() => model.list(more)), restore: () => invoke(() => model.restore()), save: () => invoke(() => model.save()), prompt: () => invoke(() => model.prompt()), script: () => invoke(() => model.script()), commit: () => invoke(() => model.commit()), stop: () => model.stop(),
+    edit: (key: keyof AgentFields, value: string) => model.edit(key, value), connect: () => invoke(() => model.connect()), create: (imported: boolean) => invoke(() => model.create(imported)), list: (more: boolean) => invoke(() => model.list(more)), restore: () => invoke(() => model.restore()), save: () => invoke(() => model.save()), prompt: () => invoke(() => model.prompt()), script: () => invoke(() => model.script()), commit: () => invoke(() => model.commit()), diff: () => invoke(() => model.diff()), stop: () => model.stop(),
   } };
 }
