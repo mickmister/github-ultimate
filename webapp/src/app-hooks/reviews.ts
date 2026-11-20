@@ -10,13 +10,17 @@ import { measure } from '../../../hosted/performance';
 import type { ReviewWorkflowProgress } from '../../../src/review-progress';
 
 export const PROCESS_REVIEW_UPDATE = 'This process review requires an updated credential broker. Update the browser extension or Alohak broker, then reload this page and submit again. No review was accepted by this attempt. Capability support does not grant workflow permission.';
-export function isLegacyProcessSchemaError(error: unknown): boolean {
+export const RESPONSE_EFFECT_REVIEW_UPDATE = 'Update the browser extension or Alohak credential broker, then retry this review. The connected broker cannot read its return-to-agent metadata yet. Your selections remain in this page; this attempt did not submit them.';
+function isLegacyRequestSchemaError(error: unknown, fields: readonly string[]): boolean {
   try {
     const issues = JSON.parse(error instanceof Error ? error.message : typeof error === 'string' ? error : '');
     return Array.isArray(issues) && issues.length === 1 && issues[0]?.code === 'unrecognized_keys'
-      && Array.isArray(issues[0].keys) && issues[0].keys.length === 1 && issues[0].keys[0] === 'process'
+      && Array.isArray(issues[0].keys) && issues[0].keys.length > 0 && issues[0].keys.every((key: unknown) => typeof key === 'string' && fields.includes(key))
       && Array.isArray(issues[0].path) && issues[0].path.length === 0;
   } catch { return false; }
+}
+export function isLegacyProcessSchemaError(error: unknown): boolean {
+  return isLegacyRequestSchemaError(error, ['process']);
 }
 
 export interface StoredReviewArtifact { value: ReviewArtifact; pin: ReviewPin; dispatch?: ReviewReceipt['dispatch'] }
@@ -105,10 +109,12 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
       // Resolve the exact immutable request, not mutable head or page-supplied process data.
       const pinned = await reviews(scope).open({ resource: requestResource(value.request.id), version_kind: 'git-blob', version: value.request.version, snapshot: value.request.snapshot });
       const processBound = Boolean(pinned.request.process);
+      const responseEffectBound = Boolean(pinned.request.response_effect);
       if (processBound && !support.capabilities?.includes('qrspiProcessReview')) throw new Error(PROCESS_REVIEW_UPDATE);
       try {
         return await bridgeRequest<ReviewReceipt>({ operation: 'reviewWrite', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, text: JSON.stringify(value), expected }, 120000, mobileGitHubRequest);
       } catch (error) {
+        if (responseEffectBound && isLegacyRequestSchemaError(error, ['response_effect', ...(processBound ? ['process'] : [])])) throw new Error(RESPONSE_EFFECT_REVIEW_UPDATE);
         if (processBound && isLegacyProcessSchemaError(error)) throw new Error(PROCESS_REVIEW_UPDATE);
         throw error;
       }

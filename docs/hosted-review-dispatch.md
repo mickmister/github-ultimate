@@ -16,6 +16,15 @@ By default the authenticated storage connection must also expose the configured 
 
 Modern Connections discovery advertises `qrspiProcessReview` in addition to generic `reviewWrite`. Hosted saves resolve the exact immutable request and require both capabilities for process-bound drafts/responses before sending any privileged write. Non-process reviews still require only `reviewWrite`. This capability is compatibility evidence, not Actions permission or workflow admission. A sole root-level `unrecognized_keys: ["process"]` broker error is translated into extension/Alohak broker update and page reload guidance; other validation failures remain visible.
 
+Process-less requests can include `response_effect` for return-to-agent VD notification.
+An older installed broker may advertise `reviewWrite` but reject that field when
+reading the pinned request. The hosted client translates a root-level unknown-key
+error limited to the pinned request's `response_effect` (and `process`, if present)
+into broker-update and retry guidance. It retains the same answers, request pins
+and response identity; it does not remove routing metadata or relax validation.
+Compatible brokers continue to work with their existing capabilities. Updating
+the hosted page alone cannot replace an older installed extension/Alohak broker.
+
 Answer/progress recovery is tab-session storage, scoped to exact connection, installation, repository, workspace, request version/snapshot and authenticated reviewer. It retains the pending ID and a SHA-256 payload fingerprint for explicit retry, never automatically submits, and caches no document body, comment/quote, or credential. At most eight entries of 128,000 characters each are retained, expiring after seven days. Feature intake uses its independent existing category; recovery never clears it. Blocked/full storage leaves in-memory state and warns before a save; reload recovery then cannot be guaranteed. Authored content comments are not restored by this local mechanism (remote drafts remain supported).
 
 Production deployment requires an updated installed broker and hosted webapp. No installed-extension acceptance, workflow start, or real human response has been observed by this implementation lane.

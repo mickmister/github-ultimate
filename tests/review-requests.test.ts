@@ -8,7 +8,7 @@ import { reviewStatus, restoreReviewComments, storeReviewComments } from '../web
 import { reviewBeadMetadata } from '../src/review-beads';
 import { Connections, type ConnectionRecord } from '../src/connections';
 import { processMetadata } from '../hosted/review-process';
-import { createHostedReviews, isLegacyProcessSchemaError } from '../webapp/src/app-hooks/reviews';
+import { createHostedReviews, isLegacyProcessSchemaError, RESPONSE_EFFECT_REVIEW_UPDATE } from '../webapp/src/app-hooks/reviews';
 import { bridgeRequest } from '../hosted/client';
 import { MobileGitHub } from '../src/mobile-github';
 import { MobileFixtureBroker } from '../src/mobile-protocol';
@@ -307,6 +307,57 @@ test('mixed-version broker rejects process early, translates only the old schema
     await expect(createHostedReviews(legacy.git.read).save(selected, legacy.value, null)).resolves.toHaveProperty('version');
     expect(isLegacyProcessSchemaError(new Error(oldError))).toBe(true);
     for (const issues of [[{ code: 'unrecognized_keys', keys: ['process', 'other'], path: [] }], [{ code: 'unrecognized_keys', keys: ['process'], path: ['nested'] }], [{ code: 'invalid_type', keys: ['process'], path: [] }]]) expect(isLegacyProcessSchemaError(JSON.stringify(issues))).toBe(false);
+  } finally {
+    bridge.mockImplementation(async (input: any) => input.operation === 'discover' ? { capabilities: [] } as any : [{ id: scope.id, installation: { id: 1 }, user: { id: 1 } }] as any);
+  }
+});
+
+test('legacy response-effect parser gives update guidance, retains answers and retries unchanged after broker update', async () => {
+  const f = fixture();
+  f.request.response_effect = { kind: 'vk-session', workspace_id: '46e5772c-a538-498f-b3ae-4d7073dddc39', session_id: '8d4c83eb-bfd9-4321-8bb4-976f1bac24c5' };
+  const text = JSON.stringify(f.request);
+  f.value.request.version = f.git.blob(text);
+  f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
+  const original = structuredClone(f.value);
+  // This is the older broker's authoritative parser, not a page-side parse.
+  const { z } = await import('zod');
+  const { response_effect: _, ...legacyShape } = reviewRequestSchema.shape;
+  const legacySchema = z.object(legacyShape).strict();
+  expect(() => legacySchema.parse(f.request)).toThrow('response_effect');
+  const bridge = vi.mocked(bridgeRequest);
+  const writes: unknown[] = [];
+  let legacy = true;
+  let failure = '';
+  bridge.mockImplementation(async (input: any) => {
+    if (input.operation === 'discover') return { capabilities: ['reviewWrite'] } as any;
+    if (input.operation === 'reviewWrite') {
+      writes.push(input);
+      if (failure) throw new Error(failure);
+      if (legacy) legacySchema.parse(f.request);
+      return await writeReview(input, 'github:1', f.git.read, f.git.mutate) as any;
+    }
+    return [] as any;
+  });
+  try {
+    const service = createHostedReviews(f.git.read);
+    const selected = { connectionId: scope.id, ...scope };
+    await expect(service.save(selected, f.value, null)).rejects.toThrow(RESPONSE_EFFECT_REVIEW_UPDATE);
+    expect(f.git.mutations).toHaveLength(0);
+    expect(f.value).toEqual(original);
+    for (const issues of [
+      [{ code: 'unrecognized_keys', keys: ['response_effect', 'other'], path: [] }],
+      [{ code: 'unrecognized_keys', keys: ['response_effect'], path: ['nested'] }],
+      [{ code: 'invalid_type', keys: ['response_effect'], path: [] }],
+    ]) {
+      failure = JSON.stringify(issues);
+      await expect(service.save(selected, f.value, null)).rejects.toThrow(failure);
+    }
+    legacy = false; failure = '';
+    // A broker that understands the field already works without a new capability.
+    const receipt = await service.save(selected, f.value, null);
+    expect(JSON.parse(f.git.blobs.get(receipt.version)!)).toEqual(original);
+    expect(writes.every((input: any) => input.text === JSON.stringify(original))).toBe(true);
+    expect(parseReviewRequest(f.git.blobs.get(original.request.version)!)).toHaveProperty('response_effect', f.request.response_effect);
   } finally {
     bridge.mockImplementation(async (input: any) => input.operation === 'discover' ? { capabilities: [] } as any : [{ id: scope.id, installation: { id: 1 }, user: { id: 1 } }] as any);
   }
