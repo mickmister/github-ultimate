@@ -5,7 +5,7 @@ import { ReviewProcessView } from '../src/features/reviews/ReviewProcess.view';
 import { createReviewFixture, reviewScope, richComparison, type ReviewComparisonFixture } from './reviews.fixtures';
 import { markdownTables } from './markdown-tables.fixtures';
 
-function Fixture({ focused = false, missingBaseline = false, comparison, process = false, picker = false }: { focused?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean }) {
+export function Fixture({ focused = false, missingBaseline = false, comparison, process = false, picker = false }: { focused?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean }) {
   const hooks = useMemo(() => createReviewFixture({ remote: window.location.search.includes('remoteFixture=true'), missingBaseline, comparison, process, picker }), [missingBaseline, comparison, process, picker]);
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const change = () => setHash(window.location.hash); window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
@@ -14,7 +14,7 @@ function Fixture({ focused = false, missingBaseline = false, comparison, process
     : picker ? {} : { connection: reviewScope.connectionId, repository: reviewScope.repository, workspace: reviewScope.workspace, requestId: focused ? 'reader-01' : undefined };
   return <ReviewWorkspace key={JSON.stringify(location)} appHooks={hooks} location={location} />;
 }
-const meta = { title: 'Web app/Reviews', component: ReviewWorkspace, parameters: { layout: 'fullscreen' } } satisfies Meta<typeof ReviewWorkspace>;
+const meta = { title: 'Web app/Reviews', component: ReviewWorkspace, excludeStories: ['Fixture'], parameters: { layout: 'fullscreen' } } satisfies Meta<typeof ReviewWorkspace>;
 export default meta;
 type Story = StoryObj;
 const configPin = { resource: 'threads/task-reader/config.md', version_kind: 'git-blob' as const, version: 'a'.repeat(40), snapshot: 'b'.repeat(40) };

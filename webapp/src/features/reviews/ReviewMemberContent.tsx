@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import type { OpenReview } from '../../../../hosted/reviews';
 import type { ReviewArtifact, ReviewMember } from '../../../../src/review-protocol';
 import { parseRecord, type Answers, type TaskForm } from '../../../../src/protocol';
@@ -34,6 +34,7 @@ export function ReviewMemberContent(props: ReviewMemberContentProps) {
     } catch (cause) { return { form: null, error: String(cause) }; }
   }, [member, content]);
   const error = resource?.status === 'error' ? resource.error : parsed.error;
-  const [mode, setMode] = useState<'full' | 'baseline' | 'changes'>('full');
+  const mode = props.documentZen.modes[member.id] ?? 'full';
+  const setMode = (mode: 'full' | 'baseline' | 'changes') => props.documentZen.setMode(member.id, mode);
   return <ReviewMemberContentView {...props} content={content} baseline={baseline} form={parsed.form} error={error} baselineError={baselineError} mode={mode} setMode={setMode} />;
 }

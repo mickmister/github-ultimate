@@ -40,7 +40,7 @@ test('late workspace discovery cannot replace a newer repository selection', asy
   await page.goto(url);
   await page.getByLabel('Approved connection', { exact: true }).selectOption(first);
   await page.getByLabel('Storage repository', { exact: true }).selectOption('example/storage');
-  await expect(page.getByText('Finding document workspaces in the selected repository…')).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('Finding workspaces…');
   await page.getByLabel('Storage repository', { exact: true }).selectOption('example/new');
   await expect(page.getByLabel('Workspace', { exact: true })).toHaveValue('new-workspace');
   release();
@@ -58,7 +58,7 @@ test('connection changes reset storage choices and ignore stale repository resul
   });
   await page.goto(url);
   await page.getByLabel('Approved connection', { exact: true }).selectOption(first);
-  await expect(page.getByText('Loading repositories for this connection…')).toBeVisible();
+  await expect(page.getByRole('status')).toHaveText('Loading repositories…');
   await page.getByLabel('Approved connection', { exact: true }).selectOption(second);
   await expect(page.getByLabel('Storage repository', { exact: true })).toHaveValue('second/storage');
   await expect(page.getByLabel('Workspace', { exact: true })).toHaveValue('second-workspace');
