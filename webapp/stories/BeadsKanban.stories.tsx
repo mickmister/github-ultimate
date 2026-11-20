@@ -19,11 +19,11 @@ export const LargeWorkspace: Story = { args: { ...Compact.args, results: fixture
 export const InvalidSnapshot: Story = { args: { ...Compact.args, results: fixtureResults([fixtureIssues[0], fixtureIssues[0]]) } };
 function SwitchingWorkspace() {
   const [second, setSecond] = useState(false);
-  return <><button onClick={() => setSecond(value => !value)}>Switch workspace</button><BeadsBoard key={String(second)} workspace={second ? 'Second workspace' : 'First workspace'} results={fixtureResults(second ? [{ id: 'second-1', title: 'A different collection', status: 'open', priority: 2 }] : fixtureIssues)} /></>;
+  return <><button onClick={() => setSecond(value => !value)}>Switch workspace</button><BeadsBoard workspace={second ? 'Second workspace' : 'First workspace'} results={fixtureResults(second ? [{ id: 'second-1', title: 'A different collection', status: 'open', priority: 2 }] : fixtureIssues)} /></>;
 }
 export const WorkspaceSwitch: Story = { render: () => <SwitchingWorkspace />, args: Compact.args };
 
-const pageHost: NonNullable<ComponentProps<typeof BeadsSample>['host']> = {
+export const pageHost: NonNullable<ComponentProps<typeof BeadsSample>['host']> = {
   connections: async () => [{ id: '11111111-1111-4111-8111-111111111111', appId: 1, name: 'Example connection', installation: { id: 1, account: 'example' } }],
   discover: async () => ['first', 'second'], storage: applicationStorage,
   async open(scope, signal) {

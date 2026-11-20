@@ -3,7 +3,7 @@ import { applicationStorage } from '../../app-storage';
 import { boardPreferencesKey, defaultPreferences, readPreferences, type BoardPreferences } from './preferences';
 import { settingsError } from './settings-error';
 
-export function useBoardPreferences(scope: string | undefined, initialDensity: 'compact' | 'comfortable') {
+export function useBoardPreferences(scope: string | undefined, initialDensity: 'compact' | 'comfortable', workspace?: string) {
   const [preferences, setPreferences] = useState(() => defaultPreferences(initialDensity));
   const [ready, setReady] = useState(!scope), [error, setError] = useState('');
   const [saving, setSaving] = useState(false), revision = useRef(0);
@@ -12,6 +12,8 @@ export function useBoardPreferences(scope: string | undefined, initialDensity: '
   const current = useRef(preferences);
   useEffect(() => {
     let stopped = false;
+    revision.current++; setSaving(false);
+    current.current = defaultPreferences(initialDensity); setPreferences(current.current);
     if (!scope) { setReady(true); return; }
     setReady(false);
     void Promise.all([applicationStorage(), boardPreferencesKey(scope)]).then(([opened, name]) => {
@@ -20,8 +22,8 @@ export function useBoardPreferences(scope: string | undefined, initialDensity: '
       current.current = readPreferences(opened.getItem(name), initialDensity);
       setPreferences(current.current); setError(''); setReady(true);
     }).catch(reason => { if (!stopped) { storageFailure.current = reason; setError(settingsError('Filter', reason)); setReady(true); } });
-    return () => { stopped = true; storage.current = undefined; key.current = ''; };
-  }, [scope, initialDensity]);
+    return () => { stopped = true; revision.current++; storage.current = undefined; key.current = ''; };
+  }, [scope, initialDensity, workspace]);
   function update(change: (current: BoardPreferences) => BoardPreferences) {
     let next: BoardPreferences;
     try { next = change(current.current); }

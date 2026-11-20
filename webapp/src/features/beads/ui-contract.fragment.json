@@ -1,0 +1,16 @@
+{
+  "feature": {
+    "id": "beads",
+    "host": "webapp/src/features/beads/BeadsSample.tsx",
+    "hooks": "webapp/src/features/beads/Beads.hooks.ts",
+    "hook": "useBeadsFeature",
+    "copy": "webapp/src/features/beads/Beads.copy.ts",
+    "ownedViews": ["webapp/src/features/beads/BeadsSample.view.tsx", "webapp/src/features/beads/BeadsBoard.view.tsx"],
+    "presentations": [
+      { "id": "beads", "kind": "page", "file": "webapp/src/features/beads/Beads.presentation.tsx", "export": "BeadsPresentation" },
+      { "id": "beads.board", "kind": "region", "file": "webapp/src/features/beads/BeadsBoard.presentation.tsx", "export": "BeadsBoardPresentation" }
+    ],
+    "scenarios": "webapp/stories/BeadsSurfaces.stories.tsx"
+  },
+  "routes": { "webapp/src/routes/beads.tsx": { "feature": "beads" } }
+}

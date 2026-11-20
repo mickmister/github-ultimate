@@ -20,4 +20,9 @@ describe('Beads board semantics', () => {
     expect(() => boardIssues([{}])).toThrow('missing');
     expect(boardIssues([{ id: 'x', priority: '1', labels: [1, 'label'] }])[0]).toMatchObject({ id: 'x', status: 'unknown', priority: null, labels: ['label'] });
   });
+  it('searches the complete parsed collection, including content outside the rendered page', () => {
+    const issues = boardIssues(Array.from({ length: 2000 }, (_, index) => ({ id: `task-${index}`, title: 'Common title', description: index === 1999 ? 'Needle in the final description' : '', labels: ['searchable-label'], assignee: 'owner' })));
+    expect(filterIssues(issues, { ...initialBoardFilters, query: 'needle' }, new Set(), new Set()).map(issue => issue.id)).toEqual(['task-1999']);
+    expect(filterIssues(issues, { ...initialBoardFilters, query: 'searchable-label' }, new Set(), new Set())).toHaveLength(2000);
+  });
 });
