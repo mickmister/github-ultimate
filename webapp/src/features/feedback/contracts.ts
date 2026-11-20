@@ -42,3 +42,5 @@ export interface FeedbackComment {
   readonly comment: string;
   readonly context: FeedbackCapture;
 }
+
+export type FeedbackModel = ReturnType<typeof import('./Feedback.hooks').useFeedbackModel>;

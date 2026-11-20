@@ -1,5 +1,6 @@
 import type { FeedbackCapture, FeedbackComment, FeedbackKind, FeedbackOptions } from './contracts';
 import { formatFeedbackReview } from './review';
+import { feedbackCopy as copy } from './Feedback.copy';
 
 export const feedbackStorageKey = 'github-ultimate:feedback:v1';
 export function restoreFeedbackDraft(value: string | null): FeedbackComment[] {
@@ -33,7 +34,7 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
     state = { ...state, ...next };
     if (save) {
       try { persist(JSON.stringify({ schemaVersion: 1, interactions: state.items })); }
-      catch { state = { ...state, message: 'The local comment draft could not be saved. Keep this page open until you save or copy your comments.' }; }
+      catch { state = { ...state, message: copy.storageFailed.text }; }
     }
     listeners.forEach(listener => listener());
   }
@@ -50,7 +51,7 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
     add(kind: FeedbackKind, comment: string, context: FeedbackCapture) {
       if (!comment.trim()) return;
       const item: FeedbackComment = { id: crypto.randomUUID(), version: 1, kind, comment, context: structuredClone(capture(context)) };
-      update({ items: [...state.items, item], message: 'Comment queued.' }, true);
+      update({ items: [...state.items, item], message: copy.queued.text }, true);
     },
     edit(id: string, comment: string) {
       update({ items: state.items.map(item => item.id === id ? { ...item, comment, version: item.version + 1 } : item), message: '' }, true);
@@ -59,7 +60,7 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
     async copyAndClear(write: (text: string) => Promise<void>, kind?: FeedbackKind) {
       if (state.exporting || !state.items.length) return;
       const categories = new Set(state.items.map(item => item.kind));
-      if (!kind && categories.size > 1) { update({ message: 'Export Content and Feature separately; they have different destinations.' }); return; }
+      if (!kind && categories.size > 1) { update({ message: copy.separateCategories.text }); return; }
       const exported = state.items.filter(item => !kind || item.kind === kind);
       if (!exported.length) return;
       const versions = new Map(exported.map(item => [item.id, item.version]));
@@ -68,9 +69,9 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
       try {
         // Start clipboard writing directly in the user's click, before any other asynchronous work.
         await write(review);
-        update({ items: state.items.filter(item => versions.get(item.id) !== item.version), exporting: false, message: kind === 'feature-comment' ? 'Feature intake copied; destination workspace/thread is unknown. Paste into app feedback discovery/intake. Not delivered and no content process continued.' : 'Content review copied. Exported content comments cleared.' }, true);
+        update({ items: state.items.filter(item => versions.get(item.id) !== item.version), exporting: false, message: kind === 'feature-comment' ? copy.featureCopied.text : copy.contentCopied.text }, true);
       } catch {
-        update({ exporting: false, message: 'Clipboard copy failed. Your comments are still queued; retry from the Copy review & clear button.' });
+        update({ exporting: false, message: copy.exportFailed.text });
       }
     },
   };

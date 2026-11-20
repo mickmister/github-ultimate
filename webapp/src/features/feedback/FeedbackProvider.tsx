@@ -1,95 +1,19 @@
-import { createContext, useContext, useEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
-import type { FeedbackCapture, FeedbackComment, FeedbackKind, FeedbackOptions, FeedbackSelection, FeedbackTarget } from './contracts';
-import { createFeedbackQueue, feedbackStorageKey, restoreFeedbackDraft } from './queue';
-import { captureFeedbackSelection } from './selection';
+import type { ReactNode } from 'react';
+import type { FeedbackOptions } from './contracts';
+import { createFeedbackQueue, feedbackStorageKey } from './queue';
+import { FeedbackContext, useFeedbackModel, useParentFeedback } from './Feedback.hooks';
 import { FeedbackShellView } from './FeedbackShell.view';
-import { useTouchFeedbackSelection } from './useTouchFeedbackSelection';
 
-interface FeedbackAPI {
-  readonly items: readonly FeedbackComment[];
-  setPortalContainer(container: HTMLElement | null): void;
-  registerTarget(root: HTMLElement, target: FeedbackTarget): () => void;
-  edit(id: string, text: string): void;
-  remove(id: string): void;
-  open(target: FeedbackTarget, root: HTMLElement, origin: HTMLElement, point?: { x: number; y: number }, selection?: FeedbackSelection | null): void;
-}
-export const FeedbackContext = createContext<FeedbackAPI | null>(null);
-export const AttachableParentContext = createContext<FeedbackTarget | null>(null);
-export function useFeedback() {
-  const value = useContext(FeedbackContext);
-  if (!value) throw new Error('AttachableContext requires a FeedbackProvider.');
-  return value;
+export { FeedbackContext, AttachableParentContext, useFeedback } from './Feedback.hooks';
+type Props = FeedbackOptions & { children: ReactNode; storageKey?: string; queue?: ReturnType<typeof createFeedbackQueue>; uiSuppressed?: boolean };
+
+/** Retain above the outlet; suppress global controls while a review owns its queue. */
+export function FeedbackProvider({ children, includePageUrl = false, storageKey = feedbackStorageKey, queue, uiSuppressed = false }: Props) {
+  const parent = useParentFeedback();
+  return parent && !queue ? <>{children}</> : <FeedbackRoot key={storageKey} includePageUrl={includePageUrl} storageKey={storageKey} queue={queue} uiSuppressed={uiSuppressed}>{children}</FeedbackRoot>;
 }
 
-/** Place once above the router/panels; nested consumers also work as standalone presentations. */
-export function FeedbackProvider({ children, includePageUrl = false, storageKey = feedbackStorageKey, queue }: FeedbackOptions & { children: ReactNode; storageKey?: string; queue?: ReturnType<typeof createFeedbackQueue> }) {
-  const parent = useContext(FeedbackContext);
-  return parent && !queue ? <>{children}</> : <FeedbackRoot key={storageKey} includePageUrl={includePageUrl} storageKey={storageKey} providedQueue={queue}>{children}</FeedbackRoot>;
-}
-
-function FeedbackRoot({ children, includePageUrl, storageKey, providedQueue }: { children: ReactNode; includePageUrl: boolean; storageKey: string; providedQueue?: ReturnType<typeof createFeedbackQueue> }) {
-  const [queue] = useState(() => {
-    if (providedQueue) return providedQueue;
-    let initial = null;
-    try { initial = sessionStorage.getItem(storageKey); } catch { /* Memory-only draft until storage is available. */ }
-    return createFeedbackQueue(restoreFeedbackDraft(initial), value => sessionStorage.setItem(storageKey, value), { includePageUrl });
-  });
-  useEffect(() => { queue.setIncludePageUrl(includePageUrl); }, [queue, includePageUrl]);
-  const state = useSyncExternalStore(queue.subscribe, queue.getSnapshot, queue.getSnapshot);
-  const [active, setActive] = useState<{ context: FeedbackCapture; point: { x: number; y: number } } | null>(null);
-  const [composer, setComposer] = useState<{ kind: FeedbackKind; context: FeedbackCapture; text: string } | null>(null);
-  const [review, setReview] = useState(false);
-  const [notice, setNotice] = useState('');
-  const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
-  const origin = useRef<HTMLElement | null>(null);
-  const commentRef = useRef<HTMLTextAreaElement | null>(null);
-  const touch = useTouchFeedbackSelection(!active && !composer && !review);
-  const api: FeedbackAPI = {
-    items: state.items, edit: queue.edit, remove: queue.remove, setPortalContainer, registerTarget: touch.registerTarget,
-    open(target, root, trigger, point, selection) {
-      touch.dismiss();
-      const rect = trigger.getBoundingClientRect();
-      const viewport = root.ownerDocument.defaultView!;
-      origin.current = trigger;
-      setNotice('');
-      setActive({ point: point ?? { x: Math.max(8, Math.min(rect.left, viewport.innerWidth - 8)), y: Math.max(8, Math.min(rect.bottom, viewport.innerHeight - 8)) }, context: structuredClone({
-        target, selection: selection === undefined ? captureFeedbackSelection(root, target.representation) : selection,
-        ...(includePageUrl ? { pageUrl: root.ownerDocument.location.href } : {}),
-        appBuild: import.meta.env.VITE_UI_BUILD ?? 'development', capturedAt: new Date().toISOString(),
-      }) });
-    },
-  };
-  function closeMenu() { setActive(null); origin.current?.focus(); }
-  function select(value: string) {
-    if (!active) return;
-    const context = active.context;
-    if (value === 'copy' && context.selection) {
-      void navigator.clipboard?.writeText(context.selection.text).then(() => setNotice('Selection copied.'), () => setNotice('Clipboard copy failed. Select the text and use your browser’s Copy command.'));
-      if (!navigator.clipboard) setNotice('Clipboard is unavailable. Select the text and use your browser’s Copy command.');
-    } else if (value === 'feature-comment' || value === 'content-comment' && context.target.resource) {
-      setComposer({ kind: value as FeedbackKind, context, text: '' });
-    }
-    closeMenu();
-  }
-  return <FeedbackContext.Provider value={api}>
-    <FeedbackShellView active={active} composer={composer} review={review} state={state} notice={notice} commentRef={commentRef} portalContainer={portalContainer} selectionPoint={touch.selected?.point ?? null}
-      actions={{
-        closeMenu, select,
-        openSelection() {
-          const selected = touch.capture();
-          if (selected) api.open(selected.target, selected.root, selected.root, selected.point, selected.selection);
-          else touch.dismiss();
-        },
-        openReview(element) { origin.current = element; setNotice(''); setReview(true); },
-        closeDialog() { setComposer(null); setReview(false); origin.current?.focus(); },
-        setComment(text) { setComposer(value => value ? { ...value, text } : null); },
-        addComment() {
-          if (!composer?.text.trim()) return;
-          queue.add(composer.kind, composer.text, composer.context);
-          setComposer(null); setNotice(''); origin.current?.focus();
-        },
-        edit: queue.edit, remove: queue.remove,
-        copyAndClear(kind) { setNotice(''); void queue.copyAndClear(text => navigator.clipboard.writeText(text), kind); },
-      }}>{children}</FeedbackShellView>
-  </FeedbackContext.Provider>;
+function FeedbackRoot({ children, includePageUrl = false, storageKey = feedbackStorageKey, queue, uiSuppressed }: Props) {
+  const model = useFeedbackModel({ includePageUrl, storageKey, providedQueue: queue, uiSuppressed });
+  return <FeedbackContext.Provider value={model.api}><FeedbackShellView {...model} uiSuppressed={uiSuppressed}>{children}</FeedbackShellView></FeedbackContext.Provider>;
 }
