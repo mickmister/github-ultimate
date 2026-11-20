@@ -28,6 +28,7 @@ export const copy = defineCopy({
   scratch: { purpose: 'heading', text: 'Scratch workspace' },
   files: { purpose: 'label', text: 'Scratch files' },
   diff: { purpose: 'heading', text: 'Changes since scratch HEAD' },
+  loadDiff: { purpose: 'action', text: 'Load diff' },
   script: { purpose: 'label', text: 'Scratch JavaScript' },
   run: { purpose: 'action', text: 'Run scratch JavaScript' },
   message: { purpose: 'label', text: 'Scratch commit message' },

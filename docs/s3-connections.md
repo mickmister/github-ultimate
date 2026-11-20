@@ -68,6 +68,29 @@ are not saved in page preferences.
 
 ## Direct and review uploads
 
+### Browser-agent checkpoints on Backblaze B2
+
+The agent uses a dedicated `s3Checkpoint` operation, rather than the general
+object uploader. Keep reads/uploads enabled and overwrites disabled. The broker
+generates a fresh key under `pi-sessions/<session-id>/`, including the payload
+SHA-256, with a 4 MiB checkpoint limit. For standard `*.backblazeb2.com` endpoints,
+the upload is an ordinary signed PUT without `If-None-Match`; Backblaze's non-null
+`x-amz-version-id` is required. Readback and restoration use that exact version,
+with SHA-256 verification. Checkpoint discovery uses ListObjectVersions, preserving
+version IDs across paginated results. Application keys need permission to list
+and read file versions as well as upload files.
+
+Other endpoints use conditional create-only checkpoint PUTs. Endpoint detection
+does not infer Backblaze behind custom gateways; those retain conditional PUT
+behavior. General `s3Upload` still sends `If-None-Match: *` when replacement is off;
+there is no automatic retry that removes the condition on arbitrary uploads.
+
+Backblaze reference: [PUT Object](https://www.backblaze.com/apidocs/s3-put-object),
+[File versions](https://www.backblaze.com/docs/cloud-storage-file-versions),
+[GET Object](https://www.backblaze.com/apidocs/s3-get-object).
+
+### Direct and review destinations
+
 Configure a direct-bucket connection for streamlined uploads. Configure a separate
 staging-bucket connection, with its own credentials, prefix and operation grants,
 for review uploads. The user chooses the destination connection explicitly.

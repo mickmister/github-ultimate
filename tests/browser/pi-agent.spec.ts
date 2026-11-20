@@ -9,7 +9,7 @@ test('packaged extension keeps inference headers private, runs Pi/GitHub tools a
   try {
     const extension = resolve(profile, 'extension'); await cp(resolve('dist'), extension, { recursive: true });
     const manifest = JSON.parse(await readFile(resolve(extension, 'manifest.json'), 'utf8'));
-    manifest.host_permissions.push('https://agent.example/*', 'https://inference.example/*', 'https://s3.example/*');
+    manifest.host_permissions.push('https://agent.example/*', 'https://inference.example/*', 'https://s3.us-west-004.backblazeb2.com/*');
     await writeFile(resolve(extension, 'manifest.json'), JSON.stringify(manifest));
     context = await chromium.launchPersistentContext(profile, { channel: 'chromium', headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, '--no-sandbox'] });
     const worker: Worker = context.serviceWorkers()[0] ?? await context.waitForEvent('serviceworker');
@@ -17,7 +17,7 @@ test('packaged extension keeps inference headers private, runs Pi/GitHub tools a
       const grant = [{ origin: 'https://agent.example', subpath: '/poc/' }];
       const records = {
         connections: { id: '11111111-1111-4111-8111-111111111111', name: 'Test GitHub', appId: 123, clientId: 'test', user: { id: 42, login: 'tester' }, installation: { id: 456, account: 'tester' }, tokens: { accessToken: 'private-github-token', expiresAt: Date.now() + 86400000 }, hostedGrants: grant },
-        s3Connections: { id: '22222222-2222-4222-8222-222222222222', revision: '33333333-3333-4333-8333-333333333333', name: 'Test sessions', endpoint: 'https://s3.example/', region: 'auto', bucket: 'sessions', addressing: 'path', prefix: 'private/', accessKeyId: 'private-s3-key', secretAccessKey: 'private-s3-secret', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: grant },
+        s3Connections: { id: '22222222-2222-4222-8222-222222222222', revision: '33333333-3333-4333-8333-333333333333', name: 'Test sessions', endpoint: 'https://s3.us-west-004.backblazeb2.com/', region: 'us-west-004', bucket: 'sessions', addressing: 'path', prefix: 'private/', accessKeyId: 'private-s3-key', secretAccessKey: 'private-s3-secret', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: grant },
       };
       const db = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('github-ultimate-credentials', 4); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
       await new Promise<void>((resolve, reject) => { const tx = db.transaction(Object.keys(records), 'readwrite'); for (const [name, record] of Object.entries(records)) tx.objectStore(name).put(record); tx.oncomplete = () => resolve(); tx.onerror = () => reject(tx.error); }); db.close();
@@ -30,23 +30,26 @@ test('packaged extension keeps inference headers private, runs Pi/GitHub tools a
         if (url.hostname === 'inference.example') {
           if (headers.authorization !== 'Bearer private-inference-secret' || headers['x-custom'] !== 'private-custom-secret') return Response.json({}, { status: 401 });
           const body = JSON.parse(raw!);
-          if (body.messages.at(-1).role === 'user' && !body.messages.some((message: any) => message.role === 'tool')) return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: 'browser-call-1', type: 'function', function: { name: 'github_probe', arguments: '{"repository":"owner/repo"}' } }] } }] });
+           if (body.messages.at(-1).role === 'user' && !body.messages.some((message: any) => message.role === 'tool')) return Response.json({ choices: [{ finish_reason: 'tool_calls', message: { content: null, tool_calls: [{ id: 'browser-call-1', type: 'function', function: { name: 'github_graphql', arguments: JSON.stringify({ query: 'query { repository(owner:"owner",name:"repo") { defaultBranchRef { target { oid } } } }', variables: {} }) } }] } }] });
           return Response.json({ choices: [{ finish_reason: 'stop', message: { content: 'Verified repository head. Café 🌴' } }] });
         }
         if (url.hostname === 'api.github.com') {
-          if (headers.authorization !== 'Bearer private-github-token') return Response.json({}, { status: 401 });
+           if (headers.authorization !== 'Bearer private-github-token') return Response.json({}, { status: 401 });
+           if (url.pathname === '/graphql' && request.method === 'POST') return Response.json({ data: { repository: { defaultBranchRef: { target: { oid: 'a'.repeat(40) } } } } });
           if (url.pathname === '/user/installations/456/repositories') return Response.json({ repositories: [{ full_name: 'owner/repo', private: true, default_branch: 'main' }] });
           if (url.pathname === '/repos/owner/repo/git/ref/heads/main') return Response.json({ object: { type: 'commit', sha: 'a'.repeat(40) } });
         }
-        if (url.hostname === 's3.example') {
+        if (url.hostname === 's3.us-west-004.backblazeb2.com') {
           if (!headers.authorization?.startsWith('AWS4-HMAC-SHA256')) return new Response('', { status: 403 });
           const key = decodeURIComponent(url.pathname.slice('/sessions/'.length));
           if (request.method === 'PUT') {
-            if (headers['if-none-match'] !== '*' || key in network.__piObjects) return new Response('', { status: 412 });
-            network.__piObjects[key] = raw!; return new Response('', { headers: { ETag: '"checkpoint"' } });
+            if (headers['if-none-match']) return new Response('', { status: 501 });
+            if (key in network.__piObjects) return new Response('', { status: 412 });
+            network.__piObjects[key] = raw!; return new Response('', { headers: { ETag: '"checkpoint"', 'x-amz-version-id': 'pinned-version' } });
           }
+          if (url.searchParams.has('versions')) return new Response(`<ListVersionsResult><IsTruncated>false</IsTruncated><EncodingType>url</EncodingType>${Object.entries(network.__piObjects).filter(([key]) => key.startsWith(url.searchParams.get('prefix')!)).map(([key, value]) => `<Version><Key>${encodeURIComponent(key)}</Key><VersionId>pinned-version</VersionId><Size>${new TextEncoder().encode(value).length}</Size></Version>`).join('')}</ListVersionsResult>`);
           if (url.searchParams.has('list-type')) return new Response(`<ListBucketResult><IsTruncated>false</IsTruncated><EncodingType>url</EncodingType>${Object.entries(network.__piObjects).filter(([key]) => key.startsWith(url.searchParams.get('prefix')!)).map(([key, value]) => `<Contents><Key>${encodeURIComponent(key)}</Key><Size>${new TextEncoder().encode(value).length}</Size></Contents>`).join('')}</ListBucketResult>`);
-          if (key in network.__piObjects) return new Response(network.__piObjects[key], { headers: { 'Content-Type': 'application/json' } });
+          if (key in network.__piObjects && url.searchParams.get('versionId') === 'pinned-version') return new Response(network.__piObjects[key], { headers: { 'Content-Type': 'application/json', 'x-amz-version-id': 'pinned-version' } });
         }
         return new Response('', { status: 404 });
       };
@@ -81,6 +84,8 @@ test('packaged extension keeps inference headers private, runs Pi/GitHub tools a
     expect(await page.content()).not.toMatch(/private-inference-secret|private-custom-secret|private-github-token|private-s3-secret/);
     const before = await worker.evaluate(() => (globalThis as any).__piRequests.filter((item: any) => item.url.includes('inference.example')).length);
     expect(before).toBe(2);
+    const toolData = await worker.evaluate(() => (globalThis as any).__piRequests.filter((item: any) => item.url.includes('inference.example'))[1].body.messages.find((message: any) => message.role === 'tool').content);
+    expect(JSON.parse(toolData)).toMatchObject({ data: { repository: { defaultBranchRef: { target: { oid: 'a'.repeat(40) } } } } });
     await page.reload(); await page.getByRole('button', { name: 'Load approved connections' }).click();
     await page.getByLabel('Inference connection', { exact: true }).selectOption({ label: 'Test inference' }); await page.getByLabel('GitHub connection', { exact: true }).selectOption({ label: 'Test GitHub' }); await page.getByLabel('S3 session storage').selectOption({ label: 'Test sessions' });
     await page.getByLabel('Session ID').fill(sessionId); await page.getByRole('button', { name: 'List checkpoints', exact: true }).click();

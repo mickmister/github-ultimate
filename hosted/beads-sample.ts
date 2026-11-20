@@ -2,7 +2,7 @@ import { bridgeRequest } from './client';
 import { WorkspaceReader, documentText, type GitTransport } from './workspaces';
 import { mapReads } from '../src/bounded-reads';
 import { nativeReadConcurrency } from '../src/git-read-limits';
-import { resolveBeadsServing } from './beads-serving';
+import { resolveBeadsServing, selectBeadsServing } from './beads-serving';
 
 // Updated only with a verified immutable release; workspace metadata cannot select executable code.
 export const beadsRelease = {
@@ -10,6 +10,7 @@ export const beadsRelease = {
   manifestSha256: '157c5211842f2d2bc9e170754cd3029e625a6c99b07bdc2041559cbc4d47e7db',
 };
 export type BeadsScope = { connectionId: string; installationId: number; repository: string; workspace: string };
+export type BeadsPin = { gitCommit: string; doltCommit: string; servingCommit?: string };
 export type BeadsOperation = 'list' | 'ready' | 'blocked';
 export type BeadsIssue = Record<string, unknown>;
 export type BeadsResult = { operation: BeadsOperation; request: unknown; issues: BeadsIssue[] | null; durationMs: number };
@@ -47,7 +48,7 @@ async function createEngine(signal: AbortSignal) {
   } finally { URL.revokeObjectURL(url); }
 }
 
-export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, progress: (message: string) => void, send: GitTransport = bridgeRequest) {
+export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, progress: (message: string) => void, send: GitTransport = bridgeRequest, pinned?: BeadsPin) {
   const urls: string[] = []; let engine: Engine | undefined;
   const dispose = () => { engine?.dispose(); for (const url of urls.splice(0)) URL.revokeObjectURL(url); };
   signal.addEventListener('abort', dispose, { once: true });
@@ -58,10 +59,10 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     if (!workspace?.dolt) throw new Error('The selected workspace has no published native Beads/Dolt snapshot.');
     await reader.open(workspace);
     const native = new WorkspaceReader(send, scope.connectionId, scope.repository, scope.installationId, scope.workspace, 'dolt');
-    let snapshot = await native.snapshot(workspace.dolt, true);
+    let snapshot = await native.snapshot(pinned?.gitCommit ?? workspace.dolt, true);
     const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
     progress('Resolving the current-state Beads serving pack…');
-    const resolved = support.capabilities.includes('beadsServingPacks') ? await resolveBeadsServing(native, snapshot, scope.workspace, signal, async () => {
+    const resolved = pinned ? { snapshot, serving: await selectBeadsServing(native, snapshot, scope.workspace, signal, pinned.servingCommit ? await native.snapshot(pinned.servingCommit, true) : null) } : support.capabilities.includes('beadsServingPacks') ? await resolveBeadsServing(native, snapshot, scope.workspace, signal, async () => {
       progress('Workspace publication changed; rediscovering the canonical snapshot and serving pack…');
       const current = (await reader.discover()).find(value => value.name === scope.workspace);
       signal.throwIfAborted();
@@ -101,6 +102,7 @@ export async function openBeadsSample(scope: BeadsScope, signal: AbortSignal, pr
     progress('Loading the integrity-pinned WASM engine and decoding native Dolt chunks…');
     engine = await createEngine(signal); signal.throwIfAborted();
     const opened = await engine.open({ apiVersion: 1, manifest: manifestReference, files }, signal);
+    if (pinned && opened.commit !== pinned.doltCommit) throw new Error('Restored Beads snapshot identity mismatch.');
     if (serving && (opened.commit !== serving.descriptor.doltCommit || opened.root !== serving.descriptor.root)) throw new Error('Beads serving database identity mismatch.');
     for (const url of urls.splice(0)) URL.revokeObjectURL(url);
     const runtime = engine;

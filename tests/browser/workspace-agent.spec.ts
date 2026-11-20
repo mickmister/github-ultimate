@@ -5,7 +5,8 @@ import { createServer as createHttpServer, type Server } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname } from 'node:path';
 import { pageChannel, replyChannel, hostedRelayRevision } from '../../src/bridge-channels';
-import { Scratch } from '../../src/scratch';
+import { Scratch, gitObject, gitTreeEntries, type ScratchEntry } from '../../src/scratch';
+import { createHash } from 'node:crypto';
 
 let server: ViteDevServer | undefined, staticServer: Server | undefined, origin: string;
 test.beforeAll(async () => {
@@ -24,14 +25,20 @@ test.beforeAll(async () => {
 test.afterAll(async () => { await server?.close(); if (staticServer) await new Promise<void>(done => staticServer!.close(() => done())); });
 async function mockBridge(page: Page) {
   const objects = new Map<string, string>(), revision = crypto.randomUUID(); let inferenceCalls = 0;
-  const initial = new Scratch({ version: 1, revision: 0, origin: { repository: 'owner/repo', commit: 'a'.repeat(40), directory: 'docs' }, files: [{ path: 'README.md', content: 'Pinned original\n', mode: '100644' }], commits: [] });
+  const blob = gitObject('blob', 'Pinned original\n'), nested = gitTreeEntries([{ name: 'untouched.txt', mode: '100644', oid: 'f'.repeat(40) }]);
+  const entries: ScratchEntry[] = [{ name: 'README.md', type: 'blob', mode: '100644', oid: blob, size: 16 }, { name: 'nested', type: 'tree', mode: '40000', oid: nested, size: 0 }], tree = gitTreeEntries(entries);
+  const initial = new Scratch({ version: 1, revision: 0, origin: { repository: 'owner/repo', commit: 'a'.repeat(40), directory: 'docs' }, base: { tree, trees: { [tree]: entries } }, files: [], commits: [] });
+  let blobReads = 0;
   initial.commit('Pinned import', 0, null, 0);
   await page.exposeFunction('agentTestBridge', async (request: any) => {
+    if (request.operation === 'discover') return { capabilities: ['agentGraphql', 'agentTree', 'agentBlob', 's3Checkpoint'] };
     if (request.operation === 'inferenceConnections') return [{ id: 'inference', revision, name: 'Test inference', model: 'test-model', hostedGrants: [] }];
     if (request.operation === 'connections') return [{ id: 'github', name: 'Test GitHub', appId: 1, user: { id: 2, login: 'tester' }, installation: { id: 3, account: 'tester' } }];
     if (request.operation === 's3Connections') return [{ id: 'storage', revision, name: 'Test S3', endpoint: 'https://s3.example/', bucket: 'sessions', prefix: 'private/', region: 'auto', addressing: 'path', allowRead: true, allowUpload: true, allowOverwrite: false }];
     if (request.operation === 'agentSnapshot') { expect(request).toMatchObject({ repository: 'owner/repo', commit: 'a'.repeat(40), directory: 'docs' }); return initial.snapshot(); }
-    if (request.operation === 's3Upload') { if (objects.has(request.key)) throw Error('Overwrite denied'); objects.set(request.key, Buffer.from(request.base64, 'base64').toString('utf8')); return { key: request.key }; }
+    if (request.operation === 'agentBlob') { expect(request.oid).toBe(blob); blobReads++; return { sha: blob, encoding: 'base64', size: 16, content: Buffer.from('Pinned original\n').toString('base64') }; }
+    if (request.operation === 'agentTree') throw Error('Unrelated directory must remain lazy.');
+    if (request.operation === 's3Checkpoint') { const body = Buffer.from(request.base64, 'base64'), sha256 = createHash('sha256').update(body).digest('hex'), key = `private/pi-sessions/${request.sessionId}/${new Date().toISOString()}-${crypto.randomUUID()}-${sha256}.json`; objects.set(key, body.toString('utf8')); return { key, sha256 }; }
     if (request.operation === 's3Read') { const body = objects.get(request.key)!; return { key: request.key, size: Buffer.byteLength(body), base64: Buffer.from(body).toString('base64') }; }
     if (request.operation === 's3List') return { objects: [...objects].filter(([key]) => key.startsWith(request.prefix)).map(([key, body]) => ({ key, size: Buffer.byteLength(body) })) };
     if (request.operation === 'inferenceComplete') {
@@ -51,7 +58,7 @@ async function mockBridge(page: Page) {
       catch (error) { window.postMessage({ channel: replyChannel, version: 1, relayRevision: hostedRelayRevision, requestId: message.requestId, ok: false, error: String(error) }, location.origin); }
     });
   }, { pageChannel, replyChannel, hostedRelayRevision });
-  return { objects, calls: () => inferenceCalls };
+  return { objects, calls: () => inferenceCalls, blobReads: () => blobReads };
 }
 async function connect(page: Page) {
   await page.getByRole('button', { name: 'Load connections', exact: true }).click();
@@ -66,6 +73,7 @@ test('hosted agent imports pinned files, executes real QuickJS tool loop, commit
   await page.getByLabel('Source repository').fill('owner/repo'); await page.getByLabel('Source commit SHA').fill('a'.repeat(40)); await page.getByLabel('Source directory (empty for root)').fill('docs');
   await page.getByRole('button', { name: 'Import pinned directory' }).click();
   await expect(page.getByText(/Saved and readback-verified:/)).toBeVisible();
+  expect(remote.blobReads()).toBe(0);
   const session = await page.getByLabel('Session UUID').inputValue();
   await page.getByLabel('Message to agent').fill('Update README and commit'); await page.getByRole('button', { name: 'Send', exact: true }).click();
   await expect(page.locator('.agent-transcript')).toContainText('Updated README and committed', { timeout: 30000 });
@@ -74,6 +82,7 @@ test('hosted agent imports pinned files, executes real QuickJS tool loop, commit
   const saved = JSON.parse(remote.objects.get(checkpoint)!);
   expect(saved.messages.filter((m: any) => m.role === 'toolResult').map((m: any) => ({ error: m.isError, content: m.isError ? m.content : undefined }))).toEqual([{ error: false }, { error: false }]);
   expect(saved.scratch.files[0].content).toBe('Agent changed 🌴\n'); expect(saved.scratch.commits).toHaveLength(2); expect(remote.calls()).toBe(3);
+  expect(remote.blobReads()).toBe(1); expect(Object.keys(saved.scratch.base.trees)).toHaveLength(1);
   await page.reload(); await connect(page); await page.getByLabel('Session UUID').fill(session); await page.getByRole('button', { name: 'List checkpoints', exact: true }).click();
   await page.getByLabel('Saved checkpoint').selectOption(checkpoint); await page.getByRole('button', { name: 'Restore session & scratch', exact: true }).click();
   await expect(page.locator('.agent-transcript')).toContainText('Updated README and committed'); await expect(page.getByText(saved.scratch.commits.at(-1).oid, { exact: true }).first()).toBeVisible(); expect(remote.calls()).toBe(3);
@@ -84,6 +93,9 @@ test('hosted agent imports pinned files, executes real QuickJS tool loop, commit
   await page.getByLabel('Scratch JavaScript', { exact: true }).fill('text({fetch: typeof fetch, process: typeof process, file: await tools.read_file({path:"README.md"})});');
   await page.getByRole('button', { name: 'Run scratch JavaScript', exact: true }).click();
   await expect(page.locator('.agent-scratch')).toContainText('undefined'); await expect.poll(() => remote.objects.size).toBe(3);
+  await page.getByRole('button', { name: 'Load diff', exact: true }).click();
+  await expect(page.locator('.agent-scratch')).toContainText('"complete": true');
+  expect(remote.objects.size).toBe(3); expect(remote.blobReads()).toBe(1);
 });
 test('worker bounds infinite scripts without blocking the hosted UI', async ({ page }) => {
   test.setTimeout(120000); await mockBridge(page); await page.goto(`${origin}#/agent`); await connect(page); await page.getByRole('button', { name: 'New empty workspace' }).click(); await expect(page.getByText(/Saved and readback-verified:/)).toBeVisible();

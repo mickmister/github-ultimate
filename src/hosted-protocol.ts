@@ -9,6 +9,7 @@ import { reviewProgressSchema } from './review-progress';
 import { documentCacheSchema } from './document-cache';
 import { actionsReadSchema } from './actions-protocol';
 import { agentSnapshotSchema } from './agent-snapshot';
+import { agentGraphqlSchema, agentScope } from './agent-graphql';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -24,6 +25,9 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('agentProbe'), id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive(), repository: z.string().regex(/^[a-zA-Z0-9_.-]+\/[a-zA-Z0-9_.-]+$/).max(220) }).strict(),
   ...gitReadSchemas,
   agentSnapshotSchema,
+  agentGraphqlSchema,
+  z.object({ operation: z.literal('agentTree'), ...agentScope, repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), oid: z.string().regex(/^[a-f0-9]{40}$/) }).strict(),
+  z.object({ operation: z.literal('agentBlob'), ...agentScope, repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), oid: z.string().regex(/^[a-f0-9]{40}$/) }).strict(),
   documentCacheSchema,
   reviewWriteSchema,
   reviewProgressSchema,

@@ -1,6 +1,6 @@
 import { test, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { Scratch, scratchTree, gitObject } from '../src/scratch';
+import { Scratch, scratchTree, gitObject, gitTreeEntries, type ScratchEntry } from '../src/scratch';
 import { agentSnapshot } from '../src/agent-snapshot';
 import { scratchTools } from '../hosted/scratch-tools';
 
@@ -39,13 +39,40 @@ test('tool execution validates actual script arguments, rejects ambient options 
   expect(() => write.execute({ path: 'file', content: 'bad', expectedRevision: 0 }, { signal: controller.signal })).toThrow();
   expect(scratch.list()).toEqual([]);
 });
-test('pinned directory import verifies file bytes and records independent scratch ancestry', async () => {
-  const blob = gitObject('blob', 'Pinned\n'), commit = 'a'.repeat(40), tree = 'b'.repeat(40);
+test('pinned directory initialization fetches shallow metadata only and verifies tree identities', async () => {
+  const blob = gitObject('blob', 'Pinned\n'), commit = 'a'.repeat(40);
+  const entries: ScratchEntry[] = [{ name: 'readme.md', mode: '100644', type: 'blob', oid: blob, size: 7 }], child = gitTreeEntries(entries);
+  const root: ScratchEntry[] = [{ name: 'docs', mode: '40000', type: 'tree', oid: child, size: 0 }], tree = gitTreeEntries(root);
   const request = { operation: 'agentSnapshot' as const, id: crypto.randomUUID(), userId: 1, installationId: 2, repository: 'owner/repo', commit, directory: 'docs' };
   const seen: string[] = [];
-  const api = async (path: string) => { seen.push(path); if (path.includes('/commits/')) return { sha: commit, tree: { sha: tree } }; if (path.includes('/trees/')) return { sha: tree, truncated: false, tree: [{ path: 'docs', type: 'tree', mode: '040000', sha: 'c'.repeat(40) }, { path: 'docs/readme.md', type: 'blob', mode: '100644', sha: blob, size: 7 }] }; return { sha: blob, encoding: 'base64', size: 7, content: Buffer.from('Pinned\n').toString('base64') }; };
-  const state = await agentSnapshot(request, api);
-  expect(state.files).toEqual([{ path: 'readme.md', mode: '100644', content: 'Pinned\n' }]); expect(state.origin).toEqual({ repository: 'owner/repo', commit, directory: 'docs' }); expect(state.commits[0].parent).toBeNull();
+  const api = async (path: string) => { seen.push(path); if (path.includes('/commits/')) return { sha: commit, tree: { sha: tree } }; throw Error('No blob or recursive tree requests at initialization'); };
+  const graphql = async (_query: string, variables: Record<string, unknown>) => ({ data: { repository: { object: { oid: variables.oid, entries: (variables.oid === tree ? root : entries).map(e => ({ ...e, mode: parseInt(e.mode, 8) })) } } } });
+  const state = await agentSnapshot(request, api, graphql);
+  expect(state.files).toEqual([]); expect(state.base?.tree).toBe(child); expect(state.origin).toEqual({ repository: 'owner/repo', commit, directory: 'docs' }); expect(state.commits[0].parent).toBeNull();
   expect(seen).toContain(`/repos/owner/repo/git/commits/${commit}`);
-  await expect(agentSnapshot(request, async path => path.includes('/blobs/') ? { sha: blob, encoding: 'base64', size: 7, content: Buffer.from('Forged\n').toString('base64') } : api(path))).rejects.toThrow('integrity');
+  await expect(agentSnapshot(request, api, async () => ({ data: { repository: { object: { oid: tree, entries: [] } } } }))).rejects.toThrow('integrity');
+});
+
+test('lazy read/edit/commit/restore preserves untouched objects and reports search coverage', async () => {
+  const contents = 'Original\n', blob = gitObject('blob', contents), childEntries: ScratchEntry[] = [{ name: 'code.ts', mode: '100644', type: 'blob', oid: blob, size: contents.length }], child = gitTreeEntries(childEntries);
+  const rootEntries: ScratchEntry[] = [{ name: 'src', mode: '40000', type: 'tree', oid: child, size: 0 }, { name: 'large.bin', mode: '100644', type: 'blob', oid: 'f'.repeat(40), size: 1024 * 1024 }], root = gitTreeEntries(rootEntries);
+  const calls: string[] = [], loader = { tree: async (oid: string) => { calls.push(`tree:${oid}`); return childEntries; }, blob: async (oid: string) => { calls.push(`blob:${oid}`); return contents; } };
+  const scratch = new Scratch({ version: 1, revision: 0, origin: { repository: 'owner/repo', commit: 'a'.repeat(40), directory: '' }, base: { tree: root, trees: { [root]: rootEntries } }, files: [], commits: [] }, loader);
+  scratch.commit('Base', 0, null); expect(calls).toEqual([]);
+  expect(scratch.list().map(f => f.path)).toEqual(['large.bin', 'src']);
+  const context = { signal: new AbortController().signal }, tools = scratchTools(scratch), call = (name: string, args: unknown) => tools.find(t => t.name === name)!.execute(args, context);
+  expect(await call('read_file', { path: 'src/code.ts' })).toMatchObject({ content: contents, revision: 1 });
+  expect(calls).toEqual([`tree:${child}`, `blob:${blob}`]);
+  await call('write_file', { path: 'src/code.ts', content: 'Changed\n', expectedRevision: 1 });
+  const committed = scratch.commit('Change', 2, scratch.head);
+  const changedChild = gitTreeEntries([{ ...childEntries[0], oid: gitObject('blob', 'Changed\n') }]);
+  expect(committed.tree).toBe(gitTreeEntries(rootEntries.map(e => e.name === 'src' ? { ...e, oid: changedChild } : e)));
+  expect(calls).toHaveLength(2);
+  const restored = new Scratch(scratch.snapshot(), loader); expect(restored.read('src/code.ts').content).toBe('Changed\n');
+  const search = await scratchTools(restored).find(t => t.name === 'search')!.execute({ path: '.', text: 'Changed' }, context);
+  expect(search).toMatchObject({ complete: false, matches: [{ path: 'src/code.ts', line: 1, text: 'Changed' }], skipped: [{ path: 'large.bin' }] });
+  expect(calls).toHaveLength(2);
+  await restored.prepare('src/code.ts'); restored.remove('src/code.ts', restored.revision); expect(restored.changed()).toEqual([{ path: 'src/code.ts', status: 'deleted' }]);
+  expect(await restored.inspectDiff()).toMatchObject({ complete: true, changes: [{ path: 'src/code.ts', patch: expect.stringContaining('-Changed') }] });
+  expect(calls).toHaveLength(2);
 });

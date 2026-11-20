@@ -2,7 +2,7 @@ import type { BrowserAgent, AgentFields } from '../../../../hosted/browser-agent
 import { copy } from './Agent.copy';
 export interface AgentProps {
   model: Pick<BrowserAgent, 'fields' | 'inferences' | 'githubs' | 'stores' | 'checkpoints' | 'token' | 'busy' | 'dirty' | 'runtime' | 'scratch' | 'error' | 'status' | 'output' | 'transcript'>; documentsHref: string;
-  actions: { edit(key: keyof AgentFields, value: string): void; connect(): void; create(imported: boolean): void; list(more: boolean): void; restore(): void; save(): void; prompt(): void; script(): void; commit(): void; stop(): void };
+  actions: { edit(key: keyof AgentFields, value: string): void; connect(): void; create(imported: boolean): void; list(more: boolean): void; restore(): void; save(): void; prompt(): void; script(): void; commit(): void; diff(): void; stop(): void };
 }
 export function AgentHeader(p: AgentProps) { return <header className="page-header"><h1>{copy.title}</h1><a href={p.documentsHref}>{copy.documents}</a></header>; }
 export function AgentSetup({ model: m, actions: a }: AgentProps) {
@@ -26,7 +26,7 @@ export function AgentScratch({ model: m, actions: a }: AgentProps) {
   const locked = m.busy || m.dirty || !m.scratch;
   return <section className="agent-scratch" aria-label={copy.scratch}><h2>{copy.scratch}</h2><p>{copy.scope}</p>
     <output>{m.scratch?.head}</output><ul aria-label={copy.files}>{m.scratch?.list().map(file => <li key={file.path}><code>{file.path}</code><span>{file.bytes}</span></li>)}</ul>
-    <h3>{copy.diff}</h3><pre>{m.scratch?.diff().map(f => f.patch).join('\n')}</pre>
+    <h3>{copy.diff}</h3><button disabled={locked} onClick={a.diff}>{copy.loadDiff}</button><pre>{m.scratch?.diff().map(f => f.patch).join('\n')}</pre>
     <fieldset disabled={locked}><label>{copy.script}<textarea aria-label={copy.script} rows={7} value={m.fields.script} onChange={event => a.edit('script', event.target.value)} spellCheck={false} /></label><button disabled={!m.fields.script.trim()} onClick={a.script}>{copy.run}</button>
     <label>{copy.message}<input value={m.fields.message} onChange={event => a.edit('message', event.target.value)} /></label><button disabled={!m.fields.message.trim() || !m.scratch?.diff().length} onClick={a.commit}>{copy.commitScratch}</button></fieldset><pre>{m.output}</pre>
     <h3>{copy.history}</h3><ol>{m.scratch?.snapshot().commits.slice().reverse().map(c => <li key={c.oid}><code>{c.oid}</code><pre>{c.body.split('\n\n').slice(1).join('\n\n')}</pre></li>)}</ol>
