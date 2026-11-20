@@ -3,6 +3,7 @@ import type { HostedConnection } from '../src/hosted-protocol';
 import { WorkspaceReader, documents, documentText, type Snapshot, type Workspace } from './workspaces';
 import { loadNavigation, saveNavigation, forgetNavigation, type Navigation } from './navigation';
 import './style.css';
+import './settings.css';
 
 declare const __HOSTED_BUILD__: { branch: string; sha: string };
 document.getElementById('origin')!.textContent = location.origin;

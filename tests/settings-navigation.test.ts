@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { navigationItems, workspaceSearch } from '../webapp/src/features/navigation/navigation';
+import { navigationItems, workspaceSearch } from '../webapp/src/features/navigation/navigation-model';
 
 describe('shared workspace navigation', () => {
   it('carries workspace scope to all destinations, without review pins or credentials', () => {

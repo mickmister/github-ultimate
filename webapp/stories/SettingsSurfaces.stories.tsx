@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { SettingsPresentation } from '../src/features/settings/Settings.presentation';
 import { NavigationPresentation } from '../src/features/navigation/Navigation.presentation';
-import { navigationItems } from '../src/features/navigation/navigation';
+import { navigationItems } from '../src/features/navigation/navigation-model';
 import { PresentationProvider } from '../src/presentation/Presentation';
 import type { Presentation } from '../src/presentation/geometry';
 

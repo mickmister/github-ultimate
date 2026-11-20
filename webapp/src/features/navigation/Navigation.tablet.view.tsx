@@ -1,5 +1,5 @@
 import type { SurfaceProps } from '../../presentation/Presentation';
-import type { NavigationProps } from './navigation';
+import type { NavigationProps } from './navigation-model';
 import { copy } from './Navigation.copy';
 export function NavigationTabletView({ items, presentation }: SurfaceProps<NavigationProps>) {
   return <aside className="app-navigation app-navigation-tablet" data-region="app.navigation" data-surface="tablet" data-orientation={presentation.orientation}>

@@ -1,5 +1,5 @@
 import { useRouterState } from '@tanstack/react-router';
-import { workspaceSearch } from '../navigation/navigation';
+import { workspaceSearch } from '../navigation/navigation-model';
 import { copy } from './Settings.copy';
 import type { SettingsProps } from './contracts';
 export function useSettingsFeature(): SettingsProps {
