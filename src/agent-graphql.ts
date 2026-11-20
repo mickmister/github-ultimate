@@ -1,4 +1,4 @@
-import { Kind, parse, visit } from 'graphql/language';
+import { Kind, parse, visit } from 'graphql/language/index.js';
 import { z } from 'zod';
 
 export const agentScope = { id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive() };
