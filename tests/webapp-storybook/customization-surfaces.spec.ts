@@ -8,6 +8,25 @@ const configurations = [
 
 if (process.env.APPEARANCE_BROWSER === 'webkit') test.use({ browserName: 'webkit' });
 test.describe('appearance', () => {
+  test('section actions preserve hash route and focused authoring caret survives surface swaps', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/iframe.html?id=web-app-customization--appearance-editor&viewMode=story');
+    await page.evaluate(() => { location.hash = '/settings/appearance'; });
+    const sections = page.getByRole('navigation', { name: 'Appearance sections' });
+    await sections.getByRole('button', { name: 'Colors', exact: true }).click();
+    await expect(page.getByLabel('Accent color', { exact: true })).toBeVisible();
+    await sections.getByRole('button', { name: 'Advanced CSS / JSON', exact: true }).click();
+    await expect(page).toHaveURL(/#\/settings\/appearance$/);
+    const css = page.getByLabel('Custom CSS', { exact: true });
+    await css.fill('/* Authored CSS survives */');
+    await css.evaluate((node: HTMLTextAreaElement) => { node.focus(); node.setSelectionRange(4, 12, 'backward'); });
+    for (const [surface, , width, height] of configurations) {
+      await page.setViewportSize({ width, height });
+      await expect(page.locator('main[data-surface]')).toHaveAttribute('data-surface', surface);
+      await expect(css).toBeFocused();
+      expect(await css.evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd, node.selectionDirection])).toEqual([4, 12, 'backward']);
+    }
+  });
   for (const [surface, orientation, width, height] of configurations) {
     test(`${surface} ${orientation}: draft, preview, stop and save`, async ({ page }, testInfo) => {
       await page.setViewportSize({ width, height });

@@ -69,6 +69,9 @@ test('real review hosts preserve draft, question step, Zen, progress, comparison
   await page.getByRole('button', { name: '← Back', exact: true }).click();
   await page.getByRole('button', { name: 'Reader plan', exact: true }).click();
   await expect(page.getByRole('checkbox', { name: 'I have reviewed this item', exact: true })).toBeChecked();
+  await page.setViewportSize({ width: 390, height: 844 });
+  const phoneNavigator = page.locator('[data-review-surface=phone]');
+  await expect(phoneNavigator.getByRole('listitem').filter({ has: page.getByRole('button', { name: 'Reader plan', exact: true }) })).toContainText('Reviewed');
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
   await expect(page.getByLabel('Comment 1', { exact: true })).toHaveValue('Keep this comment through rotation.');
 });

@@ -19,9 +19,9 @@ export function AppearanceFeedback({ model: m }: CustomizationProps) {
 export function ThemeBasics({ model: m }: CustomizationProps) {
   return <section id="appearance-theme" className="appearance-card"><h2>{copy.basics}</h2>
     <fieldset disabled={!m.ready || m.busy}>
-      <label htmlFor="ui-theme-preset">{copy.preset}</label><select id="ui-theme-preset" value={m.selectedPreset} onChange={event => m.actions.preset(event.target.value)}><option value="" disabled>{copy.custom}</option>{builtInThemes.map(theme => <option key={theme.id} value={theme.id}>{theme.id === 'system' ? copy.systemDefault : theme.value.name}</option>)}</select>
-      <div className="appearance-basics"><label>{copy.name}<input disabled={!m.draft} value={m.draft?.name ?? ''} maxLength={80} onChange={event => m.actions.name(event.target.value)} /></label>
-        <div><label htmlFor="ui-theme-mode">{copy.mode}</label><select id="ui-theme-mode" disabled={!m.draft} value={m.draft?.mode ?? 'system'} onChange={event => m.actions.mode(event.target.value as Customization['mode'])}><option value="system">{copy.system}</option><option value="light">{copy.light}</option><option value="dark">{copy.dark}</option></select></div></div>
+      <label htmlFor="ui-theme-preset">{copy.preset}</label><select id="ui-theme-preset" ref={m.controlRef('preset')} value={m.selectedPreset} onChange={event => m.actions.preset(event.target.value)}><option value="" disabled>{copy.custom}</option>{builtInThemes.map(theme => <option key={theme.id} value={theme.id}>{theme.id === 'system' ? copy.systemDefault : theme.value.name}</option>)}</select>
+      <div className="appearance-basics"><label>{copy.name}<input ref={m.controlRef('name')} disabled={!m.draft} value={m.draft?.name ?? ''} maxLength={80} onChange={event => m.actions.name(event.target.value)} /></label>
+        <div><label htmlFor="ui-theme-mode">{copy.mode}</label><select id="ui-theme-mode" ref={m.controlRef('mode')} disabled={!m.draft} value={m.draft?.mode ?? 'system'} onChange={event => m.actions.mode(event.target.value as Customization['mode'])}><option value="system">{copy.system}</option><option value="light">{copy.light}</option><option value="dark">{copy.dark}</option></select></div></div>
     </fieldset>
     {!m.draft && <div className="appearance-error">{copy.invalid}</div>}
   </section>;
@@ -30,8 +30,8 @@ export function ThemeGroups({ model: m }: CustomizationProps) {
   return <>{settingGroups.map((group, index) => <details id={`appearance-group-${index}`} key={group.title} className="appearance-card appearance-group" open={m.expanded[group.title] ?? false} onToggle={event => { const open = event.currentTarget.open; if (open !== (m.expanded[group.title] ?? false)) m.actions.toggle(group.title, open); }}>
     <summary>{group.title}</summary><fieldset disabled={!m.ready || !m.draft || m.busy} className="customization-grid">{group.fields.map(field => <div key={field.token} className="customization-setting">
       <label htmlFor={`theme-${field.token}`}>{field.label}</label><div className="customization-token-input">
-        {field.color && <input type="color" aria-label={`${copy.pick} ${field.label.toLowerCase()}`} disabled={!m.colorValues[field.token]} value={m.colorValues[field.token] ?? '#000000'} onChange={event => m.actions.token(field.token, event.target.value)} />}
-        <input id={`theme-${field.token}`} value={m.draft?.tokens[field.token] ?? ''} placeholder={field.placeholder} spellCheck={false} onChange={event => m.actions.token(field.token, event.target.value)} />
+        {field.color && <input ref={m.controlRef(`color-${field.token}`)} type="color" aria-label={`${copy.pick} ${field.label.toLowerCase()}`} disabled={!m.colorValues[field.token]} value={m.colorValues[field.token] ?? '#000000'} onChange={event => m.actions.token(field.token, event.target.value)} />}
+        <input id={`theme-${field.token}`} ref={m.controlRef(field.token)} value={m.draft?.tokens[field.token] ?? ''} placeholder={field.placeholder} spellCheck={false} onChange={event => m.actions.token(field.token, event.target.value)} />
         <button type="button" disabled={!m.draft?.tokens[field.token]} aria-label={`${copy.useDefault} ${field.label.toLowerCase()}`} onClick={() => m.actions.token(field.token, '')}>{copy.default}</button>
       </div></div>)}</fieldset>
   </details>)}</>;
@@ -39,8 +39,8 @@ export function ThemeGroups({ model: m }: CustomizationProps) {
 export function ThemeAdvanced({ model: m }: CustomizationProps) {
   return <details id="appearance-advanced" className="appearance-card appearance-group" open={m.expanded.advanced ?? false} onToggle={event => { const open = event.currentTarget.open; if (open !== (m.expanded.advanced ?? false)) m.actions.toggle('advanced', open); }}>
     <summary>{copy.advanced}</summary><div className="appearance-advanced-content">
-      <label htmlFor="ui-customization-css">{copy.css}</label><textarea id="ui-customization-css" disabled={!m.ready || !m.draft || m.busy} rows={5} spellCheck={false} value={m.draft?.css ?? ''} onChange={event => m.actions.css(event.target.value)} />
-      <label htmlFor="ui-customization-json">{copy.json}</label><textarea id="ui-customization-json" disabled={!m.ready || m.busy} rows={14} spellCheck={false} value={m.json} onChange={event => m.actions.setJSON(event.target.value)} />
+      <label htmlFor="ui-customization-css">{copy.css}</label><textarea id="ui-customization-css" ref={m.controlRef('css')} disabled={!m.ready || !m.draft || m.busy} rows={5} spellCheck={false} value={m.draft?.css ?? ''} onChange={event => m.actions.css(event.target.value)} />
+      <label htmlFor="ui-customization-json">{copy.json}</label><textarea id="ui-customization-json" ref={m.controlRef('json')} disabled={!m.ready || m.busy} rows={14} spellCheck={false} value={m.json} onChange={event => m.actions.setJSON(event.target.value)} />
       <small>{copy.advancedHelp}</small><div className="appearance-actions"><button disabled={m.busy} onClick={m.actions.download}>{copy.export}</button><button disabled={m.busy} onClick={m.actions.useSaved}>{copy.useSaved}</button></div>
       <label>{copy.import}<input type="file" accept="application/json,.json" disabled={m.busy} onChange={event => { const file = event.target.files?.[0]; if (file) void m.actions.import(file); event.target.value = ''; }} /></label>
     </div>
@@ -62,5 +62,5 @@ export function AppearanceActions({ model: m }: CustomizationProps) {
   </div></footer>;
 }
 export function AppearanceSections({ model: m }: CustomizationProps) {
-  return <nav className="appearance-sections" aria-label={copy.sections}><a href="#appearance-theme">{copy.basics}</a>{settingGroups.map((group, index) => <a key={group.title} href={`#appearance-group-${index}`} onClick={() => m.actions.toggle(group.title, true)}>{group.title}</a>)}<a href="#appearance-advanced" onClick={() => m.actions.toggle('advanced', true)}>{copy.advanced}</a></nav>;
+  return <nav className="appearance-sections" aria-label={copy.sections}><button type="button" onClick={() => m.actions.section('appearance-theme')}>{copy.basics}</button>{settingGroups.map((group, index) => <button type="button" key={group.title} onClick={() => m.actions.section(`appearance-group-${index}`, group.title)}>{group.title}</button>)}<button type="button" onClick={() => m.actions.section('appearance-advanced', 'advanced')}>{copy.advanced}</button></nav>;
 }

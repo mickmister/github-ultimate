@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefCallback } from 'react';
 import { customizationCSS, defaultCustomization, parseCustomization, resolvedCustomizationTokens, tokenNames, uiCustomization, type Customization as Theme } from '../../../../src/ui-customization';
 import { builtInThemes } from '../../../../src/ui-themes';
 import { applicationStorage } from '../../app-storage';
@@ -22,6 +22,32 @@ export function useCustomizationFeature() {
   const saved = uiCustomization.getSaved(), active = uiCustomization.get();
   const savedText = encode(saved), activeText = encode(active);
   const previousSaved = useRef(savedText), latestJSON = useRef(json), operating = useRef(false);
+  type Control = HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement;
+  const controls = useRef(new Map<string, RefCallback<Control>>());
+  function controlRef(id: string) {
+    let callback = controls.current.get(id);
+    if (!callback) {
+      let previous: Control | null = null;
+      let restore: { start: number | null; end: number | null; direction: 'forward' | 'backward' | 'none' | null } | null = null;
+      callback = node => {
+        if (!node && previous && previous.ownerDocument.activeElement === previous) {
+          restore = previous instanceof HTMLSelectElement ? { start: null, end: null, direction: null }
+            : { start: previous.selectionStart, end: previous.selectionEnd, direction: previous.selectionDirection };
+        }
+        previous = node;
+        if (node && restore) {
+          const selection = restore; restore = null;
+          queueMicrotask(() => {
+            if (!node.isConnected) return;
+            node.focus({ preventScroll: true });
+            if (!(node instanceof HTMLSelectElement) && selection.start !== null && selection.end !== null) node.setSelectionRange(selection.start, selection.end, selection.direction ?? undefined);
+          });
+        }
+      };
+      controls.current.set(id, callback);
+    }
+    return callback;
+  }
   latestJSON.current = json;
   const validation = useMemo(() => {
     try {
@@ -78,8 +104,12 @@ export function useCustomizationFeature() {
   }
   return {
     json, draft, saved, active, dirty, previewing, previewMatchesDraft, selectedPreset, colorValues,
-    ready, busy, error, validationError: validation.error, notice, external, expanded, canUndo: undo !== null,
+    ready, busy, error, validationError: validation.error, notice, external, expanded, canUndo: undo !== null, controlRef,
     actions: {
+      section(id: string, group?: string) {
+        if (group) setExpanded(value => ({ ...value, [group]: true }));
+        requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+      },
       setJSON: load,
       toggle: (id: string, open: boolean) => setExpanded(value => ({ ...value, [id]: open })),
       preset(id: string) { const preset = builtInThemes.find(theme => theme.id === id); if (preset) { setUndo(json); load(encode(preset.value)); } },

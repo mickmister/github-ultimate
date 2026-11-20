@@ -42,8 +42,8 @@
 .appearance-tablet-workspace { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(13rem, 1fr); gap: 1rem; align-items: start; }
 .appearance-desktop-workspace { display: grid; grid-template-columns: minmax(8rem, .6fr) minmax(0, 2.4fr) minmax(12rem, 1fr); gap: 1.25rem; align-items: start; }
 .appearance-sections { display: grid; align-content: start; position: sticky; top: 1rem; }
-.appearance-sections a { color: var(--muted); text-decoration: none; font-size: .9rem; }
-.appearance-sections a:hover { background: var(--selected); color: var(--accent); }
+.appearance-sections button { color: var(--muted); text-align: start; font-size: .9rem; }
+.appearance-sections button:hover { background: var(--selected); color: var(--accent); }
 .appearance-phone .appearance-header { display: block; }
 .appearance-phone .appearance-header dl { margin-block-start: 1rem; }
 .appearance-phone .appearance-basics { grid-template-columns: 1fr; gap: 0; }
