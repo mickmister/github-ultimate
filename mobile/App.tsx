@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { AppState, Linking, Platform, ScrollView, StatusBar, StyleSheet, useColorScheme } from 'react-native';
+import { AppState, BackHandler, Linking, Platform, ScrollView, StatusBar, StyleSheet, useColorScheme } from 'react-native';
 import { Button, Switch, Text, TextInput, View, ShellThemeContext } from './Theme';
 import { darkShell, shellPalettes, type ShellTheme } from '../src/mobile-theme';
 import Constants from 'expo-constants';
@@ -28,6 +28,11 @@ export default function App() {
   const [bootstrap, setBootstrap] = useState('');
   const [error, setError] = useState('');
   const [showSettings, setShowSettings] = useState(true);
+  useEffect(() => {
+    if (!showSettings) return;
+    const back = BackHandler.addEventListener('hardwareBackPress', () => { setShowSettings(false); return true; });
+    return () => back.remove();
+  }, [showSettings]);
   const [showDiagnostics, setShowDiagnostics] = useState(false);
   const [reload, setReload] = useState(0);
   const [navigation, setNavigation] = useState({ key: '', back: false, forward: false });
@@ -117,12 +122,12 @@ export default function App() {
   const grant = entry ? grantForEntry(entry) : undefined;
   return <ShellThemeContext.Provider value={theme}><SafeAreaProvider><SafeAreaView style={[styles.screen, { backgroundColor: theme.background }]}>
     <StatusBar barStyle={darkShell(theme) ? 'light-content' : 'dark-content'} backgroundColor={theme.background} />
-    <View style={[styles.toolbar, { backgroundColor: theme.surface }]}><Button title={showSettings ? 'Hide settings' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
+    <View style={[styles.toolbar, { backgroundColor: theme.surface }]}><Button title={showSettings ? 'Return to workspace' : 'Native settings'} onPress={() => setShowSettings(v => !v)} />
       <Button title="Back" disabled={navigation.key !== viewKey || !navigation.back} onPress={() => webView.current?.goBack()} />
       <Button title="Forward" disabled={navigation.key !== viewKey || !navigation.forward} onPress={() => webView.current?.goForward()} />
       <Button title="Reload" disabled={!entry} onPress={() => { lifecycle.reset(); setBootstrap(''); webView.current?.reload(); }} /></View>
-    {showSettings && <ScrollView style={styles.settings} keyboardShouldPersistTaps="handled">
-      <Text accessibilityRole="header">Alohak</Text>
+    {showSettings && <ScrollView style={styles.settings} contentContainerStyle={styles.settingsContent} keyboardShouldPersistTaps="handled" automaticallyAdjustKeyboardInsets>
+      <Text accessibilityRole="header" style={styles.title}>Native settings</Text>
       <Text>Approve only a deployment whose scripts you trust. GitHub credentials stay in native secure storage; page storage and GitHub approvals are independent.</Text>
       <Text>Deployment URL (website, not Expo installation link)</Text>
       <TextInput accessibilityLabel="HTTPS entry URL" editable={!settingsBusy} autoCapitalize="none" autoCorrect={false} value={input} onChangeText={setInput} placeholder="https://your-pages-host/project/app/" style={styles.input} />
@@ -138,7 +143,7 @@ export default function App() {
       <CacheSettings />
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={[styles.error, { color: theme.error }]}>{error}</Text> : null}
-    {entry && <AlohakWebView ref={webView} key={viewKey} style={[styles.webview, { backgroundColor: theme.background }]} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap}
+    {entry && <View style={[styles.webview, showSettings && styles.retainedWebview]} accessibilityElementsHidden={showSettings} importantForAccessibility={showSettings ? 'no-hide-descendants' : 'auto'}><AlohakWebView ref={webView} key={viewKey} style={[styles.webview, { backgroundColor: theme.background }]} entryURL={route} scopeURL={grant!.origin + grant!.subpath} bootstrap={bootstrap}
       onNavigation={(back, forward) => { if (currentViewKey.current === viewKey) setNavigation({ key: viewKey, back, forward }); }}
       onDocument={({ nativeEvent }) => { if (currentViewKey.current === viewKey) onDocument(nativeEvent); }}
       onMessage={({ nativeEvent }) => {
@@ -152,11 +157,14 @@ export default function App() {
           // Disposed native views reject commands; the page client has its own
           // bounded timeout and never retries ambiguous operations implicitly.
         });
-      }} />}
+      }} /></View>}
   </SafeAreaView></SafeAreaProvider></ShellThemeContext.Provider>;
 }
 const styles = StyleSheet.create({
   screen: { flex: 1 }, toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', padding: 8 },
-  settings: { flexGrow: 0, maxHeight: 300, padding: 12 }, input: { borderWidth: 1, padding: 12, fontSize: 16, marginVertical: 12 },
+  settings: { flex: 1 }, settingsContent: { padding: 24, gap: 16, width: '100%', maxWidth: 960, alignSelf: 'center', paddingBottom: 64 },
+  title: { fontSize: 28, fontWeight: '700' },
+  retainedWebview: { display: 'none' },
+  input: { borderWidth: 1, padding: 12, fontSize: 16, marginVertical: 12 },
   error: { padding: 12 }, webview: { flex: 1 },
 });

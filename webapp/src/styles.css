@@ -2,6 +2,33 @@
 @media (prefers-color-scheme: dark) { :root { --bg: #101724; --panel: #182233; --fg: #e4ebf6; --muted: #aabbd1; --line: #35445c; --accent: #bdadff; --selected: #302a4e; --error: #ffabb9; } }
 * { box-sizing: border-box; }
 body { margin: 0; }
+.application-frame { min-height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); }
+.application-frame:has(> .app-navigation-tablet) { grid-template-columns: 152px minmax(0, 1fr); }
+.application-content { min-width: 0; }
+.app-navigation { background: var(--panel); border-bottom: 1px solid var(--line); padding: 12px 20px; }
+.app-brand { font-weight: 750; text-decoration: none; }
+.app-navigation a { min-height: 44px; display: flex; align-items: center; padding: 8px 12px; border-radius: var(--ui-radius, 8px); }
+.app-navigation a[aria-current=page] { background: var(--selected); color: var(--accent); font-weight: 700; }
+.app-navigation-phone { display: flex; align-items: start; justify-content: space-between; gap: 8px; }
+.app-navigation-phone details { min-width: 0; }
+.app-navigation-phone summary { cursor: pointer; min-height: 44px; padding: 8px; }
+.app-navigation-phone nav { display: grid; gap: 4px; }
+.app-navigation-tablet { border-right: 1px solid var(--line); padding: 16px 8px; }
+.app-navigation-tablet nav { display: grid; gap: 8px; margin-top: 24px; }
+.app-navigation-desktop { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; }
+.app-navigation-desktop ul { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; }
+.settings-page { padding: 24px; min-width: 0; }
+.settings-phone { width: 100%; padding: 20px 16px; }
+.settings-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--ui-radius, 12px); padding: 24px; margin-block: 20px; min-width: 0; }
+.settings-card summary { cursor: pointer; font-weight: 650; min-height: 44px; }
+.settings-card dd { margin: 8px 0; overflow-wrap: anywhere; }
+.settings-destination { display: flex; justify-content: space-between; gap: 16px; align-items: center; min-height: 56px; padding: 16px; background: var(--selected); border: 1px solid var(--line); border-radius: var(--ui-radius, 12px); font-weight: 650; }
+.settings-master-detail { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(0, 2fr); gap: 24px; }
+.settings-master-detail nav { display: flex; flex-direction: column; gap: 16px; padding-top: 20px; }
+.settings-master-detail nav > a { min-height: 44px; padding: 12px; }
+.settings-desktop { max-width: 1120px; margin-inline: auto; padding: 40px; }
+.settings-desktop header { display: flex; justify-content: space-between; align-items: center; gap: 24px; }
+.settings-columns { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); gap: 24px; align-items: start; }
 :is(button, input, select):not(.monaco-editor *) { font: inherit; }
 :is(button, input, select):not(.monaco-editor *) { min-height: var(--ui-control-size, 44px); border: 1px solid var(--line); border-radius: var(--ui-radius, 8px); background: var(--panel); color: var(--fg); padding: var(--ui-spacing, 8px 12px); }
 button:not(.monaco-editor *) { cursor: pointer; font-weight: 600; }

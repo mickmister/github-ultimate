@@ -2,8 +2,9 @@ import { ClientOnly, createRootRoute, Outlet, useRouterState } from '@tanstack/r
 import { RootDocument } from '../views/RootDocument.view';
 import { AppPending } from '../views/AppPending.view';
 import { FeedbackProvider } from '../features/feedback/FeedbackProvider';
-import { Customization } from '../features/customization/Customization';
-import { AppSettingsView } from '../views/AppSettings.view';
+import { CustomizationProvider } from '../features/customization/Customization';
+import { Navigation } from '../features/settings/Settings';
+import { AppFrameView } from '../views/AppSettings.view';
 import { MobileHandoff } from '../features/mobile/MobileHandoff';
 import { PresentationProvider } from '../presentation/Presentation';
 
@@ -28,5 +29,5 @@ function RootContent() {
   const reviewing = useRouterState({ select: state => state.location.pathname === '/reviews' || state.location.pathname.startsWith('/reviews/') });
   // Focused sessions provide their own remotely backed queue. Mounting the
   // general shell as well would expose two overlapping, unrelated queue buttons.
-  return <><MobileHandoff /><AppSettingsView /><Customization />{reviewing ? <Outlet /> : <FeedbackProvider><Outlet /></FeedbackProvider>}</>;
+  return <CustomizationProvider><MobileHandoff /><AppFrameView navigation={<Navigation />}>{reviewing ? <Outlet /> : <FeedbackProvider><Outlet /></FeedbackProvider>}</AppFrameView></CustomizationProvider>;
 }
