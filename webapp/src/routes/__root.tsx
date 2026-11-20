@@ -13,7 +13,7 @@ export const Route = createRootRoute({
     meta: [
       { charSet: 'utf-8' },
       { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'Documents · GitHub Ultimate' },
+      { title: 'GitHub Ultimate' },
     ],
   }),
   component: Root,
@@ -29,5 +29,5 @@ function RootContent() {
   const reviewing = useRouterState({ select: state => state.location.pathname === '/reviews' || state.location.pathname.startsWith('/reviews/') });
   // Focused sessions provide their own remotely backed queue. Mounting the
   // general shell as well would expose two overlapping, unrelated queue buttons.
-  return <CustomizationProvider><MobileHandoff /><AppFrameView navigation={<Navigation />}>{reviewing ? <Outlet /> : <FeedbackProvider><Outlet /></FeedbackProvider>}</AppFrameView></CustomizationProvider>;
+  return <CustomizationProvider><MobileHandoff /><AppFrameView navigation={<Navigation />}><FeedbackProvider uiSuppressed={reviewing}><Outlet /></FeedbackProvider></AppFrameView></CustomizationProvider>;
 }

@@ -15,10 +15,11 @@
     "hooks": "webapp/src/features/documents/Documents.hooks.ts",
     "hook": "useDocumentsFeature",
     "copy": "webapp/src/features/documents/Documents.copy.ts",
-    "ownedViews": ["webapp/src/features/documents/DocumentsWorkspace.view.tsx", "webapp/src/features/documents/DocumentsReading.view.tsx", "webapp/src/features/documents/DocumentTreeAppearance.view.tsx"],
+    "ownedViews": ["webapp/src/features/documents/DocumentsWorkspace.view.tsx", "webapp/src/features/documents/DocumentsReading.view.tsx", "webapp/src/features/documents/DocumentTreeAppearance.view.tsx", "webapp/src/features/feedback/FeedbackShell.view.tsx"],
     "presentations": [
       { "id": "documents", "kind": "page", "file": "webapp/src/features/documents/Documents.presentation.tsx", "export": "DocumentsPresentation" },
-      { "id": "documents.navigation", "kind": "region", "file": "webapp/src/features/documents/DocumentNavigation.tsx", "export": "DocumentNavigation" }
+      { "id": "documents.navigation", "kind": "region", "file": "webapp/src/features/documents/DocumentNavigation.tsx", "export": "DocumentNavigation" },
+      { "id": "feedback.shell", "kind": "region", "file": "webapp/src/features/feedback/Feedback.presentation.tsx", "export": "FeedbackRegion" }
     ],
     "scenarios": "webapp/stories/DocumentsSurfaces.stories.tsx"
   }, {
@@ -62,6 +63,12 @@
       { "id": "beads", "kind": "page", "file": "webapp/src/features/beads/Beads.presentation.tsx", "export": "BeadsPresentation" },
       { "id": "beads.board", "kind": "region", "file": "webapp/src/features/beads/BeadsBoard.presentation.tsx", "export": "BeadsBoardPresentation" }
     ], "scenarios": "webapp/stories/BeadsSurfaces.stories.tsx"
+  }, {
+    "id": "home", "host": "webapp/src/features/home/Home.tsx",
+    "hooks": "webapp/src/features/home/Home.hooks.ts", "hook": "useHomeFeature",
+    "copy": "webapp/src/features/home/Home.copy.ts", "ownedViews": ["webapp/src/features/home/Home.parts.view.tsx"],
+    "presentations": [{ "id": "home", "kind": "page", "file": "webapp/src/features/home/Home.presentation.tsx", "export": "HomePresentation" }],
+    "scenarios": "webapp/stories/HomeSurfaces.stories.tsx"
   }],
   "routes": {
     "webapp/src/routes/agent.tsx": { "feature": "agent" },
@@ -72,10 +79,9 @@
     "webapp/src/routes/settings.appearance.tsx": { "feature": "customization" },
     "webapp/src/routes/reviews.tsx": { "feature": "reviews" },
     "webapp/src/routes/reviews.$requestId.tsx": { "feature": "reviews", "parent": "webapp/src/routes/reviews.tsx" },
-    "webapp/src/routes/beads.tsx": { "feature": "beads" }
+    "webapp/src/routes/beads.tsx": { "feature": "beads" },
+    "webapp/src/routes/index.tsx": { "feature": "home" }
   },
-  "legacyRoutes": {
-    "webapp/src/routes/index.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing index redirect; replace with cross-workspace Reviews home after contract batch." }
-  },
+  "legacyRoutes": {},
   "exceptions": []
 }
