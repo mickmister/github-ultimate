@@ -27,10 +27,14 @@ test('browses native-shaped issues, filters readiness and keeps card density ind
 test('clears selection and filters when the workspace changes', async ({ page }) => {
   await page.goto('/iframe.html?id=web-app-beads-kanban--workspace-switch&viewMode=story');
   await page.getByLabel('Search issues').fill('demo-1.2');
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await page.getByLabel('Filter name').fill('Workspace draft');
   await page.getByRole('button', { name: 'Open demo-1.2:', exact: false }).click();
   await page.getByRole('button', { name: 'Switch workspace' }).click();
   await expect(page.getByRole('complementary')).toHaveCount(0);
   await expect(page.getByLabel('Search issues')).toHaveValue('');
+  await page.getByRole('button', { name: 'Filters', exact: true }).click();
+  await expect(page.getByLabel('Filter name')).toHaveValue('');
   await expect(page.getByRole('button', { name: 'Open second-1:', exact: false })).toBeVisible();
 });
 
@@ -53,6 +57,8 @@ test('distinguishes empty, unavailable readiness and malformed snapshots', async
   await page.goto('/iframe.html?id=web-app-beads-kanban--readiness-unavailable&viewMode=story');
   await page.getByRole('button', { name: 'Filters', exact: true }).click();
   await expect(page.getByLabel('Readiness').locator('option[value=ready]')).toHaveAttribute('disabled', '');
+  await page.getByRole('button', { name: /^Open demo-3:/ }).click();
+  await expect(page.getByRole('complementary')).toContainText('Unavailable');
   await page.goto('/iframe.html?id=web-app-beads-kanban--invalid-snapshot&viewMode=story');
   await expect(page.getByRole('alert')).toContainText('duplicate issue ID');
 });

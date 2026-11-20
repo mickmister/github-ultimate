@@ -1,4 +1,5 @@
 import type { BeadsIssue, BeadsResult } from '../../../../hosted/beads-sample';
+import { copy } from './Beads.copy';
 
 export type BoardIssue = {
   id: string; title: string; status: string; priority: number | null; type: string;
@@ -7,11 +8,12 @@ export type BoardIssue = {
 export type BoardFilters = { query: string; label: string; assignee: string; type: string; readiness: string; closed: boolean };
 export const initialBoardFilters: BoardFilters = { query: '', label: '', assignee: '', type: '', readiness: '', closed: false };
 export const statusColumns = [
-  { id: 'open', label: 'Open' }, { id: 'in_progress', label: 'In progress' },
-  { id: 'blocked', label: 'Blocked' }, { id: 'deferred', label: 'Deferred' },
-  { id: 'closed', label: 'Closed' }, { id: 'other', label: 'Other status' },
+  { id: 'open', label: copy.openStatus }, { id: 'in_progress', label: copy.inProgress },
+  { id: 'blocked', label: copy.storedBlocked }, { id: 'deferred', label: copy.deferred },
+  { id: 'closed', label: copy.closedStatus }, { id: 'other', label: copy.other },
 ];
 export const text = (value: unknown) => typeof value === 'string' ? value : '';
+export const detailTabIndex = -1;
 export function boardIssues(records: BeadsIssue[]): BoardIssue[] {
   const ids = new Set<string>();
   return records.map(raw => {
@@ -31,7 +33,7 @@ export function resultIds(result?: BeadsResult) { return new Set((result?.issues
 export function filterIssues(issues: BoardIssue[], filters: BoardFilters, ready: Set<string>, blocked: Set<string>) {
   const query = filters.query.trim().toLocaleLowerCase();
   return issues.filter(issue => (filters.closed || issue.status !== 'closed')
-    && (!query || `${issue.id} ${issue.title}`.toLocaleLowerCase().includes(query))
+    && (!query || `${issue.id} ${issue.title} ${issue.description} ${issue.assignee} ${issue.type} ${issue.status} ${issue.labels.join(' ')}`.toLocaleLowerCase().includes(query))
     && (!filters.label || issue.labels.includes(filters.label))
     && (!filters.assignee || (filters.assignee === '__unassigned' ? !issue.assignee : issue.assignee === filters.assignee))
     && (!filters.type || issue.type === filters.type)
