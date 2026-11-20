@@ -4,5 +4,5 @@ export function RoutedReviews() {
   const search = useRouterState({ select: state => state.location.search });
   const requestId = useParams({ strict: false, select: params => params.requestId });
   const location = { ...parseReviewSearch(search), requestId };
-  return <ReviewWorkspace key={JSON.stringify(location)} location={location} />;
+  return <ReviewWorkspace key={JSON.stringify(location)} location={location} unifiedNavigation />;
 }

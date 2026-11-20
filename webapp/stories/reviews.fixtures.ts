@@ -21,8 +21,17 @@ export const richComparison: ReviewComparisonFixture = {
 };
 export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false, picker = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
-  const load = async (resource?: ReviewPin, operation = 'state', requestId?: string) => remote ? await (await fetch('/__review-fixture', { headers: { 'X-Review-Operation': operation, ...(requestId ? { 'X-Review-Request': requestId } : {}), ...(resource ? { 'X-Review-Resource': JSON.stringify(resource) } : {}) } })).json() as ReviewFixtureState : state;
-  const store = async (next: ReviewFixtureState) => { if (remote) await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) }); else state = next; };
+  const load = async (resource?: ReviewPin, operation = 'state', requestId?: string): Promise<ReviewFixtureState> => {
+    if (!remote) return state;
+    const response = await fetch('/__review-fixture', { headers: { 'X-Review-Operation': operation, ...(requestId ? { 'X-Review-Request': requestId } : {}), ...(resource ? { 'X-Review-Resource': JSON.stringify(resource) } : {}) } });
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+    return response.json();
+  };
+  const store = async (next: ReviewFixtureState) => {
+    if (!remote) { state = next; return; }
+    const response = await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) });
+    if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
+  };
   function packet(id: string, revision: number): OpenReview {
     const request: ReviewRequest = { kind: 'review-request', schema_version: 1, request_id: id, revision_id: `revision-${revision}`, workspace: reviewScope.workspace, bead_id: 'task-reader', related_beads: [], thread: 'threads/task-reader', title: id === 'reader-01' ? 'Reader follow-up' : 'Independent reader review', purpose: 'Review the pinned reader plan and two forms.', question: revision === 1 ? 'What should we do next?' : 'Updated question: which changes should we make?', status: 'published', change_kind: 'implemented', members: [
       { id: 'plan', kind: 'document', label: 'Reader plan', target: { ...target, resource: comparison?.path ?? target.resource }, baseline: { ...baseline, resource: comparison?.path ?? baseline.resource } },

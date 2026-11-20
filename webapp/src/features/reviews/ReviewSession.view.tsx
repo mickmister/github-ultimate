@@ -11,7 +11,9 @@ import { ReviewMemberContent } from './ReviewMemberContent';
 import { reviewHref } from './ReviewWorkspace';
 import type { ReviewContents } from './review-contents';
 import { submissionNotice } from './submission-notice';
-import type { ReviewDocumentZen } from './ReviewPacket.hooks';
+import type { ReviewDocumentZen } from './contracts';
+import { ReviewsDetailPresentation } from './ReviewsDetail.presentation';
+import { reviewsCopy as copy } from './Reviews.copy';
 
 interface Props {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; latest?: OpenReview; service: ReviewsModuleV1;
@@ -28,33 +30,37 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
   const downloaded = [...contents.values()].filter(item => item.status === 'ready').length;
   const failed = [...contents.values()].filter(item => item.status === 'error').length;
   const downloading = downloaded + failed < contents.size;
-  return <section aria-label="Focused review session"><header className="review-summary"><p>{review.request.purpose}</p><p><strong>Requested response:</strong> {review.request.question}</p>
-    <p>{review.request.change_kind === 'implemented' ? 'Implemented work' : review.request.change_kind === 'proposal' ? 'Proposed work' : 'Implemented and proposed work'} · {review.request.bead_id}</p>
-    <details><summary>Exact review revision</summary><p>{review.request.revision_id}</p><code>{review.pin.version}</code><p>Snapshot: {review.pin.snapshot}</p><a href={reviewHref(scope, review)}>Reopen this exact packet</a></details>
-    <button onClick={actions.refresh} disabled={busy}>Check for updates and receipts</button>
-    {latest && latest.pin.version !== review.pin.version && <p role="status"><strong>Updated packet available.</strong> Your answers still refer to this revision. <a href={reviewHref(scope, latest)}>Open the updated packet separately</a></p>}
-    {review.request.status !== 'published' && <p>This packet is {review.request.status}; response submission is unavailable.</p>}
-    {latest?.request.status === 'withdrawn' && review.request.status !== 'withdrawn' && <p role="status">This request has been withdrawn. Existing responses remain available.</p>}
+  const contentProgress = downloading ? copy.downloading.text(downloaded + failed, contents.size) : failed ? copy.unavailableContents.text(failed) : '';
+  return <section aria-label={copy.session.text}><header className="review-summary"><p>{review.request.purpose}</p><p><strong>{copy.requested.text}</strong> {review.request.question}</p>
+    <p>{review.request.change_kind === 'implemented' ? copy.implemented.text : review.request.change_kind === 'proposal' ? copy.proposed.text : copy.mixed.text}{copy.separator.text}{review.request.bead_id}</p>
+    <button onClick={actions.refresh} disabled={busy}>{copy.checkUpdates.text}</button>
+    {latest && latest.pin.version !== review.pin.version && <p role="status"><strong>{copy.updated.text}</strong> {copy.answersPinned.text} <a href={reviewHref(scope, latest)}>{copy.openUpdated.text}</a></p>}
+    {review.request.status !== 'published' && <p>{copy.unavailable.text}</p>}
+    {latest?.request.status === 'withdrawn' && review.request.status !== 'withdrawn' && <p role="status">{copy.withdrawn.text}</p>}
   </header>
-    {review.request.process && responses.filter(item=>item.value.reviewer===listing.reviewer).map(response=><ReviewWorkflow key={response.value.id} scope={scope} review={review} response={response} service={service} />)}
-    <ReviewProcess scope={scope} review={review} service={service} />
-    <p className="muted" data-ui="review-content-progress" hidden={!downloading && !failed} aria-live="polite">{downloading ? `Downloading review contents… ${downloaded + failed} of ${contents.size} finished.` : failed ? `${failed} review resource(s) unavailable.` : ''}</p>
-    {failed > 0 && <button type="button" onClick={actions.retryContents}>Retry unavailable review contents</button>}
-    <button type="button" aria-expanded={sidebarOpen} aria-controls="review-items" onClick={actions.toggleSidebar}>{sidebarOpen ? 'Hide sidebar' : 'Show sidebar'}</button>
-    <div className="review-layout" data-sidebar-open={sidebarOpen}><aside id="review-items" aria-label="Review items" hidden={!sidebarOpen}><ol>{review.request.members.map(item => <li key={item.id}><button aria-current={selected === item.id ? 'step' : undefined} onClick={() => actions.select(item.id)}>{item.label}</button><span>{submitted.has(item.id) ? 'Submitted' : progress.includes(item.id) ? 'Reviewed' : item.kind}</span></li>)}</ol></aside>
+    <p className="muted" data-ui="review-content-progress" hidden={!downloading && !failed} aria-live="polite">{contentProgress}</p>
+    {failed > 0 && <button type="button" onClick={actions.retryContents}>{copy.retryContents.text}</button>}
+    <button type="button" aria-expanded={sidebarOpen} aria-controls="review-items" onClick={actions.toggleSidebar}>{sidebarOpen ? copy.hideSidebar.text : copy.showSidebar.text}</button>
+    <div className="review-layout review-detail-layout" data-sidebar-open={sidebarOpen}><div id="review-items" className="review-navigator" hidden={!sidebarOpen}><ReviewsDetailPresentation review={review} selected={selected} onSelect={actions.select} progress={progress} submitted={submitted} /></div>
       <article className="review-content"><h2>{member.label}</h2><ReviewMemberContent key={member.id} scope={scope} review={review} member={member} contents={contents} documentZen={documentZen}
         answer={submitted.has(member.id) ? responses.flatMap(item => item.value.forms).find(form => form.member_id === member.id) : forms.find(form => form.member_id === member.id)} submitted={submitted.has(member.id)}
         onAnswer={(answers, intent) => actions.answer(member.id, answers, intent)} onSubmit={() => actions.submit(member.id)} busy={busy || !accepting}
          onSaveDraft={actions.saveDraft} formStatus={{ notice, error, dirty, workflowAfterSubmit:Boolean(review.request.process) }}
          onNextForm={nextForm ? () => actions.select(nextForm.id) : undefined} onSubmitReview={() => actions.submit()}
         reviewed={progress.includes(member.id)} onReviewed={checked => actions.progress(member.id, checked)} />
-      </article></div>
-    <footer className="review-submit"><p role="status">{dirty ? 'Unsaved changes. ' : ''}{notice}</p>{error && <p role="alert">{error}</p>}
+      </article>
+      <aside className="review-evidence" aria-label={copy.evidence.text}>
+        <h2>{copy.evidence.text}</h2>
+        {review.request.process && responses.filter(item=>item.value.reviewer===listing.reviewer).map(response=><ReviewWorkflow key={response.value.id} scope={scope} review={review} response={response} service={service} />)}
+        <ReviewProcess scope={scope} review={review} service={service} />
+        <details><summary>{copy.exactRevision.text}</summary><p>{review.request.revision_id}</p><code>{review.pin.version}</code><p>{review.pin.snapshot}</p><a href={reviewHref(scope, review)}>{copy.reopen.text}</a></details>
+      </aside></div>
+    <footer className="review-submit"><p role="status">{dirty ? copy.unsaved.text : ''}{notice}</p>{error && <p role="alert">{error}</p>}
       <p>{submissionNotice(review.request)}</p>
-      <button disabled={busy || !accepting} onClick={actions.saveDraft}>Save draft remotely</button><button disabled={busy || !accepting} onClick={() => actions.submit()}>Submit review feedback</button>
-      <ul aria-label="Submission receipts">{responses.map(item => <li key={item.value.id}>{item.value.forms.length} forms · {item.value.comments.length} comments
-        <details><summary>Submission details</summary><strong>{item.value.id}</strong><p><code>{item.pin.resource}</code></p><a href={evidenceHref(scope.repository, item.pin)}>Exact saved response</a><p><code>{item.pin.version}</code> · snapshot <code>{item.pin.snapshot}</code></p></details>
-        {review.request.process || review.request.response_effect ? <><p>Response saved · {review.request.process ? 'dispatch' : 'VK notification'} {item.dispatch?.state ?? 'unknown'}. {item.dispatch?.message ?? 'Delivery evidence is not loaded; retry reconciles the same immutable response without minting answers.'}</p>{item.dispatch?.target && <a href={item.dispatch.target}>{review.request.process ? 'Configured workflow evidence' : 'Open VD workspace'}</a>}{item.dispatch?.attempted_at && <p>Delivery checked: {item.dispatch.attempted_at}</p>}<ark.button data-ui="review-delivery-retry" disabled={busy || item.dispatch?.kind === 'vk' && ['dispatched', 'unknown'].includes(item.dispatch.state)} onClick={() => actions.retry(item.value)}>Retry delivery of saved response</ark.button></> : listing.acknowledgements.includes(`${item.value.id}:${item.pin.version}`) ? 'Task notification acknowledged' : 'Response saved; task notification pending'}</li>)}</ul>
+      <button disabled={busy || !accepting} onClick={actions.saveDraft}>{copy.saveDraft.text}</button><button disabled={busy || !accepting} onClick={() => actions.submit()}>{copy.submit.text}</button>
+      <ul aria-label={copy.receipts.text}>{responses.map(item => <li key={item.value.id}>{item.value.forms.length}{copy.forms.text}{copy.separator.text}{item.value.comments.length}{copy.comments.text}
+        <details><summary>{copy.submissionDetails.text}</summary><strong>{item.value.id}</strong><p><code>{item.pin.resource}</code></p><a href={evidenceHref(scope.repository, item.pin)}>{copy.exactResponse.text}</a><p><code>{item.pin.version}</code>{copy.separator.text}{copy.snapshot.text} <code>{item.pin.snapshot}</code></p></details>
+        {review.request.process || review.request.response_effect ? <><p>{copy.responseSaved.text}{copy.separator.text}{review.request.process ? copy.dispatch.text : copy.notification.text} {item.dispatch?.state ?? copy.unknown.text}{copy.separator.text}{item.dispatch?.message ?? copy.missingDelivery.text}</p>{item.dispatch?.target && <a href={item.dispatch.target}>{review.request.process ? copy.workflowEvidence.text : copy.openVD.text}</a>}{item.dispatch?.attempted_at && <p>{copy.deliveryChecked.text} {item.dispatch.attempted_at}</p>}<ark.button data-ui="review-delivery-retry" disabled={busy || item.dispatch?.kind === 'vk' && ['dispatched', 'unknown'].includes(item.dispatch.state)} onClick={() => actions.retry(item.value)}>{copy.retryDelivery.text}</ark.button></> : listing.acknowledgements.includes(`${item.value.id}:${item.pin.version}`) ? copy.acknowledged.text : copy.pendingNotification.text}</li>)}</ul>
     </footer>
   </section>;
 }
