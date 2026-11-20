@@ -30,18 +30,52 @@
     "ownedViews": ["webapp/src/features/runs/WorkflowRuns.view.tsx"],
     "presentations": [{ "id": "runs", "kind": "page", "file": "webapp/src/features/runs/WorkflowRuns.presentation.tsx", "export": "WorkflowRunsPresentation" }],
     "scenarios": "webapp/stories/WorkspaceRuns.stories.tsx"
+  }, {
+    "id": "settings", "host": "webapp/src/features/settings/Settings.tsx",
+    "hooks": "webapp/src/features/settings/Settings.hooks.ts", "hook": "useSettingsFeature",
+    "copy": "webapp/src/features/settings/Settings.copy.ts", "ownedViews": ["webapp/src/views/AppSettings.view.tsx"],
+    "presentations": [
+      { "id": "settings", "kind": "page", "file": "webapp/src/features/settings/Settings.presentation.tsx", "export": "SettingsPresentation" },
+      { "id": "app.navigation", "kind": "region", "file": "webapp/src/features/navigation/Navigation.presentation.tsx", "export": "NavigationPresentation" }
+    ], "scenarios": "webapp/stories/SettingsSurfaces.stories.tsx"
+  }, {
+    "id": "customization", "host": "webapp/src/features/customization/Customization.tsx",
+    "hooks": "webapp/src/features/customization/Customization.hooks.ts", "hook": "useCustomizationFeature",
+    "copy": "webapp/src/features/customization/Customization.copy.ts", "ownedViews": ["webapp/src/features/customization/Customization.view.tsx"],
+    "presentations": [{ "id": "customization", "kind": "page", "file": "webapp/src/features/customization/Customization.presentation.tsx", "export": "CustomizationPresentation" }],
+    "scenarios": "webapp/stories/Customization.stories.tsx"
+  }, {
+    "id": "reviews", "host": "webapp/src/features/reviews/ReviewWorkspace.tsx",
+    "hooks": "webapp/src/features/reviews/ReviewWorkspace.hooks.ts", "hook": "useReviewWorkspaceFeature",
+    "copy": "webapp/src/features/reviews/Reviews.copy.ts",
+    "ownedViews": ["webapp/src/features/reviews/ReviewWorkspace.view.tsx", "webapp/src/features/reviews/ReviewPacket.view.tsx", "webapp/src/features/reviews/ReviewSession.view.tsx", "webapp/src/features/reviews/ReviewsInboxParts.view.tsx"],
+    "presentations": [
+      { "id": "reviews.inbox", "kind": "page", "file": "webapp/src/features/reviews/ReviewsInbox.presentation.tsx", "export": "ReviewsInboxPresentation" },
+      { "id": "reviews.detail", "kind": "region", "file": "webapp/src/features/reviews/ReviewsDetail.presentation.tsx", "export": "ReviewsDetailPresentation" }
+    ], "scenarios": "webapp/stories/ReviewsDetailSurfaces.stories.tsx"
+  }, {
+    "id": "beads", "host": "webapp/src/features/beads/BeadsSample.tsx",
+    "hooks": "webapp/src/features/beads/Beads.hooks.ts", "hook": "useBeadsFeature",
+    "copy": "webapp/src/features/beads/Beads.copy.ts",
+    "ownedViews": ["webapp/src/features/beads/BeadsSample.view.tsx", "webapp/src/features/beads/BeadsBoard.view.tsx"],
+    "presentations": [
+      { "id": "beads", "kind": "page", "file": "webapp/src/features/beads/Beads.presentation.tsx", "export": "BeadsPresentation" },
+      { "id": "beads.board", "kind": "region", "file": "webapp/src/features/beads/BeadsBoard.presentation.tsx", "export": "BeadsBoardPresentation" }
+    ], "scenarios": "webapp/stories/BeadsSurfaces.stories.tsx"
   }],
   "routes": {
     "webapp/src/routes/agent.tsx": { "feature": "agent" },
     "webapp/src/routes/runs.tsx": { "feature": "runs" },
     "webapp/src/routes/documents.tsx": { "feature": "documents" },
-    "webapp/src/routes/documents.$documentId.tsx": { "feature": "documents", "parent": "webapp/src/routes/documents.tsx" }
+    "webapp/src/routes/documents.$documentId.tsx": { "feature": "documents", "parent": "webapp/src/routes/documents.tsx" },
+    "webapp/src/routes/settings.tsx": { "feature": "settings" },
+    "webapp/src/routes/settings.appearance.tsx": { "feature": "customization" },
+    "webapp/src/routes/reviews.tsx": { "feature": "reviews" },
+    "webapp/src/routes/reviews.$requestId.tsx": { "feature": "reviews", "parent": "webapp/src/routes/reviews.tsx" },
+    "webapp/src/routes/beads.tsx": { "feature": "beads" }
   },
   "legacyRoutes": {
-    "webapp/src/routes/index.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing index redirect; replace with cross-workspace Reviews home after contract batch." },
-    "webapp/src/routes/beads.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing Kanban; three-surface task browsing is subsequent experience work." },
-    "webapp/src/routes/reviews.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing review inbox/session migration follows Documents pilot." },
-    "webapp/src/routes/reviews.$requestId.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing review detail uses parent review controller; migrate with review inbox." }
+    "webapp/src/routes/index.tsx": { "owner": "task-3vt.39.6.17", "reason": "Existing index redirect; replace with cross-workspace Reviews home after contract batch." }
   },
   "exceptions": []
 }

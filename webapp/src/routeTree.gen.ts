@@ -15,8 +15,10 @@ import { Route as BeadsRouteImport } from './routes/beads'
 import { Route as DocumentsRouteImport } from './routes/documents'
 import { Route as ReviewsRouteImport } from './routes/reviews'
 import { Route as RunsRouteImport } from './routes/runs'
+import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as DocumentsDocumentIdRouteImport } from './routes/documents.$documentId'
 import { Route as ReviewsRequestIdRouteImport } from './routes/reviews.$requestId'
+import { Route as SettingsAppearanceRouteImport } from './routes/settings.appearance'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -48,6 +50,11 @@ const RunsRoute = RunsRouteImport.update({
   path: '/runs',
   getParentRoute: () => rootRouteImport,
 } as any)
+const SettingsRoute = SettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DocumentsDocumentIdRoute = DocumentsDocumentIdRouteImport.update({
   id: '/$documentId',
   path: '/$documentId',
@@ -58,6 +65,11 @@ const ReviewsRequestIdRoute = ReviewsRequestIdRouteImport.update({
   path: '/$requestId',
   getParentRoute: () => ReviewsRoute,
 } as any)
+const SettingsAppearanceRoute = SettingsAppearanceRouteImport.update({
+  id: '/appearance',
+  path: '/appearance',
+  getParentRoute: () => SettingsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -66,8 +78,10 @@ export interface FileRoutesByFullPath {
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/reviews/$requestId': typeof ReviewsRequestIdRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -76,8 +90,10 @@ export interface FileRoutesByTo {
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/reviews/$requestId': typeof ReviewsRequestIdRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -87,8 +103,10 @@ export interface FileRoutesById {
   '/documents': typeof DocumentsRouteWithChildren
   '/reviews': typeof ReviewsRouteWithChildren
   '/runs': typeof RunsRoute
+  '/settings': typeof SettingsRouteWithChildren
   '/documents/$documentId': typeof DocumentsDocumentIdRoute
   '/reviews/$requestId': typeof ReviewsRequestIdRoute
+  '/settings/appearance': typeof SettingsAppearanceRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -99,8 +117,10 @@ export interface FileRouteTypes {
     | '/documents'
     | '/reviews'
     | '/runs'
+    | '/settings'
     | '/documents/$documentId'
     | '/reviews/$requestId'
+    | '/settings/appearance'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -109,8 +129,10 @@ export interface FileRouteTypes {
     | '/documents'
     | '/reviews'
     | '/runs'
+    | '/settings'
     | '/documents/$documentId'
     | '/reviews/$requestId'
+    | '/settings/appearance'
   id:
     | '__root__'
     | '/'
@@ -119,8 +141,10 @@ export interface FileRouteTypes {
     | '/documents'
     | '/reviews'
     | '/runs'
+    | '/settings'
     | '/documents/$documentId'
     | '/reviews/$requestId'
+    | '/settings/appearance'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -130,6 +154,7 @@ export interface RootRouteChildren {
   DocumentsRoute: typeof DocumentsRouteWithChildren
   ReviewsRoute: typeof ReviewsRouteWithChildren
   RunsRoute: typeof RunsRoute
+  SettingsRoute: typeof SettingsRouteWithChildren
 }
 
 declare module '@tanstack/react-router' {
@@ -176,6 +201,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RunsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/settings': {
+      id: '/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof SettingsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/documents/$documentId': {
       id: '/documents/$documentId'
       path: '/$documentId'
@@ -189,6 +221,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/reviews/$requestId'
       preLoaderRoute: typeof ReviewsRequestIdRouteImport
       parentRoute: typeof ReviewsRoute
+    }
+    '/settings/appearance': {
+      id: '/settings/appearance'
+      path: '/appearance'
+      fullPath: '/settings/appearance'
+      preLoaderRoute: typeof SettingsAppearanceRouteImport
+      parentRoute: typeof SettingsRoute
     }
   }
 }
@@ -216,6 +255,18 @@ const ReviewsRouteChildren: ReviewsRouteChildren = {
 const ReviewsRouteWithChildren =
   ReviewsRoute._addFileChildren(ReviewsRouteChildren)
 
+interface SettingsRouteChildren {
+  SettingsAppearanceRoute: typeof SettingsAppearanceRoute
+}
+
+const SettingsRouteChildren: SettingsRouteChildren = {
+  SettingsAppearanceRoute: SettingsAppearanceRoute,
+}
+
+const SettingsRouteWithChildren = SettingsRoute._addFileChildren(
+  SettingsRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AgentRoute: AgentRoute,
@@ -223,6 +274,7 @@ const rootRouteChildren: RootRouteChildren = {
   DocumentsRoute: DocumentsRouteWithChildren,
   ReviewsRoute: ReviewsRouteWithChildren,
   RunsRoute: RunsRoute,
+  SettingsRoute: SettingsRouteWithChildren,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
