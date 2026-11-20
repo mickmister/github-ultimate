@@ -77,6 +77,7 @@ export function createCustomization(initialStore: Store = deviceStore) {
       return opening;
     },
     get: () => structuredClone(value),
+    getSaved: () => structuredClone(saved),
     export: () => JSON.stringify(value, null, 2) + '\n',
     async apply(input: unknown) {
       const token = generation;
@@ -88,8 +89,12 @@ export function createCustomization(initialStore: Store = deviceStore) {
     cancelPreview() { value = saved; render(); },
     async reset() {
       // Recovery must work even if the saved file is invalid or custom CSS hides UI.
-      generation++; saved = value = defaultCustomization(); opening = Promise.resolve(); render();
-      await write(() => store.write(JSON.stringify(defaultCustomization())));
+      const token = ++generation;
+      value = defaultCustomization(); opening = Promise.resolve(); render();
+      await write(async () => {
+        await store.write(JSON.stringify(defaultCustomization()));
+        if (generation === token) { saved = defaultCustomization(); render(); }
+      });
     },
     import: (json: string) => api.apply(json),
     download() {
