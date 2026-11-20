@@ -3,6 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ReviewWorkspace, type ReviewLocation } from '../src/features/reviews/ReviewWorkspace';
 import { ReviewProcessView } from '../src/features/reviews/ReviewProcess.view';
 import { createReviewFixture, reviewScope, richComparison, type ReviewComparisonFixture } from './reviews.fixtures';
+import { markdownTables } from './markdown-tables.fixtures';
 
 function Fixture({ focused = false, missingBaseline = false, comparison, process = false, picker = false }: { focused?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean }) {
   const hooks = useMemo(() => createReviewFixture({ remote: window.location.search.includes('remoteFixture=true'), missingBaseline, comparison, process, picker }), [missingBaseline, comparison, process, picker]);
@@ -26,6 +27,7 @@ export const ProcessStale: Story = { render: () => <ReviewProcessView scope={rev
 export const Inbox: Story = { render: () => <Fixture /> };
 export const StoragePicker: Story = { render: () => <Fixture picker /> };
 export const Focused: Story = { render: () => <Fixture focused /> };
+export const MarkdownTables: Story = { render: () => <Fixture focused comparison={{ path: 'threads/task-reader/lifecycle.md', before: markdownTables, after: markdownTables }} /> };
 export const UnavailableBaseline: Story = { render: () => <Fixture focused missingBaseline /> };
 export const RichChanges: Story = { render: () => <Fixture focused comparison={richComparison} /> };
 export const Unchanged: Story = { render: () => <Fixture focused comparison={{ ...richComparison, before: richComparison.after }} /> };

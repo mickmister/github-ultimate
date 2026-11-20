@@ -74,8 +74,10 @@ label:not(.monaco-editor *) { display: grid; gap: 6px; font-size: .875rem; font-
 .markdown-diagram svg { display: block; max-width: 100%; height: auto; margin-inline: auto; }
 .markdown-diagram-error { color: var(--muted); }
 .markdown-preview blockquote { border-left: 3px solid var(--accent); margin: 16px 0; padding: 4px 16px; color: var(--muted); }
-.markdown-preview table { border-collapse: collapse; display: block; max-width: 100%; overflow: auto; margin: 16px 0; }
+.markdown-preview table { border-collapse: collapse; display: block; max-width: 100%; overflow: auto; margin: 16px 0; overflow-wrap: normal; word-break: normal; }
 .markdown-preview th, .markdown-preview td { padding: 8px 12px; border: 1px solid var(--line); }
+/* Preserve readable row labels; let the table scroll instead of squeezing words. */
+.markdown-preview tr > :first-child { min-width: 12ch; }
 .markdown-preview input[type=checkbox] { width: auto; min-height: 0; margin-right: 8px; }
 code { font-size: .8em; }
 @media (max-width: 720px) { .browser { grid-template-columns: minmax(0, 1fr); } .document-sidebar { border-right: 0; border-bottom: 1px solid var(--line); } .document-tree [role=tree] { max-height: 300px; } .connection-panel, .document-sidebar, .document-preview, .welcome { padding: 16px; } }

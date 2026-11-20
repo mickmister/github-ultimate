@@ -7,6 +7,7 @@ import { createMockAppHooks, mockDocumentContents, mockSnapshot, readyModel } fr
 import { ancestorFolders } from '../src/features/documents/document-tree';
 import { isMarkdown } from '../src/features/documents/document-format';
 import { PresentationProvider } from '../src/presentation/Presentation';
+import { markdownTables } from './markdown-tables.fixtures';
 
 function InteractiveBrowser() {
   const appHooks = useMemo(createMockAppHooks, []);
@@ -52,6 +53,7 @@ export const Interactive: Story = { render: () => <InteractiveBrowser /> };
 export const ReadingDocument: Story = { render: () => <FixtureBrowser initialModel={readyModel} /> };
 export const SourceDocument: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'source' }} /> };
 export const MarkdownPreview: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown' }} /> };
+export const MarkdownTables: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown', content: markdownTables }} /> };
 export const MermaidDiagrams: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown', content: '# Beads changesets\n\n```mermaid\nflowchart TD\n  A[Read snapshot] --> B{Changes available?}\n  B -->|Yes| C[Apply changeset]\n  B -->|No| D[Keep snapshot]\n```\n\n```mermaid\nflowchart LR\n  E[Validate] --> F[Publish]\n```\n\n```text\nflowchart TD\n  This is ordinary source code.\n```' }} /> };
 export const InvalidMermaid: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentMode: 'markdown', content: '# Invalid diagram\n\n```mermaid\nflowchart TD\n  A[Unclosed node\n```\n\nThe rest of the document still renders.\n\n```mermaid\nflowchart TD\n  A[Valid diagram] --> B[Still renders]\n```' }} /> };
 export const UntrustedMarkdown: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: 'unsafeMarkdown', content: mockDocumentContents.unsafeMarkdown, documentMode: 'markdown' }} /> };
