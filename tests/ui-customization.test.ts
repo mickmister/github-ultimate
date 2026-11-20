@@ -8,10 +8,13 @@ test('customization preview, full JSON round trip and local restore preserve tok
   await api.ready();
   const theme = { ...defaultCustomization(), name: 'Shared theme', mode: 'dark' as const, tokens: { accent: '#12ab78', fontSize: '17px', radius: '2px' }, css: '[data-ui="review-choice"] { border-style: dashed; }' };
   await api.preview(theme);
+  expect(api.getSaved()).toEqual(defaultCustomization());
   expect(saved).toBeNull();
   expect(api.get()).toEqual(theme);
   api.cancelPreview(); expect(api.get()).toEqual(defaultCustomization());
   await api.apply(theme);
+  const savedCopy = api.getSaved(); savedCopy.name = 'Untracked mutation';
+  expect(api.getSaved()).toEqual(theme);
   expect(parseCustomization(api.export())).toEqual(theme);
   const reopened = createCustomization(store); await reopened.ready();
   expect(reopened.get()).toEqual(theme);
@@ -21,6 +24,17 @@ test('customization preview, full JSON round trip and local restore preserve tok
   await expect(api.apply({ ...theme, tokens: { accent: 'red;display:none' } })).rejects.toThrow();
   expect(api.get()).toEqual(theme);
   await api.reset(); expect(parseCustomization(saved!)).toEqual(defaultCustomization());
+});
+
+test('failed reset restores readable defaults without claiming a new saved value', async () => {
+  const theme = { ...defaultCustomization(), name: 'Persisted theme' };
+  const api = createCustomization({ read: async () => JSON.stringify(theme), write: async () => { throw new Error('Disk full'); } });
+  await api.ready();
+  await expect(api.reset()).rejects.toThrow('Disk full');
+  expect(api.getSaved()).toEqual(theme);
+  expect(api.get()).toEqual(defaultCustomization());
+  api.cancelPreview();
+  expect(api.get()).toEqual(theme);
 });
 
 test('failed persistence does not apply a theme, and reset recovers corrupt saved data or a late restore', async () => {
