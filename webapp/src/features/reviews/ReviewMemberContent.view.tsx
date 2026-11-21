@@ -1,0 +1,36 @@
+import type { TaskForm } from '../../../../src/protocol';
+import { AttachableContext } from '../feedback/AttachableContext';
+import { FeedbackAnnotations } from '../feedback/FeedbackAnnotations';
+import { MarkdownDocument } from '../documents/MarkdownDocument';
+import { MonacoDocument } from '../documents/MonacoDocument';
+import { isMarkdown } from '../documents/document-format';
+import { DocumentChanges } from './DocumentChanges';
+import { ReviewForm } from './ReviewForm';
+import { ReviewDocument } from './ReviewDocument';
+import { ReviewCheckbox } from './ReviewCheckbox.view';
+import { reviewTarget } from './model';
+import { submissionNotice } from './submission-notice';
+import type { ReviewMemberContentProps } from './ReviewMemberContent';
+
+interface Props extends ReviewMemberContentProps { content: string | null; baseline: string | null; form: TaskForm | null; error: string; baselineError: string; mode: 'full' | 'baseline' | 'changes'; setMode(mode: 'full' | 'baseline' | 'changes'): void }
+export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, preview, onAnswer, onSubmit, onNextForm, onSubmitReview, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode, documentZen }: Props) {
+  if (error) return <p role="alert">{error}</p>;
+  if (content === null) return <p role="status">Loading {member.label}…</p>;
+  if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onNextForm={onNextForm} onSubmitReview={onSubmitReview} onSaveDraft={onSaveDraft} formStatus={formStatus} submissionNotice={submissionNotice(review.request)} feedbackTarget={preview ? undefined : reviewTarget(scope, review, member, 'rendered-form')} />;
+  if (member.kind !== 'document') return null;
+  const markdown = isMarkdown(member.target.resource);
+  const target = reviewTarget(scope, review, member, markdown ? 'rendered-markdown' : 'source');
+  return <ReviewDocument title={member.label} busy={busy} onSaveDraft={onSaveDraft} formStatus={formStatus} zen={documentZen.member === member.id} onZen={open => documentZen.setMember(open ? member.id : null)}><section aria-label="Pinned document review"><div className="review-progress">
+    <ReviewCheckbox label="I have reviewed this item" checked={reviewed} disabled={busy} descriptionId="review-progress-help" onChange={onReviewed} />
+    <details><summary>Review progress (optional)</summary><p id="review-progress-help" className="muted">Save a draft or submit to record this marker. It does not block submission or authorize code changes.</p></details>
+  </div><div role="group" aria-label="Document comparison view"><button aria-pressed={mode === 'full'} onClick={() => setMode('full')}>Full document</button>
+    {member.baseline && <><button aria-pressed={mode === 'changes'} onClick={() => setMode('changes')}>Changes</button><button aria-pressed={mode === 'baseline'} onClick={() => setMode('baseline')}>Baseline</button></>}</div>
+    <details><summary>Item details</summary><code>{member.target.resource}</code></details>
+    {mode !== 'full' && (baselineError ? <p role="alert">{baselineError}</p> : baseline === null ? <p role="status">Loading pinned baseline…</p> : mode === 'changes'
+      ? <DocumentChanges path={member.target.resource} before={baseline} after={content} />
+      : markdown ? <MarkdownDocument content={baseline} /> : <MonacoDocument path={member.baseline!.resource} content={baseline} />)}
+    {mode === 'full' && (preview ? markdown ? <MarkdownDocument content={content} /> : <MonacoDocument path={member.target.resource} content={content} /> : <AttachableContext target={target}><FeedbackAnnotations target={target}>
+      {markdown ? <MarkdownDocument content={content} /> : <MonacoDocument path={member.target.resource} content={content} />}
+    </FeedbackAnnotations></AttachableContext>)}
+  </section></ReviewDocument>;
+}

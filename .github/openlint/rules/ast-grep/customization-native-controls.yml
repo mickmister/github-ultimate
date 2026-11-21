@@ -1,0 +1,9 @@
+id: customization-native-controls
+language: Tsx
+severity: hint
+message: Native control inventory; verify shared theme tokens and a stable styling contract. Native HTML alone does not require migration to Ark UI.
+rule:
+  any:
+    - pattern: <input $$$ATTRS />
+    - pattern: <textarea $$$ATTRS />
+    - pattern: <select $$$ATTRS>$$$CHILDREN</select>

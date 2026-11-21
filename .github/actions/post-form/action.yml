@@ -1,0 +1,56 @@
+name: Post GitHub Ultimate form
+description: Validate form DSL and post it to the automatically resolved PR using gh
+inputs:
+  form-file:
+    description: Form JSON/YAML file, relative to the caller working directory or absolute
+    required: true
+  repository:
+    description: Optional owner/repo override
+  pr-number:
+    description: Optional PR number when the event cannot identify one
+  submission-id:
+    description: Optional stable retry key (default is run ID plus form ID)
+  token:
+    description: GitHub token with permission to comment on the PR
+    default: ${{ github.token }}
+outputs:
+  comment-url:
+    description: Published or reused form comment URL
+    value: ${{ steps.publish.outputs.comment-url }}
+  comment-id:
+    description: Published or reused comment ID
+    value: ${{ steps.publish.outputs.comment-id }}
+  pr-number:
+    description: Resolved PR number
+    value: ${{ steps.publish.outputs.pr-number }}
+  reused:
+    description: True when an identical existing submission was reused
+    value: ${{ steps.publish.outputs.reused }}
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      with:
+        node-version: '22'
+    - name: Install publisher dependencies
+      shell: bash
+      working-directory: ${{ github.action_path }}/../../..
+      run: |
+        corepack enable
+        corepack prepare pnpm@12.18.0 --activate
+        pnpm --filter github-ultimate install --prod --frozen-lockfile --ignore-scripts
+    - id: publish
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.token }}
+        FORM_FILE: ${{ inputs.form-file }}
+        TARGET_REPO: ${{ inputs.repository }}
+        TARGET_PR: ${{ inputs.pr-number }}
+        SUBMISSION_ID: ${{ inputs.submission-id }}
+        PUBLISHER_PATH: ${{ github.action_path }}/../../../cli/form.ts
+      run: |
+        args=(--file "$FORM_FILE" --json --github-output)
+        if [[ -n "$TARGET_REPO" ]]; then args+=(--repo "$TARGET_REPO"); fi
+        if [[ -n "$TARGET_PR" ]]; then args+=(--pr "$TARGET_PR"); fi
+        if [[ -n "$SUBMISSION_ID" ]]; then args+=(--submission-id "$SUBMISSION_ID"); fi
+        node --experimental-strip-types "$PUBLISHER_PATH" "${args[@]}"
