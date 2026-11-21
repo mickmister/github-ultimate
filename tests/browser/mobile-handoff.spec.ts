@@ -41,6 +41,7 @@ for (const [name, userAgent, visible] of [
         await expect(open).toHaveAttribute('href', /documents%252Fthreads/);
         expect(resolveAlohakLink((await open.getAttribute('href'))!, entry)).toBe(document);
       } else {
+        await page.locator('.app-navigation summary').click();
         await expect(page.getByText('Settings', { exact: true })).toBeVisible();
         await expect(open).toHaveCount(0);
       }

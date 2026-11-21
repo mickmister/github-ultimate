@@ -60,7 +60,7 @@ test('hosted app reads a private document over Alohak RPC without extension fall
         ${mobileBootstrap(native.documentId, 'ios')}
       }, 1500);
     })();`);
-    await page.goto(entry);
+    await page.goto(entry + '#/documents');
     await expect(page.getByRole('status')).toContainText('Connected. Choose a repository');
     await page.getByLabel('Storage repository').fill('owner/private');
     await expect(page.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeEnabled();

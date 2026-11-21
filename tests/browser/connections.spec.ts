@@ -243,7 +243,8 @@ test('hosted branch page reads through an approved connection and revocation tak
   await dashboard.reload();
   await expect(dashboard.getByRole('link', { name: 'notes/private.md', exact: true })).toHaveAttribute('href', `https://github.dev/mickmister/workspace-storage/blob/${'c'.repeat(40)}/documents/notes/private.md`);
   await dashboard.getByRole('link', { name: 'Settings', exact: true }).click();
-  await expect(dashboard.getByRole('heading', { name: 'Connection & storage settings', exact: true })).toBeVisible();
+  await expect(dashboard.getByRole('heading', { name: 'Connection diagnostics', exact: true, level: 1 })).toBeVisible();
+  await expect(dashboard.getByRole('link', { name: '← Settings', exact: true })).toHaveAttribute('href', './app/#/settings');
   await dashboard.close();
   // The new Start SPA is served entirely from static files under its real
   // branch base path, and uses the same approved extension/verified Git reader.
@@ -254,7 +255,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await modern.setViewportSize({ width: 1440, height: 900 });
   const pageErrors: string[] = []; modern.on('pageerror', error => pageErrors.push(error.message));
   const workerURLs: string[] = []; modern.on('worker', worker => workerURLs.push(worker.url()));
-  await modern.goto('https://mickmister.github.io' + appPath);
+  await modern.goto('https://mickmister.github.io' + appPath + '#/documents');
   await expect(modern.getByRole('heading', { name: 'Documents', exact: true, level: 1 })).toBeVisible();
   await expect(modern.getByRole('status')).toContainText('Connected. Choose a repository');
   await expect(modern.getByLabel('Storage repository')).toHaveValue('');
@@ -302,7 +303,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(modern.getByRole('button', { name: 'Markdown preview', exact: true })).toHaveCount(0);
   const returning = await context.newPage();
   await returning.setViewportSize({ width: 1440, height: 900 });
-  await returning.goto('https://mickmister.github.io' + appPath);
+  await returning.goto('https://mickmister.github.io' + appPath + '#/documents');
   await expect(returning.getByLabel('Document content')).toContainText('Explore product requirements');
   await expect(returning.locator('.document-fullscreen')).toBeVisible();
   await returning.close();
@@ -312,10 +313,10 @@ test('hosted branch page reads through an approved connection and revocation tak
   await modern.setViewportSize({ width: 375, height: 812 });
   expect(await modern.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await modern.setViewportSize({ width: 1440, height: 900 });
-  // A new landing visit resumes the workspace without a Discover click. Clear
+  // A new Documents visit resumes the workspace without a Discover click. Clear
   // page preferences too: the extension independently remembers this scope.
   await modern.evaluate(() => localStorage.removeItem(`github-ultimate-workspace-v1:${location.pathname}`));
-  await modern.goto('https://mickmister.github.io' + appPath);
+  await modern.goto('https://mickmister.github.io' + appPath + '#/documents');
   await expect(modern.getByLabel('Document content')).toContainText('Explore product requirements');
   await modern.getByRole('button', { name: 'Back to documents' }).click();
   await expect(modern.getByRole('tree', { name: 'Documents', exact: true })).toBeVisible();
@@ -323,7 +324,7 @@ test('hosted branch page reads through an approved connection and revocation tak
   await expect(modern.getByLabel('Storage repository')).toHaveValue('mickmister/workspace-storage');
   await modern.getByRole('button', { name: 'Forget saved workspace', exact: true }).click();
   await expect(modern.getByRole('status')).toContainText('Saved workspace forgotten');
-  await modern.goto('https://mickmister.github.io' + appPath);
+  await modern.goto('https://mickmister.github.io' + appPath + '#/documents');
   await expect(modern.getByLabel('Storage repository')).toHaveValue('');
   await expect(modern.getByRole('button', { name: 'Discover workspaces', exact: true })).toBeDisabled();
   expect(pageErrors).toEqual([]);

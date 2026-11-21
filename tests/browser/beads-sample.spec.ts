@@ -28,6 +28,7 @@ async function serve(page: Page) {
 
 test('native Beads page is reachable and requires an approved workspace connection', async ({ page }) => {
   test.setTimeout(45000);
+  await page.setViewportSize({ width: 1440, height: 900 });
   const base = await serve(page);
   await page.goto(base + '#/beads');
   await expect(page.getByRole('heading', { name: 'Kanban', exact: true })).toBeVisible();

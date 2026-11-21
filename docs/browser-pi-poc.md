@@ -265,6 +265,15 @@ cross-device running-stream handoff and interrupted-run recovery remain open.
   browser-target packaging. License notices are derived from bundled packages;
   Pi's npm distributions omit their license file, so the MIT text is retained from
   upstream `earendil-works/pi` tag `v1.5.2` in `licenses/pi-MIT.txt`.
+- `TEST_BUILT_ASSETS=true pnpm exec playwright test tests/browser/live-session.spec.ts`
+  verifies the packaged extension and production app against a signed private-S3
+  fixture, including pending tails and read-only S3 access without GitHub or inference grants.
+  For a paired producer check, set `PI_LIVE_PRODUCER_ROOT` to a runner checkout with
+  frozen npm dependencies and its pinned Spec Kit venv, and set
+  `NODE_OPTIONS=--experimental-strip-types`. This runs the real pinned Spec Kit/Pi
+  producer against local S3 and inference fixtures. It holds inference open until
+  partial text is visible, then checks the terminal record and a single assistant
+  projection. Reported latency and request counts apply only to that fixture.
 
 These mocks prove the local architecture and serialization, not successful access
 to a user's live inference endpoint, live S3 bucket, a second physical device or
