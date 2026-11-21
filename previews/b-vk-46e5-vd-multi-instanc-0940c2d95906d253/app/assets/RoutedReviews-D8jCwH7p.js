@@ -1,1 +1,0 @@
-import{g as r,az as o,aF as c,k as i,aG as n}from"./index-CAyFQBUp.js";function R(){const t=r({select:e=>e.location.search}),a=o({strict:!1,select:e=>e.requestId}),s={...c(t),requestId:a};return i.jsx(n,{location:s},JSON.stringify(s))}export{R};
