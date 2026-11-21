@@ -94,6 +94,53 @@ page refuses workspace-bearing checkpoints rather than silently dropping files.
 Phone, tablet and desktop have separate views above the same session controller.
 Drafts, source selection and operation identity stay above presentation switches.
 
+### Follow an Actions-hosted Pi session
+
+Open **Agent from the selected workspace**, then use **Remote Actions sessions**.
+This is a read-only view of an Actions execution, separate from the local browser
+agent and its scratch checkpoints. It needs only an approved read-enabled S3
+connection, not an inference connection or S3 upload permission.
+
+1. Install/reload an extension build advertising `s3AllowMissing` and refresh the app.
+2. Choose **Load Actions storage** and the private connection for the runner's
+   `S3_CACHE_BUCKET`. Its allowed prefix must include the runner's evidence root.
+3. Set **Actions storage root** to `<S3_CACHE_PREFIX>/qrspi-hosted/`. With the runner
+   default this is `qrspi/qrspi-hosted/`; it is not the `pi-sessions/` checkpoint
+   prefix. The selected workspace's storage repository must match the runner's
+   `REVIEW_REPOSITORY`.
+4. **Find remote sessions**, choose the exact run-attempt/command, and **Follow
+   session**. A locator appears before inference begins; older runs without this
+   locator are not guessed from post-job archives. **Session link** preserves the
+   workspace/root/locator for another visit; select your locally configured S3
+   connection before opening it. An exact link avoids scanning the inventory.
+5. **Pause viewing** stops this browser's polling, not the remote execution.
+   Resume retains the cursor; refresh reconstructs from immutable chunk one.
+   Neither path executes tools or prompts. Local browser drafts survive device
+   layout changes while following.
+
+The trusted runner collects complete Pi JSON stdout records from its existing
+private intake/phase/worker log spools, approximately once a second, and publishes
+them as scoped `pi` events in its existing ordered evidence batches. Native
+records remain separate persisted-history and final-validation evidence. The view
+replaces partial text with final messages and does not render native/stdout copies
+twice. Tool activity and recorded session relationships remain identifiable.
+
+The transport uses ordinary completed PUT/GET objects on B2; no websocket relay,
+multipart Live Read, public bucket or child-agent storage credentials are needed.
+Polling is approximately one second while active, slower when idle and paused in
+hidden tabs. A roughly 1–3-second healthy update target requires live measurement.
+Invocation completion requires a flushed terminal record and all declared events;
+an absent tail remains unknown, even after disconnect. Invocation completion is
+not QRSPI phase approval. The exact Actions attempt link supports reconciliation.
+
+The view explicitly bounds inventory (100 locators), catch-up (8 chunks/pass),
+replay (64 MB), messages/tool calls/session relationships (1,000 each), and displayed transcript text
+(2 MB). It stops with an explicit incomplete-history error rather than silently
+truncating. Use an exact session link for large inventories. Private transcripts
+are not persisted in page-origin localStorage. Existing extension-owned S3 object
+caching still applies. Live steering and importing a remote session into the local
+agent are separate capabilities.
+
 ### Standalone transport POC
 
 1. `pnpm install --frozen-lockfile`, `pnpm run build`, `pnpm run hosted:build`.

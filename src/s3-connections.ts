@@ -90,6 +90,9 @@ export class S3Connections {
     const epoch = this.epoch;
     return this.serialize(async () => {
       const approved = (await this.store.all()).filter(record => record.hostedGrants.some(grant => matchesGrant(grant, document)));
+      // Public protocol information; data operations still require their own
+      // original-document grant. S3-only readers need no GitHub connection.
+      if (request.operation === 's3Capabilities') return { protocolVersion: 1, capabilities: ['s3AllowMissing'] };
       if (request.operation === 's3Connections') return approved.map(publicConnection);
       const record = approved.find(item => item.id === request.id);
       if (!record) throw new ConnectionError('S3 connection is not approved for the original document path.');
@@ -179,7 +182,8 @@ export class S3Connections {
       url.pathname += path.split('/').map(encodeURIComponent).join('/');
       if (request.operation === 's3Read') {
         if (request.versionId) url.searchParams.set('versionId', request.versionId);
-        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} });
+        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} }, request.allowMissing);
+        if (response.status === 404) { await response.body?.cancel(); return { key: path, missing: true as const }; }
         if (response.status === 304 && cached) return cached.result;
         const bytes = await boundedBytes(response, maxS3ObjectBytes);
         const result = { key: path, size: bytes.length, contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', base64: base64(bytes), etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined } satisfies S3Object;
@@ -196,14 +200,14 @@ export class S3Connections {
       return { key: path, size: bytes.length, etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined };
     }).then(value => { if (epoch !== this.epoch) throw new ConnectionError('S3 access changed during the request. Reconnect.'); return value; });
   }
-  private async send(record: S3ConnectionRecord, url: URL, init: RequestInit = {}) {
+  private async send(record: S3ConnectionRecord, url: URL, init: RequestInit = {}, allowMissing = false) {
     const client = new AwsClient({ accessKeyId: record.accessKeyId, secretAccessKey: record.secretAccessKey, sessionToken: record.sessionToken, service: 's3', region: record.region, retries: 0 });
     const signed = await client.sign(url, { ...init, aws: { allHeaders: true } });
     let response: Response;
     try { response = await this.fetcher(signed, { credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30000) }); }
     catch { throw new ConnectionError('S3 request failed or timed out. Check endpoint, region, credentials and browser host access.'); }
     const notModified = response.status === 304 && (!init.method || init.method === 'GET') && new Headers(init.headers).has('If-None-Match');
-    if (!response.ok && !notModified) {
+    if (!response.ok && !notModified && !(allowMissing && response.status === 404)) {
       await response.body?.cancel();
       if (response.status === 412) throw new ConnectionError('That object already exists. This connection does not permit replacement; choose another key.');
       if ([401, 403, 404].includes(response.status)) await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});

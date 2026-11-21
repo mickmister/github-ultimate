@@ -5,9 +5,10 @@ const id = z.string().uuid();
 const revision = z.string().uuid();
 const key = z.string().min(1).max(1024);
 export const s3HostedSchemas = [
+  z.object({ operation: z.literal('s3Capabilities') }).strict(),
   z.object({ operation: z.literal('s3Connections') }).strict(),
   z.object({ operation: z.literal('s3List'), id, revision, prefix: z.string().max(1024).optional(), continuationToken: z.string().max(8192).optional(), versions: z.boolean().optional(), cacheOnly: z.boolean().optional() }).strict(),
-  z.object({ operation: z.literal('s3Read'), id, revision, key, versionId: z.string().min(1).max(2000).optional(), cacheOnly: z.boolean().optional() }).strict(),
+  z.object({ operation: z.literal('s3Read'), id, revision, key, versionId: z.string().min(1).max(2000).optional(), cacheOnly: z.boolean().optional(), allowMissing: z.boolean().optional() }).strict(),
   z.object({ operation: z.literal('s3Upload'), id, revision, key, base64: z.string().max(Math.ceil(maxS3ObjectBytes / 3) * 4), contentType: z.string().min(1).max(200).regex(/^[\x20-\x7e]+$/).default('application/octet-stream') }).strict(),
   z.object({ operation: z.literal('s3Checkpoint'), id, revision, sessionId: z.string().uuid(), base64: z.string().max(Math.ceil(4 * 1024 * 1024 / 3) * 4) }).strict(),
 ] as const;
@@ -39,6 +40,7 @@ export type S3Configuration = z.infer<typeof s3ConfigurationSchema>;
 export type PublicS3Connection = Pick<S3Configuration, 'name' | 'endpoint' | 'region' | 'bucket' | 'addressing' | 'prefix' | 'allowRead' | 'allowUpload' | 'allowOverwrite'> & { id: string; revision: string; hostedGrants: { origin: string; subpath: string }[] };
 export type S3Listing = { objects: { key: string; size: number; etag?: string; versionId?: string }[]; continuationToken?: string };
 export type S3Object = { key: string; size: number; contentType: string; base64: string; etag?: string; versionId?: string };
+export type S3ReadResult = S3Object | { key: string; missing: true };
 export function backblaze(endpoint: string) { return new URL(endpoint).hostname.endsWith('.backblazeb2.com'); }
 export function checkpointReference(key: string, versionId?: string) { return versionId ? `${key}#versionId=${encodeURIComponent(versionId)}` : key; }
 

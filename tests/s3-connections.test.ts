@@ -44,6 +44,21 @@ async function connect() {
   await broker.handle({ operation: 'grantOrigin', id: record.id, origin, subpath: '/storage/' });
   return record;
 }
+test('live polling returns typed missing only for opt-in 404 and rechecks publication without masking access failures', async () => {
+  expect(await broker.handleHosted(documentURL, { operation: 's3Capabilities' })).toEqual({ protocolVersion: 1, capabilities: ['s3AllowMissing'] });
+  expect(await broker.handleHosted(documentURL, { operation: 's3Connections' })).toEqual([]);
+  const record = await connect(), key = 'workspace-a/chunks/000001.json';
+  const request = { operation: 's3Read', ...scope(record), key, allowMissing: true };
+  expect(await broker.handleHosted(documentURL, request)).toEqual({ key, missing: true });
+  objects.set(key, new TextEncoder().encode('{}'));
+  expect(await broker.handleHosted(documentURL, request)).toMatchObject({ key, base64: btoa('{}') });
+  objects.delete(key);
+  await expect(broker.handleHosted(documentURL, { ...request, allowMissing: false })).rejects.toThrow('404');
+  override = () => new Response('private details', { status: 403 });
+  await expect(broker.handleHosted(documentURL, request)).rejects.toThrow('403');
+  override = () => new Response('private details', { status: 503 });
+  await expect(broker.handleHosted(documentURL, request)).rejects.toThrow('503');
+});
 test('signs paginated list/read/upload requests, preserves literal object keys and never exposes credentials', async () => {
   const record = await connect();
   const listing = await broker.handleHosted(documentURL, { operation: 's3List', ...scope(record) }) as S3Listing;

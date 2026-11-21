@@ -11,4 +11,10 @@
 .agent-tablet-work { display: grid; grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 2fr); gap: 1rem; }
 .agent-desktop-work > *, .agent-tablet-work > * { min-width: 0; }
 .agent-phone details { margin-block: 1rem; }
+.agent-remote { margin-block: 1rem 2rem; padding-block: 1rem; border-block: 1px solid currentColor; min-width: 0; }
+.agent-remote a { display: inline-block; margin: .5rem; }
+.agent-remote-transcript { max-height: 32rem; overflow: auto; }
+.agent-remote-fields { display: grid; gap: .75rem; }
+.agent-desktop .agent-remote-fields { grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr) auto minmax(0, 2fr); align-items: end; }
+.agent-tablet .agent-remote-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .agent-tablet[data-orientation=portrait] .agent-tablet-work { grid-template-columns: minmax(11rem, 1fr) minmax(14rem, 2fr); }
