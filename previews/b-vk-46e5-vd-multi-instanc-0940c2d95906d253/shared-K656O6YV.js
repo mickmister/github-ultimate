@@ -1,0 +1,1 @@
+import{a as r}from"./shared-XMXA6AEG.js";import"./shared-MRGS7MNO.js";import"./shared-LZ2MU5YZ.js";import"./shared-LYLHBCEV.js";import"./shared-GN236C4S.js";function s(){return{request:e=>r(e),close(){}}}export{s as storageAdapter};
