@@ -20,7 +20,6 @@ const formSchema = z.object({
   id, title: text, goal: text.optional(), description: text.optional(),
   task_id: reference.optional(), session_id: reference.optional(), parent_task_id: reference.optional(),
   invalidatedAt: z.string().max(100).optional(), invalidatedReason: text.optional(),
-  allowCodeFileChanges: z.union([z.literal(false), z.object({ allowLabel: text.optional(), avoidLabel: text.optional(), label: text.optional(), description: text.optional(), defaultChecked: z.boolean().optional() }).strict()]).optional(),
   nextInstructionPresets: z.array(z.object({ label: text, value: text }).strict()).max(8).optional(),
   questions: z.array(question).min(1).max(60),
 }).strict().superRefine((form, ctx) => {
@@ -93,6 +92,9 @@ export function parseRecord(raw: string): RecordData {
     if (v && typeof v === 'object') for (const item of Object.values(v)) depth(item, n + 1);
   }
   depth(value);
+  // Historical pinned forms retain their original bytes. The retired authoring
+  // field is ignored on read; submission permission always belongs to the human.
+  if (value && typeof value === 'object' && 'format' in value && value.format === 'standard') delete (value as Record<string, unknown>).allowCodeFileChanges;
   const record = z.union([formSchema, snapshotSchema, responseSchema]).parse(value);
   if ('format' in record && instructions) record.description = [record.description, instructions].filter(Boolean).join('\n\n');
   return record;
@@ -142,7 +144,7 @@ export async function revisionOf(raw: string): Promise<string> {
 export function composeResponse(form: TaskForm, answers: Answers, source: { repository: string; number: number; comment_id: string; revision: string }, approved: boolean, options: { allowUnanswered?: boolean } = {}): string {
   const errors = validateAnswers(form, answers, options);
   if (errors.length) throw new Error(errors.join('\n'));
-  const allow = form.allowCodeFileChanges === false ? false : approved;
+  const allow = approved;
   const payload = {
     schema_version: 1, kind: 'response', response_id: `response-${crypto.randomUUID()}`,
     task_id: form.task_id ?? form.id, form_id: form.id, session_id: form.session_id ?? null,

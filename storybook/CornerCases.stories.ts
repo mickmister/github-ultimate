@@ -125,7 +125,6 @@ export const LongInstructionPresets: Story = {
   args: { width: 'phone', stage: 'review', source: json({
     ...form, id: 'long_presets', title: 'Eight long next-instruction presets',
     nextInstructionPresets: Array.from({ length: 8 }, (_, index) => ({ label: `Follow-up ${index + 1}: discuss compatibility and verification before starting the next implementation step`, value: `Discuss follow-up ${index + 1}.\nExplain compatibility risks and the verification plan before making changes.` })),
-    allowCodeFileChanges: { allowLabel: 'Approve the proposed next steps after reviewing all remaining compatibility concerns', avoidLabel: 'Continue discussing the unanswered questions before implementation', description: 'Long action labels should wrap instead of covering adjacent controls.' },
   }) },
 };
 

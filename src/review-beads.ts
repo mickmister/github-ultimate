@@ -3,7 +3,7 @@ import type { ReviewArtifact, ReviewPin } from './review-protocol.ts';
 
 // Beads keeps pointers and form-state mapping, never the authoritative answers.
 // Compare the attached standard DSL, not rendered HTML or a form ID alone.
-const formKeys = ['format', 'kind', 'version', 'id', 'title', 'goal', 'description', 'task_id', 'session_id', 'parent_task_id', 'invalidatedAt', 'invalidatedReason', 'allowCodeFileChanges', 'nextInstructionPresets', 'questions'];
+const formKeys = ['format', 'kind', 'version', 'id', 'title', 'goal', 'description', 'task_id', 'session_id', 'parent_task_id', 'invalidatedAt', 'invalidatedReason', 'nextInstructionPresets', 'questions'];
 export function attachedFormDSL(value: Record<string, unknown>) {
   const record = parseRecord(JSON.stringify(Object.fromEntries(formKeys.filter(key => value[key] !== undefined).map(key => [key, value[key]]))));
   if (!('format' in record)) throw new Error('Expected an attached standard form.');

@@ -230,7 +230,6 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
   const submissionControls = el('section', undefined, 'submission-controls'); submissionControls.append(next); htmlForm.append(submissionControls);
   const actions = el('div', undefined, 'actions submission-actions');
   actions.setAttribute('role', 'group'); actions.setAttribute('aria-label', 'Choose how to continue'); actions.tabIndex = -1;
-  const config = typeof form.allowCodeFileChanges === 'object' ? form.allowCodeFileChanges : undefined;
   const preview = el('section', undefined, 'preview'); preview.hidden = true;
   controller.isComposingResponse = () => !preview.hidden;
   const viewChanged = () => window.dispatchEvent(new Event('gu-view-change'));
@@ -247,10 +246,10 @@ export function renderForm(root: ShadowRoot, form: TaskForm, source: Source, isC
       preview.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     } catch (e) { errors.textContent = String(e); }
   }
-  if (form.allowCodeFileChanges !== false) actions.append(button(config?.allowLabel ?? config?.label ?? 'Approved for next steps', () => prepare(true), 'primary'));
-  actions.append(button(config?.avoidLabel ?? 'Continue discussion — don’t implement yet', () => prepare(false)));
+  actions.append(button('Approved for next steps', () => prepare(true), 'primary'));
+  actions.append(button('Continue discussion — don’t implement yet', () => prepare(false)));
   htmlForm.addEventListener('submit', event => { event.preventDefault(); prepare(false); });
-  submissionControls.append(errors, markdown(config?.description), actions); htmlForm.append(status);
+  submissionControls.append(errors, actions); htmlForm.append(status);
   preview.append(el('h3', 'Review your comment'), previewStatus, previewText);
   const previewActions = el('div', undefined, 'actions');
   previewActions.append(button('Place in GitHub comment editor', () => {

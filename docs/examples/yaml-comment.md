@@ -11,7 +11,6 @@ task_id: investigation_task
 session_id: session-demo
 title: A quick follow-up question
 goal: Continue the existing conversation
-allowCodeFileChanges: false
 questions:
   - type: textarea
     id: question

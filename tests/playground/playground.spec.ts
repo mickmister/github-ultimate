@@ -26,7 +26,7 @@ test('source edits validate, YAML forms render, and snapshots/saved responses ar
   await page.goto('/');
   await page.getByRole('button', { name: /Follow-up question/ }).click();
   await expect(page.getByRole('heading', { name: 'A quick follow-up question' })).toBeVisible();
-  await expect(page.getByRole('button', { name: 'Approved for next steps', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Approved for next steps', exact: true })).toBeVisible();
   const source = page.getByRole('textbox', { name: 'Frontmatter source' });
   await source.fill('format: standard\nid: editable\ntitle: My custom form\nquestions:\n  - id: note\n    type: textarea\n    title: My custom question');
   await page.getByRole('button', { name: 'Render source', exact: true }).click();

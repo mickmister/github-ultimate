@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseRecord, composeResponse, validateAnswers, revisionOf, safeLink } from '../src/protocol';
+import { parseRecord, composeResponse, validateAnswers, revisionOf, safeLink, type TaskForm } from '../src/protocol';
 import { readFileSync } from 'node:fs';
 import { choiceOptions } from '../src/choices';
 
@@ -88,8 +88,9 @@ describe('untrusted GitHub protocol', () => {
       expect(parseRecord(JSON.stringify(response))).toMatchObject({ kind: 'response', intent: approved ? 'approved-next-steps' : 'discussion' });
       expect(source.revision).toHaveLength(64);
     }
-    const readOnly = { ...parsed(), allowCodeFileChanges: false as const };
-    expect(composeResponse(readOnly, answers, source, true)).toContain('"allow_code_file_changes": false');
+    const historical = parseRecord(JSON.stringify({ ...parsed(), allowCodeFileChanges: false }));
+    expect(historical).not.toHaveProperty('allowCodeFileChanges');
+    expect(composeResponse(historical as TaskForm, answers, source, true)).toContain('"allow_code_file_changes": true');
   });
   it('allows private Tailscale HTTPS links and exact repository workflow links only', () => {
     expect(safeLink('https://runner.example.ts.net/', 'dashboard', 'owner/repo')).toBeTruthy();

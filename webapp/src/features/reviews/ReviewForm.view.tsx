@@ -4,6 +4,7 @@ import { choiceOptions } from '../../../../src/choices';
 import type { RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { ReviewCheckbox } from './ReviewCheckbox.view';
+import { reviewsCopy } from './Reviews.copy';
 import { AttachableContext } from '../feedback/AttachableContext';
 import type { FeedbackTarget } from '../feedback/contracts';
 
@@ -46,7 +47,7 @@ export function ReviewFormView({ form, answer, submitted, busy, onAnswer, onSubm
         {submissionNotice && <p>{submissionNotice}</p>}
       {!form.questions.some(question => question.id === 'additional_notes') && <label>Additional notes<textarea value={typeof answers.additional_notes === 'string' ? answers.additional_notes : ''} onChange={event => onAnswer({ ...answers, additional_notes: event.target.value }, intent)} /></label>}
       <label>Next instruction<textarea value={typeof answers.next_instruction === 'string' ? answers.next_instruction : ''} onChange={event => onAnswer({ ...answers, next_instruction: event.target.value }, intent)} /></label>
-      {form.allowCodeFileChanges !== false && <div>{form.allowCodeFileChanges?.description && <p>{form.allowCodeFileChanges.description}</p>}<ReviewCheckbox disabled={submitted || busy} checked={intent === 'approved-next-steps'} onChange={checked => onAnswer(answers, checked ? 'approved-next-steps' : 'discussion')} label={form.allowCodeFileChanges?.label ?? form.allowCodeFileChanges?.allowLabel ?? 'Allow code-file changes for these next steps'} /></div>}
+      <ReviewCheckbox disabled={submitted || busy} checked={intent === 'approved-next-steps'} onChange={checked => onAnswer(answers, checked ? 'approved-next-steps' : 'discussion')} label={reviewsCopy.allowCodeChanges.text} />
       {onNextForm ? <button type="button" onClick={onNextForm}>Go to next form</button> : onSubmitReview && <button type="button" onClick={onSubmitReview}>Submit full review</button>}
       <button type="submit">Submit just this form</button>
       </>}
