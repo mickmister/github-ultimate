@@ -95,5 +95,6 @@ test('direct session links, refresh, history and simulated tool reply need no ba
   const readme = manifest.files.find((entry: { path: string }) => entry.path === 'README.md');
   expect(await (await request.get(`${origin}${base}demo-files/f/${readme.asset}`)).text()).toContain('explicit public fixture list');
   expect(await (await request.get(`${origin}${base}PI_WEB_LICENSE.txt`)).text()).toContain('Copyright (c) 2026 agegr');
+  expect(await (await request.get(`${origin}${base}THIRD_PARTY_LICENSES.txt`)).text()).toContain('@earendil-works/pi-agent-core@1.5.2');
   expect(errors).toEqual([]); expect(sockets).toEqual([]); expect(api).toEqual([]);
 });

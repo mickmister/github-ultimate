@@ -5,6 +5,9 @@ The `pi-web/` application source is vendored from
 `432366bd510c72ce7b678a6cb1220f9cac1ed56c` (MIT, copyright 2026 agegr).
 The static demo retains that license at `pi-web/PI_WEB_LICENSE.txt` in the
 published preview. See `pi-web/UPSTREAM.md` for provenance and local changes.
+The optional browser inference runtime also bundles Pi 1.5.2 and its browser
+dependencies. Their complete license texts are included in
+`pi-web/THIRD_PARTY_LICENSES.txt` in the published preview.
 
 Runtime dependencies bundled in the extension:
 

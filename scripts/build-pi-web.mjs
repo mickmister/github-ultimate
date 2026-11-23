@@ -4,6 +4,7 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { payloadSize, previewDirectory } from './publish-hosted.mjs';
 import { build } from 'esbuild';
+import { bundleLicenses } from './bundle-licenses.mjs';
 
 export async function buildPiWeb(metadata, output = 'hosted-dist/pi-web') {
   const repository = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? 'github-ultimate';
@@ -15,7 +16,8 @@ export async function buildPiWeb(metadata, output = 'hosted-dist/pi-web') {
   await rm(output, { recursive: true, force: true });
   await mkdir(output, { recursive: true });
   await cp('pi-web/demo/out', output, { recursive: true });
-  await build({ entryPoints: ['hosted/pi-web-runtime.ts'], outfile: `${output}/extension-runtime.js`, bundle: true, format: 'esm', platform: 'browser', target: 'es2022', minify: true, sourcemap: false });
+  const runtime = await build({ entryPoints: ['hosted/pi-web-runtime.ts'], outfile: `${output}/extension-runtime.js`, bundle: true, format: 'esm', platform: 'browser', target: ['chrome120', 'safari16.4'], minify: true, sourcemap: false, metafile: true });
+  await writeFile(`${output}/THIRD_PARTY_LICENSES.txt`, await bundleLicenses(runtime.metafile));
   await cp('pi-web/LICENSE', `${output}/PI_WEB_LICENSE.txt`);
   await writeFile(`${output}/build.json`, JSON.stringify({ ...metadata, basePath: `${base}/`, demo: true, upstream: { repository: 'agegr/pi-web', commit: '432366bd510c72ce7b678a6cb1220f9cac1ed56c' } }) + '\n');
   if (await payloadSize(output) > 12 * 1024 * 1024) throw new Error('Pi Web demo exceeds its 12 MiB payload budget.');
