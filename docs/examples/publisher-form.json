@@ -6,7 +6,6 @@
   "title": "Form published by the CLI",
   "goal": "Verify form DSL can be posted without specifying the repository or PR",
   "description": "This is a manual publisher smoke test. The CLI resolved the current branch’s PR automatically, validated the form with the extension’s parser, and posted readable JSON. Repeating the command with the same submission ID reuses this comment. Optional feedback below is just example data; no workflow handler runs.",
-  "allowCodeFileChanges": false,
   "questions": [
     {
       "type": "textarea",

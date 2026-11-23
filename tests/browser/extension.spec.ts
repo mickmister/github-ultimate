@@ -320,8 +320,8 @@ test('YAML discussion-only forms permit multiple choices in authored single-choi
   await page.getByRole('checkbox', { name: 'All tests' }).check();
   await expect(page.getByRole('checkbox', { name: 'Unit tests' })).toBeChecked();
   await goReview(page);
-  // Only the first form has an approval action; the discussion-only form cannot approve.
-  await expect(page.getByRole('button', { name: 'Approved for next steps', exact: true })).toHaveCount(1);
+  // Historical form author restrictions no longer hide submission permission.
+  await expect(page.getByRole('button', { name: 'Approved for next steps', exact: true })).toHaveCount(2);
   await page.getByRole('button', { name: 'Open GitHub Ultimate workspace' }).click();
   const workspace = page.getByRole('complementary', { name: 'GitHub Ultimate PR workspace' });
   await expect(workspace).toBeVisible();

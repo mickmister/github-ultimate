@@ -88,7 +88,7 @@ export async function validateReviewArtifact(request: ReviewRequest, value: Revi
     if (member?.kind !== 'form' || member.bead_id !== answer.bead_id || member.form_id !== answer.form_id || !samePin(member.dsl, answer.dsl)) throw new Error('Form answer does not match the pinned form identity.');
     const form = parseRecord(await read(member.dsl));
     if (!('format' in form) || form.id !== member.form_id || form.task_id && form.task_id !== member.bead_id) throw new Error('Pinned DSL does not match its declared form/Bead.');
-    if (form.invalidatedAt || form.allowCodeFileChanges === false && answer.intent === 'approved-next-steps') throw new Error('This form cannot authorize code changes.');
+    if (form.invalidatedAt) throw new Error('This form has been invalidated.');
     const errors = validateAnswers(form, answer.answers, { allowUnanswered: value.kind === 'review-draft' });
     if (errors.length) throw new Error(errors.join('\n'));
   }

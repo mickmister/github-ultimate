@@ -11,7 +11,7 @@ these comments are output awaiting a human answer, not workflow requests. Preser
 the marker when publishing manually. Do not attach it to human `github-response`
 comments. This marker never grants execution authority.
 
-Required: `format: "standard"`, `id`, `title`, `questions`. `version` is 1 (default). Optional: `kind: "form"`, `goal`, `description`, `task_id`, `session_id`, `parent_task_id`, `invalidatedAt`, `invalidatedReason`, `allowCodeFileChanges`, `nextInstructionPresets`.
+Required: `format: "standard"`, `id`, `title`, `questions`. `version` is 1 (default). Optional: `kind: "form"`, `goal`, `description`, `task_id`, `session_id`, `parent_task_id`, `invalidatedAt`, `invalidatedReason`, `nextInstructionPresets`.
 
 IDs begin with a letter and contain letters, numbers, `_` or `-`, maximum 100 characters. IDs and generated answer names must be unique. `next_instruction` and `allow_code_file_changes` are reserved.
 
@@ -36,7 +36,7 @@ with multiple checkboxes selected.
 
 Forms with more than one question excluding `additional_notes` use a single-question wizard with direct navigation and final review. Requested answers can be skipped when no longer applicable. The UI passes `allowUnanswered: true` to validation/composition, records omissions, and still rejects invalid answer types and unknown options (the derived Other option is known). Protocol callers enforce requested answers by default unless they opt into the same behavior. Wizard position and values are local, scoped to the source revision, and shared by inline and zen views.
 
-`allowCodeFileChanges: false` exposes only discussion intent. Otherwise its optional object supports `allowLabel`, `avoidLabel`, `label`, `description`, `defaultChecked` (accepted for authoring compatibility, never grants implicit permission). Approval requires the explicit button action.
+Code-change permission belongs to the submission, not the form DSL. Every form offers discussion or permission for the described next steps. Permission defaults to off and requires an explicit human action; it does not itself approve a QRSPI artifact or bypass runner capabilities. The retired `allowCodeFileChanges` field is ignored when reading historical forms and is absent from parsed forms. Existing pinned bytes and saved responses are not rewritten.
 
 ## Response (`github-response`)
 

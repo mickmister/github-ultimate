@@ -1,4 +1,5 @@
 export const reviewsCopy = {
+  allowCodeChanges: { text: 'Allow code-file changes for these next steps', purpose: 'permission' },
   separator: { text: ' · ', purpose: 'label' },
   private: { text: ' · private', purpose: 'permission' },
   inbox: { text: 'Review inbox', purpose: 'heading' },

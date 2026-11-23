@@ -8,6 +8,30 @@ const orientations = [
 ] as const;
 
 for (const [surface, orientation, width, height] of orientations) {
+  test(`submission permission is explicit and persisted on ${surface} ${orientation}`, async ({ page }) => {
+    let state: ReviewFixtureState = { artifacts: [], revision: 1 };
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().method() === 'POST') state = route.request().postDataJSON();
+      await route.fulfill({ json: state });
+    });
+    await page.setViewportSize({ width, height });
+    await page.goto(`/iframe.html?id=web-app-reviews-detail-surfaces--${surface}-${orientation}&viewMode=story&remoteFixture=true`);
+    await page.getByRole('button', { name: 'Reader decisions', exact: true }).click();
+    await page.getByText('Keep this approach', { exact: true }).click();
+    while (await page.getByRole('button', { name: 'Next question', exact: true }).count()) await page.getByRole('button', { name: 'Next question', exact: true }).click();
+    await page.getByRole('button', { name: 'Continue to submission', exact: true }).click();
+    const permission = page.getByRole('checkbox', { name: 'Allow code-file changes for these next steps', exact: true });
+    await expect(permission).not.toBeChecked();
+    await page.getByText('Allow code-file changes for these next steps', { exact: true }).click();
+    await expect(permission).toBeChecked();
+    await page.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved remotely');
+    expect(state.artifacts.at(-1)!.value.forms[0].intent).toBe('approved-next-steps');
+    await page.getByRole('button', { name: 'Submit just this form', exact: true }).click();
+    await expect(page.getByLabel('Submission receipts')).toContainText('1 forms');
+    expect(state.artifacts.at(-1)!.value.forms[0].intent).toBe('approved-next-steps');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
   for (const region of ['inbox', 'detail']) {
     test(`${region} production ${surface} ${orientation}`, async ({ page }) => {
       await page.setViewportSize({ width, height });

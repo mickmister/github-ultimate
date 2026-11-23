@@ -4,12 +4,6 @@
   "version": 1,
   "title": "GitHub Ultimate — project direction and first milestone",
   "description": "Self-contained project intake. The three decision sections contain the research findings and tradeoffs; no repository browsing or separate report is needed. All choices are checkboxes. Select the options you want; where labels identify alternatives in one group, pick one preferred direction or explain your combination in the section notes. Leave uncertain groups unanswered and say what needs discussion.",
-  "allowCodeFileChanges": {
-    "allowLabel": "Submit and allow implementation of the agreed first slice",
-    "avoidLabel": "Submit for discussion only — avoid code/file changes",
-    "description": "This controls what the next agent may do after processing your response. Discussion-only means no code/file edits. Allowing implementation is not authorization to publish an extension, dispatch a paid agent job, change repository settings, or push commits. Those live operations must follow the execution policy you choose below.",
-    "defaultChecked": false
-  },
   "questions": [
     {
       "type": "choices",
