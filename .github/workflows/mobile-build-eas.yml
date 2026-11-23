@@ -5,7 +5,7 @@ on:
       platform:
         description: Platform to build
         type: choice
-        default: all
+        default: ios
         options: [all, android, ios]
       profile:
         description: EAS build profile
