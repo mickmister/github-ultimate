@@ -3,6 +3,7 @@ import { readFile, writeFile, mkdir, rm, cp } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import { previewDirectory, payloadSize, previewLimit } from './publish-hosted.mjs';
 import { compressEditorAssets } from './compress-editor-assets.mjs';
+import { buildPiWeb } from './build-pi-web.mjs';
 
 const metadata = {
   branch: process.env.GITHUB_REF_NAME ?? execFileSync('git', ['branch', '--show-current'], { encoding: 'utf8' }).trim(),
@@ -45,5 +46,6 @@ await cp('node_modules/apache-arrow/LICENSE.txt', 'hosted-dist/app/ARROW_LICENSE
 await cp('licenses/pi-MIT.txt', 'hosted-dist/app/PI_LICENSE.txt');
 await cp('node_modules/quickjs-wasi/LICENSE', 'hosted-dist/app/QUICKJS_LICENSE.txt');
 await cp('node_modules/diff/LICENSE', 'hosted-dist/app/DIFF_LICENSE.txt');
+await buildPiWeb(metadata);
 if (await payloadSize('hosted-dist') > previewLimit) throw new Error('Hosted pages exceed the branch preview payload limit.');
 console.log(`Built hosted page for ${metadata.branch} at ${metadata.sha}`);

@@ -1,5 +1,11 @@
 # Third-party notices
 
+The `pi-web/` application source is vendored from
+[`agegr/pi-web`](https://github.com/agegr/pi-web), commit
+`432366bd510c72ce7b678a6cb1220f9cac1ed56c` (MIT, copyright 2026 agegr).
+The static demo retains that license at `pi-web/PI_WEB_LICENSE.txt` in the
+published preview. See `pi-web/UPSTREAM.md` for provenance and local changes.
+
 Runtime dependencies bundled in the extension:
 
 | Package | License |

@@ -52,7 +52,7 @@ test('preview paths avoid branch slash/slug collisions and block oversized or li
   const root = await mkdtemp(join(tmpdir(), 'pages-size-'));
   try {
     await writeFile(join(root, 'huge.js'), 'x'.repeat(previewLimit + 1));
-    await expect(publishHosted({ remote: 'unused', source: root, output: join(root, 'output'), branch: 'main', sha: 'a'.repeat(40) })).rejects.toThrow('24 MiB');
+    await expect(publishHosted({ remote: 'unused', source: root, output: join(root, 'output'), branch: 'main', sha: 'a'.repeat(40) })).rejects.toThrow('36 MiB');
     await rm(join(root, 'huge.js')); await symlink('/etc/passwd', join(root, 'link'));
     await expect(payloadSize(root)).rejects.toThrow('regular files');
   } finally { await rm(root, { recursive: true, force: true }); }
@@ -88,7 +88,12 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   // Pi is an independently bundled optional page, not part of the legacy client.
   const piRedirect = await readFile('hosted-dist/pi.html', 'utf8');
   const piBytes = await payloadSize('hosted-dist/pi') + Buffer.byteLength(piRedirect);
-  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes).toBeLessThan(66 * 1024);
+  const demoBytes = await payloadSize('hosted-dist/pi-web');
+  expect(demoBytes).toBeLessThan(12 * 1024 * 1024);
+  const demoBuild = JSON.parse(await readFile('hosted-dist/pi-web/build.json', 'utf8'));
+  expect(demoBuild).toMatchObject({ branch: 'test/subpath', demo: true, basePath: `/github-ultimate/previews/${previewDirectory('test/subpath')}/pi-web/`, upstream: { repository: 'agegr/pi-web', commit: '432366bd510c72ce7b678a6cb1220f9cac1ed56c' } });
+  expect(html).toContain('href="./pi-web/"');
+  expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes - demoBytes).toBeLessThan(66 * 1024);
   expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);
   // The optional agent runtime and its licenses stay in a separately bounded
   // directory, never shared with pages that do not run an agent.

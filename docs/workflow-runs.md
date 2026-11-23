@@ -78,7 +78,7 @@ Pages publication also gzip-packs Mermaid and the lazy Monaco runtime/JSON
 modules. Editor ESM entry URLs remain stable; the packer rebases parsed imports
 and asset URLs before loading a local blob. It is restricted to those two editor
 modules, whose exported API objects/functions are stable, rather than wrapping
-arbitrary application exports. This preserves the combined app/Storybook 24 MiB
+arbitrary application exports. This preserves space within the combined preview's 36 MiB
 limit without CDN dependencies or requiring configurable HTTP encoding headers.
 
 After loading the buffers, DuckDB external access/extension autoloading is disabled
@@ -149,7 +149,7 @@ application surfaces, not physical-device keyboard or WebView acceptance.
 Required UI checks are `pnpm run lint:ui`, `pnpm run test:ui-policy`, and
 `pnpm run webapp:check`. The hosted build includes the integration branch's
 separate opt-in Pi page; the legacy payload check excludes its own files while
-retaining the existing 66 KiB legacy and 24 MiB overall preview limits.
+retaining the 66 KiB legacy and 36 MiB overall preview limits.
 
 Keep fixture truth independent of the production converter: the golden protobuf
 wire encoder hardcodes field numbers separately and expects exact span IDs,
