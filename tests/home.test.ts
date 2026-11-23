@@ -3,6 +3,7 @@ import { createHomeController } from '../webapp/src/features/home/Home.controlle
 import { createReviewFixture } from '../webapp/stories/reviews.fixtures';
 import { reviewHref } from '../webapp/src/features/reviews/navigation';
 import type { ConnectionDTO, DocumentsModuleV1 } from '../webapp/src/app-hooks/contracts';
+import { homeRequests } from '../webapp/src/features/home/Home.model';
 
 const connections: ConnectionDTO[] = [
   { id: 'a', installationId: 1, name: 'A', account: 'a' },
@@ -24,6 +25,22 @@ function fixture() {
   return hooks;
 }
 describe('Reviews Home sources', () => {
+  it('orders by creation time rather than title and puts undated legacy requests last', async () => {
+    const hooks = fixture(), controller = createHomeController(hooks);
+    await controller.actions.connect(); await flush();
+    const state = controller.getSnapshot(), source = state.sources.find(source => source.listing)!;
+    const review = source.listing!.requests[0];
+    const requests = [
+      { ...review, request: { ...review.request, request_id: 'old', title: 'A old', created_at: '2026-01-01T00:00:00Z' } },
+      { ...review, request: { ...review.request, request_id: 'legacy', title: 'A legacy', created_at: undefined } },
+      { ...review, request: { ...review.request, request_id: 'new', title: 'Z new', created_at: '2026-11-01T00:00:00Z' } },
+    ];
+    const rows = homeRequests({ ...state, sources: [{ ...source, listing: { ...source.listing!, requests } }] });
+    expect(rows.map(row => row.review.request.request_id)).toEqual(['new', 'old', 'legacy']);
+    const otherReviewer = homeRequests({ ...state, sources: [{ ...source, listing: { ...source.listing!, requests, reviewer: 'github:999' } }] });
+    expect(otherReviewer[0].key).not.toBe(rows[0].key);
+    controller.dispose();
+  });
   it('aggregates approved connections and document workspaces without opening bodies; links exact scope and pins', async () => {
     const hooks = fixture(), controller = createHomeController(hooks);
     await controller.actions.connect(); await flush();

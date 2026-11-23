@@ -18,6 +18,7 @@ export const reviewRequestSchema = z.object({
   thread: resource, title: z.string().min(1).max(1000), purpose: z.string().min(1).max(16000),
   question: z.string().min(1).max(16000), status: z.enum(['draft', 'published', 'withdrawn']),
   change_kind: z.enum(['proposal', 'implemented', 'mixed']), previous_request: key.optional(),
+  created_at: z.string().datetime().optional(),
   process: z.object({ kind: z.literal('qrspi'), id: key, workspace_ref: z.string().min(1).max(1000), thread_id: resource, config: reviewPinSchema }).strict().optional(),
   response_effect: z.object({ kind: z.literal('vk-session'), workspace_id: z.string().uuid(), session_id: z.string().uuid() }).strict().optional(),
   members: z.array(reviewMemberSchema).min(1).max(64),
