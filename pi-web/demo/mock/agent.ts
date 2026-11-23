@@ -36,7 +36,7 @@ import { settings } from "./settings-state";
 
 const streams = new Map<string, Set<MockEventSource>>();
 
-function emit(sessionId: string, event: Record<string, unknown>): void {
+export function emit(sessionId: string, event: Record<string, unknown>): void {
   for (const source of streams.get(sessionId) ?? []) source.send(event);
 }
 
@@ -96,6 +96,8 @@ function lastAssistantUsage(session: MockSession): number | null {
 }
 
 async function systemPromptFor(session: MockSession): Promise<string> {
+  const browser = browserSessions.get(session.id);
+  if (browser) return browser.systemPrompt;
   const toolNames = readSessionToolSelectionFromEntries(session.entries);
   if (toolNames && toolNames.length === 0) return "";
   const root = projectRootFor(session.cwd);
@@ -112,7 +114,7 @@ async function systemPromptFor(session: MockSession): Promise<string> {
 export async function agentState(session: MockSession) {
   const live = ensureLive(session);
   const tokens = lastAssistantUsage(session);
-  const contextWindow = contextWindowFor(live.model.provider, live.model.modelId);
+  const contextWindow = browserSessions.has(session.id) ? 32768 : contextWindowFor(live.model.provider, live.model.modelId);
   return {
     sessionId: session.id,
     sessionFile: "",
@@ -137,6 +139,7 @@ export async function agentState(session: MockSession) {
 }
 
 export function toolsFor(session: MockSession) {
+  if (browserSessions.has(session.id)) return [];
   const pinned = readSessionToolSelectionFromEntries(session.entries);
   const defaults = new Set(["read", "bash", "edit", "write", "Agent", "get_subagent_result", "steer_subagent"]);
   return toolsCatalog
@@ -340,10 +343,19 @@ async function runPrompt(session: MockSession, text: string): Promise<void> {
 
 export type CommandResult = { ok: true; data: unknown } | { ok: false; status: number; error: string; extra?: Record<string, unknown> };
 
+// Real browser sessions supply their own command handler. Never let their
+// prompts, shell commands or model changes fall through to the canned backend.
+const browserSessions = new Map<string, { command: (command: Record<string, unknown>) => Promise<CommandResult>; systemPrompt: string }>();
+export function registerBrowserSession(id: string, handler: (command: Record<string, unknown>) => Promise<CommandResult>, systemPrompt: string) {
+  browserSessions.set(id, { command: handler, systemPrompt });
+}
+
 const ok = (data: unknown = null): CommandResult => ({ ok: true, data });
 const fail = (error: string, status = 400, extra?: Record<string, unknown>): CommandResult => ({ ok: false, status, error, extra });
 
 export async function runAgentCommand(session: MockSession, command: Record<string, unknown>): Promise<CommandResult> {
+  const browser = browserSessions.get(session.id);
+  if (browser) return browser.command(command);
   const live = ensureLive(session);
   switch (command.type) {
     case "prompt": {

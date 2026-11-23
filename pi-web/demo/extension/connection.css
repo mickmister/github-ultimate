@@ -1,0 +1,5 @@
+.pi-web-extension-host > div { height: calc(var(--app-viewport-height, 100dvh) - 100px) !important; }
+.extension-connection { position: fixed; bottom: 0; left: 0; right: 0; z-index: 100; height: 100px; box-sizing: border-box; overflow: auto; padding: 6px 12px max(6px, env(safe-area-inset-bottom)); background: var(--bg-panel); color: var(--text); border-top: 1px solid var(--border); font: 12px system-ui; }
+.extension-connection-controls { display: flex; flex-wrap: wrap; gap: 6px; }
+.extension-connection button, .extension-connection select { padding: 5px 8px; max-width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 4px; }
+.extension-connection p { margin: 4px 0 0; }

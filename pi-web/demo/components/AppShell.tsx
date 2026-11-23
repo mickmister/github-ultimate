@@ -80,7 +80,7 @@ function parkedNewSessionDraftKey(cwd: string): string {
   return `parked-new:${cwd}`;
 }
 
-export function AppShell() {
+export function AppShell({ openSession }: { openSession?: { id: string } } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [initialNavigation, setInitialNavigation] = useState(() => getInitialNavigation(searchParams));
@@ -865,6 +865,13 @@ export function AppShell() {
       console.error("[pi-web] failed to open session:", error instanceof Error ? error.message : error);
     }
   }, [handleSelectSession, sessionCatalog]);
+
+  const handledOpenSession = useRef<typeof openSession>(undefined);
+  useEffect(() => {
+    if (!openSession || handledOpenSession.current === openSession) return;
+    handledOpenSession.current = openSession;
+    void handleOpenSession(openSession.id);
+  }, [openSession, handleOpenSession]);
 
   // Called by ChatWindow when a new session gets its real id from pi
   const handleSessionCreated = useCallback((session: SessionInfo, sourceDraftKey: string) => {

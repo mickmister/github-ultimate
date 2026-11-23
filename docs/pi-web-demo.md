@@ -37,8 +37,41 @@ MIT license. The demo has a 12 MiB budget within the 36 MiB branch-preview and
 
 ## Demo behavior
 
+### Real browser Pi session through the extension
+
+1. In the browser extension's Connections settings, configure an inference
+   connection using an OpenAI-compatible chat-completions endpoint, model and
+   required headers. Existing connections can be reused.
+2. Grant that connection access to origin `https://mickmister.github.io` and subpath
+   `/github-ultimate/previews/b-vk-46e5-vd-multi-instanc-0940c2d95906d253/pi-web/`.
+   A grant for the sibling `app/` page does not cover `pi-web/`.
+3. Reload Pi Web after granting access. Click **Connect inference**, select the
+   connection, then **New real Pi session**. Send a text prompt in the chat.
+4. Continue in that session for follow-up turns. **Open real session** returns to
+   the most recently created real session after browsing the sample chats.
+
+The real session uses the existing Pi 1.5.2 agent core and extension inference
+transport. The extension retains provider URLs and credential headers; the page
+receives only connection metadata and responses. Stop cancels the inference
+request. Provider errors are displayed without falling back to canned replies.
+The current transport returns a complete response, not token-by-token streaming.
+
+Real sessions are text-only and stay in memory in this tab. Reloading or closing
+the page loses them. They do not require GitHub or S3 connections. Shell, files,
+model changes, branching and compaction are not supported in these sessions;
+unsupported commands are rejected instead of invoking the demo simulator.
+The displayed project files and other sample sessions remain demonstration data.
+
+The separate `extension-runtime.js` bundle is built from the parent pnpm graph,
+so the Next demo does not install a second Pi runtime or require a Node server.
+Browser tests exercise the packaged extension, real Pi agent and private-header
+broker with a controlled provider fixture. They do not establish acceptance
+against a user's configured external provider.
+
+### Sample sessions
+
 Sessions, model accounts, tool calls and responses are simulated in the browser.
-No provider, Pi process, shell, Git checkout or private storage is contacted.
+In sample sessions, no provider, Pi process, shell, Git checkout or private storage is contacted.
 The upstream demo supports in-memory prompts, branches, files and terminal-like
 responses. This does not demonstrate real agent execution or durable recovery.
 

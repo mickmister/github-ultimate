@@ -13,9 +13,11 @@ The initial integration publishes only `demo/` as a static browser application. 
 - `demo/fixtures/` supplies the public file list and a local welcome document.
 - The parent repository's `scripts/build-pi-web.mjs` supplies the complete branch-preview base path, copies the static export, includes provenance/license/build metadata, and enforces the demo payload budget.
 - The parent build and browser tests publish and exercise the demo alongside the existing application.
+- `demo/app/DemoRoot.tsx`, `demo/components/AppShell.tsx` and `demo/extension/` add an extension connection bar and explicit session selection. `demo/mock/agent.ts` dispatches registered real sessions to their own handler, with actual system prompt, empty tool list and no simulator fallback.
+- The parent `hosted/pi-web-runtime.ts` is built separately with Pi 1.5.2 and the existing extension transport. It supports real text conversations and cancellation without moving credentials into the page.
 
-The upstream demo duplicates selected production UI files; its package/dependency versions can differ from the production package. Simulated streaming, file edits, branching and terminal responses are demo behavior. This build does not run Pi inference or persist workspaces.
+The upstream demo duplicates selected production UI files; its package/dependency versions can differ from the production package. Sample sessions still simulate streaming, file edits, branching and terminal responses. Explicitly created extension sessions run real browser Pi inference and are memory-only, text-only sessions. This build does not persist workspaces.
 
 ## Updating
 
-Review a new exact upstream commit and its license/dependency changes. Compare it with the pin above, update the imported tracked source, and reapply only the local changes listed here. Preserve the public fixture allowlist, nested-base configuration and demo-only boundary. Run the parent demo build, upstream demo lint/typecheck, and nested-path browser tests before publishing. Record the new pin and changed local paths here.
+Review a new exact upstream commit and its license/dependency changes. Compare it with the pin above, update the imported tracked source, and reapply only the local changes listed here. Preserve the public fixture allowlist, nested-base configuration and separation between simulated samples and real extension sessions. Run the parent demo build, upstream demo lint/typecheck, and nested-path browser tests before publishing. Record the new pin and changed local paths here.
