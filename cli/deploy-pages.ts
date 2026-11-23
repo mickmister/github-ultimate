@@ -5,7 +5,7 @@ import { resolve } from 'node:path';
 type Deployment = { id: string; page_url: string };
 export async function deployPages(env: NodeJS.ProcessEnv, fetcher: typeof fetch = fetch, pause = (ms: number) => new Promise<void>(done => setTimeout(done, ms))) {
   const repository = env.GITHUB_REPOSITORY, sha = env.GITHUB_SHA, artifact = env.PAGES_ARTIFACT_ID;
-  if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') || !/^[a-f0-9]{40}$/.test(sha ?? '') || !/^\d+$/.test(artifact ?? '') || !env.GITHUB_TOKEN || !env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) throw Error('Missing repository-scoped Pages deployment configuration.');
+  if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '') || !/^[a-f0-9]{40}$/.test(sha ?? '') || !/^[1-9]\d*$/.test(artifact ?? '') || !Number.isSafeInteger(Number(artifact)) || !env.GITHUB_TOKEN || !env.ACTIONS_ID_TOKEN_REQUEST_URL || !env.ACTIONS_ID_TOKEN_REQUEST_TOKEN) throw Error('Missing repository-scoped Pages deployment configuration.');
   // Tokens remain in request headers/bodies, never command arguments or logs.
   const oidc = await fetcher(env.ACTIONS_ID_TOKEN_REQUEST_URL, { headers: { Authorization: `Bearer ${env.ACTIONS_ID_TOKEN_REQUEST_TOKEN}` }, signal: AbortSignal.timeout(15000), redirect: 'error' });
   if (!oidc.ok) throw Error(`Pages OIDC request failed (HTTP ${oidc.status}).`);
@@ -15,7 +15,7 @@ export async function deployPages(env: NodeJS.ProcessEnv, fetcher: typeof fetch 
   const headers = { Authorization: `Bearer ${env.GITHUB_TOKEN}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'Content-Type': 'application/json' };
   // Use the uploader's exact ID. Artifact-service listing can lag behind the
   // completed upload even when the repository REST API already shows the file.
-  const created = await fetcher(endpoint, { method: 'POST', headers, body: JSON.stringify({ artifact_id: artifact, pages_build_version: sha, oidc_token: value }), signal: AbortSignal.timeout(15000), redirect: 'error' });
+  const created = await fetcher(endpoint, { method: 'POST', headers, body: JSON.stringify({ artifact_id: Number(artifact), pages_build_version: sha, oidc_token: value }), signal: AbortSignal.timeout(15000), redirect: 'error' });
   if (!created.ok) throw Error(`Pages deployment creation failed (HTTP ${created.status}).`);
   const deployment = await created.json() as Deployment;
   if (!/^[\w-]+$/.test(String(deployment.id)) || typeof deployment.page_url !== 'string') throw Error('Pages deployment response is invalid.');

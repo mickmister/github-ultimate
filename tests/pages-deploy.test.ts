@@ -9,7 +9,7 @@ test('Pages deployment uses the exact upload ID and OIDC without an artifact lis
   }) as typeof fetch, async () => {});
   expect(result).toEqual({ page_url: 'https://example.github.io/app/', deployment_id: '123-456' });
   expect(calls.map(call => call.url)).toEqual(['https://oidc.example/token', 'https://api.github.com/repos/owner/repo/pages/deployments', 'https://api.github.com/repos/owner/repo/pages/deployments/123-456', 'https://api.github.com/repos/owner/repo/pages/deployments/123-456']);
-  expect(JSON.parse(calls[1].init!.body as string)).toEqual({ artifact_id: '123', pages_build_version: 'a'.repeat(40), oidc_token: 'private-oidc' });
+  expect(JSON.parse(calls[1].init!.body as string)).toEqual({ artifact_id: 123, pages_build_version: 'a'.repeat(40), oidc_token: 'private-oidc' });
   expect(JSON.stringify(result)).not.toMatch(/private-/);
 });
 
