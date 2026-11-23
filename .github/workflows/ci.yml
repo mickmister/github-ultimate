@@ -24,12 +24,13 @@ jobs:
       contents: read
       actions: read
     steps:
-      - name: Observe build
-        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
-        timeout-minutes: 2
-        with:
-          profile: ${{ inputs.observability-profile || 'light' }}
-          service-name: github-ultimate-assets
+      # Disabled: this shared setup starts both CargoWall and Thoth/OTel.
+      # - name: Observe build
+      #   uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
+      #   timeout-minutes: 2
+      #   with:
+      #     profile: ${{ inputs.observability-profile || 'light' }}
+      #     service-name: github-ultimate-assets
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -44,6 +45,8 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-12-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-12-
       - run: pnpm install --frozen-lockfile --prefer-offline
+      - name: Install pinned Pi Web static demo dependencies
+        run: pnpm run pi-web:install
       - run: pnpm run check
       - run: pnpm run webapp:check
       - run: pnpm run lint:tsx-view-boundary
@@ -87,17 +90,17 @@ jobs:
           name: safari-webextension-resources
           path: dist-safari/
           if-no-files-found: error
-      # CargoWall syncs each event to disk. Snapshot before post-job summaries.
-      - name: Preserve job network audit
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: cargowall-${{ github.job }}-${{ strategy.job-index || '0' }}-${{ github.run_attempt }}
-          path: |
-            /tmp/cargowall-audit.json
-            /tmp/cargowall.log
-          retention-days: 7
-          if-no-files-found: warn
+      # Disabled: do not publish network diagnostics as Actions artifacts.
+      # - name: Preserve job network audit
+      #   if: always()
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      #   with:
+      #     name: cargowall-${{ github.job }}-${{ strategy.job-index || '0' }}-${{ github.run_attempt }}
+      #     path: |
+      #       /tmp/cargowall-audit.json
+      #       /tmp/cargowall.log
+      #     retention-days: 7
+      #     if-no-files-found: warn
   browser:
     needs: build
     runs-on: ubuntu-24.04
@@ -119,13 +122,16 @@ jobs:
             browsers: chromium
           - suite: webapp-storybook
             browsers: chromium webkit
+          - suite: pi-web
+            browsers: chromium webkit
     steps:
-      - name: Observe browser tests
-        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
-        timeout-minutes: 2
-        with:
-          profile: ${{ inputs.observability-profile || 'light' }}
-          service-name: github-ultimate-browser
+      # Disabled: this shared setup starts both CargoWall and Thoth/OTel.
+      # - name: Observe browser tests
+      #   uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
+      #   timeout-minutes: 2
+      #   with:
+      #     profile: ${{ inputs.observability-profile || 'light' }}
+      #     service-name: github-ultimate-browser
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -179,16 +185,17 @@ jobs:
           name: browser-evidence-${{ matrix.suite }}
           path: test-results/
           if-no-files-found: ignore
-      - name: Preserve job network audit
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: cargowall-${{ github.job }}-${{ strategy.job-index }}-${{ github.run_attempt }}
-          path: |
-            /tmp/cargowall-audit.json
-            /tmp/cargowall.log
-          retention-days: 7
-          if-no-files-found: warn
+      # Disabled: do not publish network diagnostics as Actions artifacts.
+      # - name: Preserve job network audit
+      #   if: always()
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      #   with:
+      #     name: cargowall-${{ github.job }}-${{ strategy.job-index }}-${{ github.run_attempt }}
+      #     path: |
+      #       /tmp/cargowall-audit.json
+      #       /tmp/cargowall.log
+      #     retention-days: 7
+      #     if-no-files-found: warn
   verify:
     if: always() && github.event_name != 'delete'
     needs: [build, browser]
@@ -269,12 +276,13 @@ jobs:
       name: github-pages
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
-      - name: Observe Pages publication
-        uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
-        timeout-minutes: 2
-        with:
-          profile: ${{ inputs.observability-profile || 'light' }}
-          service-name: github-ultimate-pages
+      # Disabled: this shared setup starts both CargoWall and Thoth/OTel.
+      # - name: Observe Pages publication
+      #   uses: mickmister/gh-agentic-workflows/.github/actions/observability@acdc7da684d404e9ce712a8c19dd7744eaad5266
+      #   timeout-minutes: 2
+      #   with:
+      #     profile: ${{ inputs.observability-profile || 'light' }}
+      #     service-name: github-ultimate-pages
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -325,13 +333,14 @@ jobs:
           }
           appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${statuses.map(({ context, url }) => `[${context}](${url})`).join(' · ')}\n`);
           NODE
-      - name: Preserve Pages network audit
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        with:
-          name: cargowall-pages-${{ github.run_attempt }}
-          path: |
-            /tmp/cargowall-audit.json
-            /tmp/cargowall.log
-          retention-days: 7
-          if-no-files-found: warn
+      # Disabled: do not publish network diagnostics as Actions artifacts.
+      # - name: Preserve Pages network audit
+      #   if: always()
+      #   uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+      #   with:
+      #     name: cargowall-pages-${{ github.run_attempt }}
+      #     path: |
+      #       /tmp/cargowall-audit.json
+      #       /tmp/cargowall.log
+      #     retention-days: 7
+      #     if-no-files-found: warn

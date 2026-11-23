@@ -1,0 +1,12 @@
+[
+  { "path": "README.md", "source": "demo/fixtures/README.md" },
+  { "path": "LICENSE" },
+  { "path": "package.json" },
+  { "path": "components/AppShell.tsx" },
+  { "path": "components/ChatInput.tsx" },
+  { "path": "components/MessageView.tsx" },
+  { "path": "components/SessionSidebar.tsx" },
+  { "path": "bin/pi-web-options.js" },
+  { "path": "lib/types.ts" },
+  { "path": "demo/README.md" }
+]

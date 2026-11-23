@@ -206,7 +206,7 @@ not publish.
 - Publish only `hosted-dist/`, including the mock-data React Storybook: no
   node_modules, extension ZIPs, source maps, build-machine diagnostics, private
   results, credentials or browser recordings.
-- Maximum 24 MiB per build (app + Storybook and their local Monaco editor/workers)
+- Maximum 36 MiB per build (app + Storybook + Pi Web demo and their local assets)
   and 50 MiB for the assembled site. Oversize publication
   fails before pushing, preserving the existing site.
 - Hosted build and Pages deployment artifacts expire after one day.
