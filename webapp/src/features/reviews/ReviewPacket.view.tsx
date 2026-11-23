@@ -6,6 +6,7 @@ import { ReviewMemberContent } from './ReviewMemberContent';
 import type { ReviewDocumentZen } from './contracts';
 import { ReviewsDetailPresentation } from './ReviewsDetail.presentation';
 import { reviewsCopy as copy } from './Reviews.copy';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 export function ReviewPacketView({ scope, review, listing, service, refresh, updateListing, error, contentsCache, contents, selected, onSelect, documentZen }: ReviewPacketProps & {
   contentsCache: ReturnType<typeof createReviewContents>; contents: ReviewContents; selected: string; onSelect(id: string): void;
@@ -15,7 +16,7 @@ export function ReviewPacketView({ scope, review, listing, service, refresh, upd
   const member = review.request.members.find(item => item.id === selected)!;
   return <section aria-label={copy.preview.text}>
     <header className="review-summary"><p>{review.request.purpose}</p><p><strong>{copy.requested.text}</strong> {review.request.question}</p>
-      <p role="status">{copy.restoring.text}</p>
+      {!error && <LoadingIndicator compact label={copy.restoring.text} />}
       {error && <button type="button" onClick={refresh}>{copy.retryRestoration.text}</button>}
     </header>
     <div className="review-layout review-detail-layout"><div className="review-navigator"><ReviewsDetailPresentation review={review} selected={selected} onSelect={onSelect} progress={[]} submitted={new Set()} /></div>

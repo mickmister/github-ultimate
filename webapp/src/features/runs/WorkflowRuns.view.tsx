@@ -7,6 +7,7 @@ import type { QueryResult } from './query-engine';
 import { jobTiming } from '../../../../src/actions-protocol';
 import { runsHref } from './navigation';
 import { copy } from './WorkflowRuns.copy';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 export { WorkflowRunsPresentation as WorkflowRunsView } from './WorkflowRuns.presentation';
 
 export interface WorkflowRunsProps {
@@ -34,7 +35,7 @@ export function RunsWorkspace(p: WorkflowRunsProps) {
   </form>;
 }
 export function RunsStatus(p: WorkflowRunsProps) {
-  return <>{p.error && <p role="alert">{p.error}</p>}{p.busy && <p role="status">{copy.loading}</p>}{p.inventory && <details><summary>{copy.provenance}</summary><code>{[p.inventory.snapshot, p.inventory.workspaceRef].filter(Boolean).join(' · ')}</code>{p.inventory.notices.map(item => <p key={item}>{item}</p>)}</details>}</>;
+  return <>{p.error && <p role="alert">{p.error}</p>}{p.busy && <LoadingIndicator compact={Boolean(p.inventory)} label={copy.loading} />}{p.inventory && <details><summary>{copy.provenance}</summary><code>{[p.inventory.snapshot, p.inventory.workspaceRef].filter(Boolean).join(' · ')}</code>{p.inventory.notices.map(item => <p key={item}>{item}</p>)}</details>}</>;
 }
 export function RunsList(p: WorkflowRunsProps) {
   if (!p.inventory) return null;
@@ -66,7 +67,7 @@ export function RunsOutputs(p: WorkflowRunsProps) {
 export function RunsTelemetry(p: WorkflowRunsProps) {
   const { actions, dataset } = p, pointer = p.selected?.pointers.find(item => item.github_job_instance === p.job);
   return <section aria-label={copy.telemetryLabel}><h3>{copy.telemetry}</h3><details><summary>{copy.provenance}</summary><p>{copy.telemetryLimits}</p></details><div className="connection-fields"><label>{copy.s3}<select value={p.s3Id} onChange={event => actions.setS3(event.target.value)}><option value="">{copy.chooseS3}</option>{p.s3.map(item => <option key={item.id} value={item.id}>{[item.name, item.bucket, item.prefix].join(' · ')}</option>)}</select></label><label>{copy.job}<select value={p.job} onChange={event => actions.setJob(event.target.value)}>{p.selected?.pointers.map(item => <option key={item.github_job_instance}>{item.github_job_instance}</option>)}</select></label><button onClick={actions.loadTelemetry} disabled={p.busy || p.queryBusy || !p.s3Id || !pointer}>{copy.loadTelemetry}</button><button disabled={!p.queryBusy && !dataset} onClick={actions.cancel}>{copy.cancel}</button></div>
-    {!p.s3.length && <p>{copy.noS3}</p>}{p.queryBusy && <p role="status">{copy.queryLoading}</p>}
+    {!p.s3.length && <p>{copy.noS3}</p>}{p.queryBusy && <LoadingIndicator compact label={copy.queryLoading} />}
     {dataset && <><p>{dataset.signals.join(', ')}</p>{dataset.warnings.map(item => <p key={item}>{item}</p>)}<details><summary>{copy.tables}</summary><ul>{Object.entries(dataset.tables).map(([name, rows]) => <li key={name}><button disabled={!rows.length} onClick={() => actions.setQuery(`SELECT * FROM ${name} LIMIT 20`)}>{name}</button><span>{rows.length}</span><code>{rows.length ? Object.keys(rows[0]).join(', ') : null}</code></li>)}</ul></details><div className="run-query"><label htmlFor="workflow-run-sql">{copy.sql}</label><textarea id="workflow-run-sql" rows={6} spellCheck={false} value={p.query} onChange={event => actions.setQuery(event.target.value)} /></div><button disabled={p.queryBusy} onClick={actions.runQuery}>{copy.runQuery}</button></>}
     {p.result && <div className="run-results"><output>{p.result.rows.length}</output>{p.result.truncated && <p>{copy.truncated}</p>}<table><thead><tr>{p.result.columns.map((column, index) => <th key={index}>{column}</th>)}</tr></thead><tbody>{p.result.rows.map((row, index) => <tr key={index}>{row.map((cell, col) => <td key={col}>{cell}</td>)}</tr>)}</tbody></table></div>}
   </section>;

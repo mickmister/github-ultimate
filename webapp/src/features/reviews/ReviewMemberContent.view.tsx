@@ -11,11 +11,12 @@ import { ReviewCheckbox } from './ReviewCheckbox.view';
 import { reviewTarget } from './model';
 import { submissionNotice } from './submission-notice';
 import type { ReviewMemberContentProps } from './ReviewMemberContent';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 interface Props extends ReviewMemberContentProps { content: string | null; baseline: string | null; form: TaskForm | null; error: string; baselineError: string; mode: 'full' | 'baseline' | 'changes'; setMode(mode: 'full' | 'baseline' | 'changes'): void }
 export function ReviewMemberContentView({ scope, review, member, answer, submitted, busy, preview, onAnswer, onSubmit, onNextForm, onSubmitReview, onSaveDraft, formStatus, reviewed, onReviewed, content, baseline, form, error, baselineError, mode, setMode, documentZen }: Props) {
   if (error) return <p role="alert">{error}</p>;
-  if (content === null) return <p role="status">Loading {member.label}…</p>;
+  if (content === null) return <LoadingIndicator label={`Loading ${member.label}…`} />;
   if (member.kind === 'form' && form) return <ReviewForm form={form} answer={answer} submitted={submitted} busy={busy} onAnswer={onAnswer} onSubmit={onSubmit} onNextForm={onNextForm} onSubmitReview={onSubmitReview} onSaveDraft={onSaveDraft} formStatus={formStatus} submissionNotice={submissionNotice(review.request)} feedbackTarget={preview ? undefined : reviewTarget(scope, review, member, 'rendered-form')} />;
   if (member.kind !== 'document') return null;
   const markdown = isMarkdown(member.target.resource);
@@ -26,7 +27,7 @@ export function ReviewMemberContentView({ scope, review, member, answer, submitt
   </div><div role="group" aria-label="Document comparison view"><button aria-pressed={mode === 'full'} onClick={() => setMode('full')}>Full document</button>
     {member.baseline && <><button aria-pressed={mode === 'changes'} onClick={() => setMode('changes')}>Changes</button><button aria-pressed={mode === 'baseline'} onClick={() => setMode('baseline')}>Baseline</button></>}</div>
     <details><summary>Item details</summary><code>{member.target.resource}</code></details>
-    {mode !== 'full' && (baselineError ? <p role="alert">{baselineError}</p> : baseline === null ? <p role="status">Loading pinned baseline…</p> : mode === 'changes'
+    {mode !== 'full' && (baselineError ? <p role="alert">{baselineError}</p> : baseline === null ? <LoadingIndicator label="Loading pinned baseline…" /> : mode === 'changes'
       ? <DocumentChanges path={member.target.resource} before={baseline} after={content} />
       : markdown ? <MarkdownDocument content={baseline} /> : <MonacoDocument path={member.baseline!.resource} content={baseline} />)}
     {mode === 'full' && (preview ? markdown ? <MarkdownDocument content={content} /> : <MonacoDocument path={member.target.resource} content={content} /> : <AttachableContext target={target}><FeedbackAnnotations target={target}>

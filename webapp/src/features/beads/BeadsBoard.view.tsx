@@ -4,6 +4,7 @@ import { text, detailTabIndex } from './board';
 import { copy, openLabel, detailsLabel, priorityLabel, countLabel, pageLabel } from './Beads.copy';
 import '@svar-ui/react-kanban/style.css';
 import './beads.css';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 export type BoardProps = BeadsBoardModel;
 type BoardCard = BoardProps['model']['cards'][number];
@@ -34,7 +35,7 @@ export function BoardControls({ model, actions }: BoardProps) {
   </fieldset>{model.preferencesError && <aside role="status" aria-label={copy.filterStorage}><p>{model.preferencesError}</p><button type="button" onClick={actions.dismissPreferencesError}>{copy.dismissFilters}</button></aside>}</>;
 }
 export function BoardStatus({ model }: BoardProps) {
-  return model.error ? <p role="alert" className="error">{model.error}</p> : !model.loaded ? <p role="status">{model.loading ? copy.loading : copy.unavailable}</p> : model.total === 0 ? <p role="status">{copy.empty}</p> : model.cards.length === 0 ? <p role="status">{copy.noMatches}</p> : null;
+  return model.error ? <p role="alert" className="error">{model.error}</p> : !model.loaded ? model.loading ? <LoadingIndicator label={copy.loading} /> : <p role="status">{copy.unavailable}</p> : model.total === 0 ? <p role="status">{copy.empty}</p> : model.cards.length === 0 ? <p role="status">{copy.noMatches}</p> : null;
 }
 export function BoardDetails({ model, actions, detailsRef, phone = false }: BoardProps & { phone?: boolean }) {
   const issue = model.selected;

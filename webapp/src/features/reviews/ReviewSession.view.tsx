@@ -14,6 +14,7 @@ import { submissionNotice } from './submission-notice';
 import type { ReviewDocumentZen } from './contracts';
 import { ReviewsDetailPresentation } from './ReviewsDetail.presentation';
 import { reviewsCopy as copy } from './Reviews.copy';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 interface Props {
   scope: WorkspaceScope; review: OpenReview; listing: ReviewListing; latest?: OpenReview; service: ReviewsModuleV1;
@@ -38,7 +39,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
     {review.request.status !== 'published' && <p>{copy.unavailable.text}</p>}
     {latest?.request.status === 'withdrawn' && review.request.status !== 'withdrawn' && <p role="status">{copy.withdrawn.text}</p>}
   </header>
-    <p className="muted" data-ui="review-content-progress" hidden={!downloading && !failed} aria-live="polite">{contentProgress}</p>
+    <div className="muted" data-ui="review-content-progress" hidden={!downloading && !failed}>{downloading ? <LoadingIndicator compact label={contentProgress} /> : contentProgress}</div>
     {failed > 0 && <button type="button" onClick={actions.retryContents}>{copy.retryContents.text}</button>}
     <button type="button" aria-expanded={sidebarOpen} aria-controls="review-items" onClick={actions.toggleSidebar}>{sidebarOpen ? copy.hideSidebar.text : copy.showSidebar.text}</button>
     <div className="review-layout review-detail-layout" data-sidebar-open={sidebarOpen}><div id="review-items" className="review-navigator" hidden={!sidebarOpen}><ReviewsDetailPresentation review={review} selected={selected} onSelect={actions.select} progress={progress} submitted={submitted} /></div>

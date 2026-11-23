@@ -1,6 +1,7 @@
 import type { BeadsPageProps } from './contracts';
 import { copy } from './Beads.copy';
 import './beads.css';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 export type { BeadsPageProps } from './contracts';
 export function WorkspaceActions({ model, actions }: BeadsPageProps) {
   return <><button onClick={actions.edit} aria-expanded={model.editing} aria-controls="beads-workspace-picker">{model.loadedChoice?.workspace || copy.workspace}</button>
@@ -21,7 +22,7 @@ export function WorkspacePicker({ model, actions }: BeadsPageProps) {
   </div></form>;
 }
 export function WorkspaceStatus({ model, actions }: BeadsPageProps) {
-  return <>{model.status && <p role="status" className="beads-loading">{model.status}</p>}
+  return <>{model.status && (model.busy ? <LoadingIndicator compact={Boolean(model.loadedChoice)} label={model.status} /> : <p role="status" className="beads-loading">{model.status}</p>)}
     {model.error && <div role="alert" className="error"><p>{model.error}</p>{model.loadedChoice ? <button onClick={actions.refresh}>{copy.retry}</button> : <button onClick={actions.edit}>{copy.workspace}</button>}</div>}
     {model.preferencesError && <aside role="status" aria-label={copy.workspaceStorage}><p>{model.preferencesError}</p><button type="button" onClick={actions.dismissPreferencesError}>{copy.dismissWorkspace}</button></aside>}
   </>;

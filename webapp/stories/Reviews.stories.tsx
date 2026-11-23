@@ -6,7 +6,7 @@ import { createReviewFixture, reviewScope, richComparison, type ReviewComparison
 import { markdownTables } from './markdown-tables.fixtures';
 
 export function Fixture({ focused = false, missingBaseline = false, comparison, process = false, picker = false }: { focused?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean }) {
-  const hooks = useMemo(() => createReviewFixture({ remote: window.location.search.includes('remoteFixture=true'), missingBaseline, comparison, process, picker }), [missingBaseline, comparison, process, picker]);
+  const hooks = useMemo(() => createReviewFixture({ remote: window.location.search.includes('remoteFixture=true'), deferConnection: window.location.search.includes('deferConnection=true'), missingBaseline, comparison, process, picker }), [missingBaseline, comparison, process, picker]);
   const [hash, setHash] = useState(window.location.hash);
   useEffect(() => { const change = () => setHash(window.location.hash); window.addEventListener('hashchange', change); return () => window.removeEventListener('hashchange', change); }, []);
   const parsed = hash.startsWith('#/reviews') ? new URL(hash.slice(1), 'https://fixture.invalid') : null;

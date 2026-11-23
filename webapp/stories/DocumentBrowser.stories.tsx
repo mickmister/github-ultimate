@@ -16,7 +16,7 @@ function InteractiveBrowser() {
 
 // Presentation fixtures keep inputs and document selection interactive without
 // reimplementing the controller. Use Interactive for the complete user journey.
-function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }) {
+function FixtureBrowser({ initialModel, adaptive = false }: { initialModel: DocumentBrowserModel; adaptive?: boolean }) {
   const [model, setModel] = useState<DocumentBrowserModel>(() => ({ ...initialModel, expandedFolders: ancestorFolders(initialModel.snapshot?.documents.find(document => document.id === initialModel.documentId)?.path ?? '') }));
   const patch = (value: Partial<DocumentBrowserModel>) => setModel(current => ({ ...current, ...value }));
   const actions: DocumentBrowserActions = {
@@ -38,7 +38,7 @@ function FixtureBrowser({ initialModel }: { initialModel: DocumentBrowserModel }
   };
   // Keep historical desktop scenarios stable; DocumentsSurfaces exercises the
   // actual adaptive resolver and all six device/orientation configurations.
-  return <PresentationProvider value={{ surface: 'desktop', orientation: 'landscape' }}><DocumentBrowserView model={model} actions={actions} /></PresentationProvider>;
+  return <PresentationProvider value={adaptive ? undefined : { surface: 'desktop', orientation: 'landscape' }}><DocumentBrowserView model={model} actions={actions} /></PresentationProvider>;
 }
 
 const meta = {
@@ -63,6 +63,7 @@ export const FilteredDocuments: Story = { render: () => <FixtureBrowser initialM
 export const CompactTealTree: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, treeAppearance: { density: 'compact', accent: 'teal' }, documentFullscreen: false }} /> };
 export const ChooseDocument: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, documentId: '', content: null }} /> };
 export const Loading: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, busy: true, canDiscover: false, canBrowse: false, status: 'Reading and verifying document…' }} /> };
+export const AdaptiveLoading: Story = { render: () => <FixtureBrowser adaptive initialModel={{ ...readyModel, content: null, busy: true, canDiscover: false, canBrowse: false, status: 'Reading and verifying document…' }} /> };
 export const ReadError: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, content: null, error: 'The approved access route is no longer available. Reconnect your extension and try again.', status: 'Document request failed.' }} /> };
 export const NoConnections: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, connections: [], connectionId: '', workspaces: [], workspaceId: '', snapshot: null, documentId: '', content: null, canBrowse: false, canDiscover: false, status: 'No approved signed-in connections. Open extension connection settings or Alohak native settings to sign in and approve this deployment.' }} /> };
 export const EmptyWorkspace: Story = { render: () => <FixtureBrowser initialModel={{ ...readyModel, snapshot: { ...mockSnapshot, documents: [] }, documentId: '', content: null, status: '0 document(s) in the verified snapshot.' }} /> };

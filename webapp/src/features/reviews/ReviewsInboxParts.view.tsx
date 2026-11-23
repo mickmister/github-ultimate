@@ -2,6 +2,8 @@ import type { ReviewWorkspaceModel } from './ReviewWorkspace.view';
 import { reviewHref } from './navigation';
 import { reviewStatus } from './model';
 import { reviewsCopy as copy } from './Reviews.copy';
+import { ReviewCheckbox } from './ReviewCheckbox.view';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 export function ReviewSource({ connections, connectionId, repository, workspace, storage, busy, actions }: ReviewWorkspaceModel) {
   return <form className="connection-panel review-source" onSubmit={event => { event.preventDefault(); actions.load(); }}>
@@ -16,7 +18,7 @@ export function ReviewSource({ connections, connectionId, repository, workspace,
       {workspace && !storage.workspaces.includes(workspace) && <option value={workspace}>{workspace}</option>}
       {storage.workspaces.map(name => <option key={name} value={name}>{name}</option>)}
     </select></label>
-    {(storage.repositoriesBusy || storage.workspacesBusy) && <p role="status">{storage.repositoriesBusy ? copy.loadingRepositories.text : copy.loadingWorkspaces.text}</p>}
+    {(storage.repositoriesBusy || storage.workspacesBusy) && <LoadingIndicator compact label={storage.repositoriesBusy ? copy.loadingRepositories.text : copy.loadingWorkspaces.text} />}
     {!storage.repositoriesBusy && !storage.repositoryError && connectionId && storage.canListRepositories && !storage.repositories.length && !repository && <p>{copy.noRepositories.text}</p>}
     {!storage.workspacesBusy && !storage.workspaceError && repository && !workspace && !storage.workspaces.length && <p>{copy.noWorkspaces.text}</p>}
     {(storage.repositoryError || storage.workspaceError) && <p role="alert">{storage.repositoryError || storage.workspaceError}</p>}
@@ -24,13 +26,14 @@ export function ReviewSource({ connections, connectionId, repository, workspace,
     <button disabled={busy || !connectionId || !repository || !workspace || storage.workspacesBusy}>{copy.open.text}</button>
   </form>;
 }
-export function ReviewFilters({ waitingOnly, setWaitingOnly }: ReviewWorkspaceModel) {
-  return <label><input type="checkbox" checked={waitingOnly} onChange={event => setWaitingOnly(event.target.checked)} />{copy.waiting.text}</label>;
+export function ReviewFilters({ listing, waitingOnly, setWaitingOnly }: ReviewWorkspaceModel) {
+  return listing && <ReviewCheckbox label={copy.waiting.text} checked={waitingOnly} onChange={setWaitingOnly} />;
 }
 export function ReviewInboxList({ scope, listing, waitingOnly, busy, actions }: ReviewWorkspaceModel) {
   if (!scope || !listing) return null;
   const requests = listing.requests.filter(review => !waitingOnly || review.request.status === 'published' && reviewStatus(review, listing.artifacts, listing.reviewer) !== 'Responded');
   return <section aria-label={copy.inbox.text} className="review-request-list"><div className="section-heading"><h2>{scope.workspace}</h2><button disabled={busy} onClick={actions.refresh}>{copy.refresh.text}</button></div>
+    {busy && <LoadingIndicator compact label={copy.loading.text} />}
     {!requests.length && <p>{waitingOnly ? copy.emptyWaiting.text : copy.empty.text}</p>}
     <ul className="review-inbox">{requests.map(review => <li key={review.request.request_id}><h3><a href={reviewHref(scope, review)}>{review.request.title}</a></h3><p>{review.request.purpose}</p><p>{reviewStatus(review, listing.artifacts, listing.reviewer)}{copy.separator.text}{review.request.bead_id}</p></li>)}</ul>
   </section>;

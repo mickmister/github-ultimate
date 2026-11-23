@@ -1,3 +1,5 @@
+import { LoadingIndicator } from './LoadingIndicator.view';
+
 export function AppPending() {
-  return <div className="app-shell" role="status">Loading GitHub Ultimate…</div>;
+  return <div className="app-shell"><LoadingIndicator label="Loading GitHub Ultimate…" /></div>;
 }

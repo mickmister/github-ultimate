@@ -19,6 +19,7 @@ export function useReviewWorkspaceFeature({ appHooks, location = {} }: { appHook
   const [scope, setScope] = useState<WorkspaceScope | null>(null);
   const [listing, setListing] = useState<ReviewListing | null>(null);
   const [opened, setOpened] = useState<OpenReview | null>(null);
+  const [initializing, setInitializing] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const generation = useRef(0);
@@ -68,21 +69,24 @@ export function useReviewWorkspaceFeature({ appHooks, location = {} }: { appHook
   }
   useEffect(() => {
     installReviewPerf();
+    setInitializing(true);
     let cancelled = false;
     void hooks.modules.documents.connect().then(async found => {
       if (cancelled) return;
+      setInitializing(false);
       setConnections(found);
       const selected = location.connection ? found.find(item => item.id === location.connection) : found.length === 1 ? found[0] : undefined;
       if (!selected) { if (location.connection) setError('The linked connection is unavailable. Select an approved connection.'); return; }
       setConnectionId(selected.id);
       if (location.repository && location.workspace) await load({ connectionId: selected.id, installationId: selected.installationId, repository: location.repository, workspace: location.workspace }, true);
-    }).catch(cause => { if (!cancelled) setError(String(cause)); });
+    }).catch(cause => { if (!cancelled) setError(String(cause)); })
+      .finally(() => { if (!cancelled) setInitializing(false); });
     return () => { cancelled = true; generation.current++; hooks.modules.documents.dispose(); };
   }, [hooks]);
   const selected = connections.find(item => item.id === connectionId);
   function resetSource() { generation.current++; setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false); }
   return { connections, connectionId, repository, workspace, storage, waitingOnly, setWaitingOnly,
-    scope, listing, opened, busy, error, service: hooks.modules.reviews,
+    scope, listing, opened, initializing, busy, error, service: hooks.modules.reviews,
     actions: { setConnectionId(value: string) { resetSource(); storage.clearConnection(); setConnectionId(value); }, setRepository(value: string) { resetSource(); storage.chooseRepository(value); }, setWorkspace(value: string) { resetSource(); storage.chooseWorkspace(value); }, load: () => selected && void load({ connectionId: selected.id, installationId: selected.installationId, repository, workspace }, true),
       refresh: () => scope && void load(scope), updateListing: setListing } };
 }

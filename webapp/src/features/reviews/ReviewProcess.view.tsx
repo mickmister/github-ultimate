@@ -1,6 +1,7 @@
 import type { ReviewRequest, ReviewPin } from '../../../../src/review-protocol';
 import type { ProcessEvidence } from '../../../../hosted/review-process';
 import type { WorkspaceScope } from '../../app-hooks/contracts';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 export function evidenceHref(repository: string, pin: ReviewPin) {
   return `https://github.com/${repository}/blob/${pin.snapshot}/documents/${pin.resource.split('/').map(encodeURIComponent).join('/')}`;
@@ -9,7 +10,7 @@ export function ReviewProcessView({ scope, process, loading, evidence, error, ch
   return <section className="review-summary" data-ui="review-process" aria-label="QRSPI process evidence"><h2>QRSPI · {process.id}</h2>
     <p>Workspace: {process.workspace_ref} · Thread: {process.thread_id}</p>
     <p>Review checkpoint: waiting for review where no response is saved. Saved responses and workflow delivery are shown separately below; neither proves phase completion.</p>
-    {loading && <p role="status">Loading pinned and current methodology evidence…</p>}
+    {loading && <LoadingIndicator compact label="Loading pinned and current methodology evidence…" />}
     {error && <p role="alert">Process evidence unavailable: {error}. Position unknown, not failed.</p>}
     {checked && <p>Evidence checked: {checked}. This is a snapshot, not live workflow status.</p>}
     <ul>{evidence.map(item => <li key={item.pin.resource}><strong>{item.label}</strong>{item.error && <p role="alert">{item.error}. Historical evidence is not replaced by current metadata.</p>}<p>Pinned: {item.metadata}</p>

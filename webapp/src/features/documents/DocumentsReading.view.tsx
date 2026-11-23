@@ -6,6 +6,7 @@ import { AttachableContext } from '../feedback/AttachableContext';
 import { FeedbackAnnotations } from '../feedback/FeedbackAnnotations';
 import { documentFeedbackTarget } from './feedback-target';
 import { copy } from './Documents.copy';
+import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 export function DocumentsReading({ model, actions }: DocumentBrowserProps) {
   const selected = model.snapshot?.documents.find(d => d.id === model.documentId);
@@ -21,7 +22,7 @@ export function DocumentsReading({ model, actions }: DocumentBrowserProps) {
     <AttachableContext key={`${model.documentMode}:${selected.id}`} target={target}><FeedbackAnnotations target={target} showRepresentation={r => actions.setDocumentMode(r === 'source' ? 'source' : 'markdown')}>
       {markdown ? <MarkdownDocument content={model.content} /> : <MonacoDocument key={selected.id} path={selected.path} content={model.content} />}
     </FeedbackAnnotations></AttachableContext>
-  </> : <><p className="document-placeholder" aria-label={copy.content}>{model.documentId && model.busy ? copy.reading : selected && model.error ? copy.readError : copy.select}</p>
+  </> : <>{model.documentId && model.busy ? <LoadingIndicator label={model.status || copy.reading} /> : <p className="document-placeholder" aria-label={copy.content}>{selected && model.error ? copy.readError : copy.select}</p>}
     {selected && model.error && <button onClick={() => actions.selectDocument(selected.id)}>{copy.retry}</button>}</>}
   </article>;
 }

@@ -108,7 +108,7 @@ test('inbox source selections and filters survive presentation swaps without mem
   });
   await page.goto('/iframe.html?id=web-app-reviews-inbox-surfaces--adaptive&viewMode=story&remoteFixture=true');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByRole('checkbox', { name: 'Only waiting for my response', exact: true }).uncheck();
+  await page.getByText('Only waiting for my response', { exact: true }).click();
   for (const [surface, orientation, width, height] of orientations) {
     await page.setViewportSize({ width, height });
     await expect(page.locator(`[data-review-surface=${surface}][data-orientation=${orientation}]`)).toBeVisible();
