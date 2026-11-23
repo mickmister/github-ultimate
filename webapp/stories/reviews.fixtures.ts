@@ -19,17 +19,17 @@ export const richComparison: ReviewComparisonFixture = {
   before: '# Reader plan\n\nKeep **local drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save in the browser\n- Reopen this tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Local | One tab |\n\n> This warning was removed.\n\n```ts\nconst storage = "local";\n```\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
   after: '# Reader plan\n\nKeep **remote drafts** in this [workspace][guide].\n\n## Next steps\n\n- Save remotely\n- Reopen any tab\n\n| Storage | Lifetime |\n| --- | --- |\n| Remote | Persistent |\n\n```ts\nconst storage = "remote";\n```\n\n## Added section\n\nRead the *updated* guidance. [Unsafe](javascript:alert(1))\n\n<script>window.markdownDiffInjected = true</script>\n\n```mermaid\nflowchart LR\n  Draft --> Review\n```\n\n[guide]: https://example.com/guide\n',
 };
-export function createReviewFixture({ remote = false, missingBaseline = false, comparison, process = false, picker = false, deferConnection = false }: { remote?: boolean; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean; deferConnection?: boolean } = {}): AppHooksV1 {
+export function createReviewFixture({ remote = false, remoteScope, missingBaseline = false, comparison, process = false, picker = false, deferConnection = false }: { remote?: boolean; remoteScope?: string; missingBaseline?: boolean; comparison?: ReviewComparisonFixture; process?: boolean; picker?: boolean; deferConnection?: boolean } = {}): AppHooksV1 {
   let state: ReviewFixtureState = { artifacts: [], revision: 1, missingBaseline };
   const load = async (resource?: ReviewPin, operation = 'state', requestId?: string): Promise<ReviewFixtureState> => {
     if (!remote) return state;
-    const response = await fetch('/__review-fixture', { headers: { 'X-Review-Operation': operation, ...(requestId ? { 'X-Review-Request': requestId } : {}), ...(resource ? { 'X-Review-Resource': JSON.stringify(resource) } : {}) } });
+    const response = await fetch('/__review-fixture', { headers: { 'X-Review-Operation': operation, ...(remoteScope ? { 'X-Review-Scope': remoteScope } : {}), ...(requestId ? { 'X-Review-Request': requestId } : {}), ...(resource ? { 'X-Review-Resource': JSON.stringify(resource) } : {}) } });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
     return response.json();
   };
   const store = async (next: ReviewFixtureState) => {
     if (!remote) { state = next; return; }
-    const response = await fetch('/__review-fixture', { method: 'POST', body: JSON.stringify(next) });
+    const response = await fetch('/__review-fixture', { method: 'POST', headers: remoteScope ? { 'X-Review-Scope': remoteScope } : {}, body: JSON.stringify(next) });
     if (!response.ok) throw new Error(`HTTP ${response.status}: ${await response.text()}`);
   };
   function packet(id: string, revision: number): OpenReview {

@@ -68,13 +68,13 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
     const artifactsPending = Promise.all(documents(selected).map(async entry => {
       const resource = entry.path.slice(10);
       // Other reviewers' drafts are neither inbox data nor this user's restore state.
-      const draft = /^review-requests\/[^/]+\/drafts\/([0-9]+)\//.exec(resource);
-      if (draft && `github:${draft[1]}` !== reviewer) return;
+      const draft = /^review-requests\/[^/]+\/(?:drafts\/([0-9]+)\/|queue\/([0-9]+)\.json$)/.exec(resource);
+      if (draft && `github:${draft[1] ?? draft[2]}` !== reviewer) return;
       if (/^review-requests\/[^/]+\/responses\/[^/]+\.bead\.json$/.test(resource)) {
         if (!requestId) return;
         const ack = JSON.parse(documentText(await active.blob(entry)));
         if (ack.kind === 'review-bead-ack' && ack.schema_version === 1 && typeof ack.response_id === 'string' && typeof ack.response_version === 'string') acknowledgements.push(`${ack.response_id}:${ack.response_version}`);
-      } else if (/^review-requests\/[^/]+\/(responses\/[^/]+|drafts\/[0-9]+\/[a-f0-9]+)\.json$/.test(resource)) {
+      } else if (/^review-requests\/[^/]+\/(responses\/[^/]+|drafts\/[0-9]+\/[a-f0-9]+|queue\/[0-9]+)\.json$/.test(resource)) {
         const value = parseReviewArtifact(documentText(await active.blob(entry)));
         if (artifactResource(value) !== resource) throw new Error('Review artifact path does not match its identity.');
         if (value.kind === 'review-response' || value.reviewer === reviewer) artifacts.push({ value, pin: { resource, version_kind: 'git-blob', version: entry.sha, snapshot: opened.snapshot.commit } });
@@ -106,11 +106,12 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
     async save(scope, value, expected) {
       const support = await bridgeRequest<{ capabilities: string[] }>({ operation: 'discover' });
       if (!support.capabilities?.includes('reviewWrite')) throw new Error('Update the credential broker to save review drafts and responses.');
+      if (value.kind === 'review-queue-state' && !support.capabilities.includes('reviewQueue')) throw new Error('Update the browser extension or Alohak credential broker to save review categories remotely. The request was not dismissed.');
       // Resolve the exact immutable request, not mutable head or page-supplied process data.
       const pinned = await reviews(scope).open({ resource: requestResource(value.request.id), version_kind: 'git-blob', version: value.request.version, snapshot: value.request.snapshot });
       const processBound = Boolean(pinned.request.process);
       const responseEffectBound = Boolean(pinned.request.response_effect);
-      if (processBound && !support.capabilities?.includes('qrspiProcessReview')) throw new Error(PROCESS_REVIEW_UPDATE);
+      if (value.kind !== 'review-queue-state' && processBound && !support.capabilities?.includes('qrspiProcessReview')) throw new Error(PROCESS_REVIEW_UPDATE);
       try {
         return await bridgeRequest<ReviewReceipt>({ operation: 'reviewWrite', id: scope.connectionId, installationId: scope.installationId, repository: scope.repository, workspace: scope.workspace, text: JSON.stringify(value), expected }, 120000, mobileGitHubRequest);
       } catch (error) {

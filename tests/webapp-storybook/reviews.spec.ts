@@ -214,7 +214,7 @@ test('inbox setup discovers repository and workspace without a hidden required f
   await page.getByRole('button', {name:'Open review inbox',exact:true}).click();
   await expect(page.getByRole('region', {name:'Review inbox',exact:true})).toBeVisible();
   await expect(page.getByRole('combobox', {name:'Workspace',exact:true})).toHaveValue('reader-workspace');
-  await expect(page.getByRole('checkbox', {name:'Only waiting for my response',exact:true})).toBeChecked();
+  await expect(page.getByRole('combobox', {name:'Queue filter',exact:true})).toHaveValue('active');
   await expect(page.getByRole('link', {name:'Reader follow-up',exact:true})).toBeVisible();
 });
 

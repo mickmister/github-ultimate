@@ -1,8 +1,26 @@
 import { expect, test } from '@playwright/test';
 
-test('dismissal survives reload and surface swaps and can be restored', async ({ page }) => {
+test('failed remote dismissal leaves the request active and reports the save error', async ({ page }) => {
+  await page.route('**/__review-fixture', route => route.fulfill(route.request().method() === 'POST'
+    ? { status: 403, body: 'Category write denied' } : { json: { artifacts: [], revision: 1 } }));
+  await page.goto('/iframe.html?id=web-app-home-surfaces--adaptive&viewMode=story&queueRemote=true');
+  await expect(page.locator('.home-requests li')).toHaveCount(4);
+  await page.locator('.home-requests li').first().getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Category write denied');
+  await expect(page.locator('.home-requests li')).toHaveCount(4);
+  await expect(page.locator('.home-requests li').first().getByRole('button', { name: 'Dismiss', exact: true })).toBeEnabled();
+});
+
+test('remote dismissal survives a fresh browser session and can be restored', async ({ page, browser }) => {
+  const records = new Map<string, unknown>();
+  const remote = async (route: import('@playwright/test').Route) => {
+    const key = route.request().headers()['x-review-scope'];
+    if (route.request().method() === 'POST') records.set(key, route.request().postDataJSON());
+    await route.fulfill({ json: records.get(key) ?? { artifacts: [], revision: 1 } });
+  };
+  await page.route('**/__review-fixture', remote);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto('/iframe.html?id=web-app-home-surfaces--adaptive&viewMode=story');
+  await page.goto('/iframe.html?id=web-app-home-surfaces--adaptive&viewMode=story&queueRemote=true');
   const rows = page.locator('.home-requests li');
   await expect(rows).toHaveCount(4);
   await rows.first().getByRole('button', { name: 'Dismiss', exact: true }).click();
@@ -11,10 +29,17 @@ test('dismissal survives reload and surface swaps and can be restored', async ({
   await expect(rows).toHaveCount(3);
   await page.reload();
   await expect(rows).toHaveCount(3);
-  await page.getByRole('checkbox', { name: 'Show dismissed requests', exact: true }).check();
-  await expect(rows).toHaveCount(4);
+  await page.getByRole('combobox', { name: 'Queue filter', exact: true }).selectOption('dismissed');
+  await expect(rows).toHaveCount(1);
+  const context = await browser.newContext();
+  const fresh = await context.newPage();
+  await fresh.route('**/__review-fixture', remote);
+  await fresh.goto(page.url());
+  await expect(fresh.locator('.home-requests li')).toHaveCount(3);
+  await context.close();
   await page.getByRole('button', { name: 'Restore', exact: true }).click();
-  await page.getByRole('checkbox', { name: 'Show dismissed requests', exact: true }).uncheck();
+  await expect(rows).toHaveCount(0);
+  await page.getByRole('combobox', { name: 'Queue filter', exact: true }).selectOption('active');
   await expect(rows).toHaveCount(4);
 });
 
@@ -55,12 +80,12 @@ test('partial failure retries just its source; rotation preserves filter and ope
   await page.goto('/iframe.html?id=web-app-home-surfaces--adaptive&viewMode=story&remoteFixture=true');
   await expect(page.getByRole('link')).toHaveCount(3);
   await expect(page.getByRole('alert')).toHaveText('Access denied for Team beta');
-  await page.getByRole('checkbox', { name: 'Waiting for my response', exact: true }).uncheck();
+  await page.getByRole('combobox', { name: 'Queue filter', exact: true }).selectOption('all');
   const before = [...calls];
   for (const [surface, orientation, width, height] of orientations) {
     await page.setViewportSize({ width, height });
     await expect(page.locator(`[data-home-surface=${surface}][data-orientation=${orientation}]`)).toBeVisible();
-    await expect(page.getByRole('checkbox', { name: 'Waiting for my response', exact: true })).not.toBeChecked();
+    await expect(page.getByRole('combobox', { name: 'Queue filter', exact: true })).toHaveValue('all');
     await expect(page.getByRole('link')).toHaveCount(6);
     await expect(page.getByRole('alert')).toBeVisible();
   }
@@ -82,7 +107,7 @@ test('manual repository and approved connection persist across all presentation 
     await page.setViewportSize({ width, height });
     await expect(page.locator(`[data-home-surface=${surface}][data-orientation=${orientation}]`)).toBeVisible();
     if (surface === 'phone' && !await page.getByRole('textbox').isVisible()) await page.locator('summary').click();
-    await expect(page.getByRole('combobox')).toHaveValue('two'); await expect(page.getByRole('textbox')).toHaveValue('example/explicit');
+    await expect(page.getByRole('combobox', { name: 'Approved connection', exact: true })).toHaveValue('two'); await expect(page.getByRole('textbox')).toHaveValue('example/explicit');
   }
   expect(calls).toEqual([]);
   await page.getByRole('button', { name: 'Discover repository', exact: true }).click();

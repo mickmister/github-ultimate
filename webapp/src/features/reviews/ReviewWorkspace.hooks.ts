@@ -6,6 +6,7 @@ import type { OpenReview } from '../../../../hosted/reviews';
 import { reviewOid, requestResource } from '../../../../src/review-protocol';
 import { installReviewPerf, measure } from '../../../../hosted/performance';
 import { useReviewStoragePicker } from './useReviewStoragePicker';
+import { saveReviewCategory, withReviewCategory, type ReviewQueueFilter } from './queue';
 
 import type { ReviewLocation } from './navigation';
 export { parseReviewSearch, reviewHref, type ReviewLocation } from './navigation';
@@ -15,7 +16,10 @@ export function useReviewWorkspaceFeature({ appHooks, location = {} }: { appHook
   const [connectionId, setConnectionId] = useState(location.connection ?? '');
   const storage = useReviewStoragePicker(hooks.modules.documents, connections, connectionId, location);
   const { repository, workspace } = storage;
-  const [waitingOnly, setWaitingOnly] = useState(true);
+  const [queueFilter, setQueueFilter] = useState<ReviewQueueFilter>('active');
+  const [categorizing, setCategorizing] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState('');
+  const savingCategory = useRef(false);
   const [scope, setScope] = useState<WorkspaceScope | null>(null);
   const [listing, setListing] = useState<ReviewListing | null>(null);
   const [opened, setOpened] = useState<OpenReview | null>(null);
@@ -84,9 +88,21 @@ export function useReviewWorkspaceFeature({ appHooks, location = {} }: { appHook
     return () => { cancelled = true; generation.current++; hooks.modules.documents.dispose(); };
   }, [hooks]);
   const selected = connections.find(item => item.id === connectionId);
-  function resetSource() { generation.current++; setScope(null); setListing(null); setOpened(null); setError(''); setBusy(false); }
-  return { connections, connectionId, repository, workspace, storage, waitingOnly, setWaitingOnly,
+  function resetSource() { generation.current++; setScope(null); setListing(null); setOpened(null); setError(''); setCategoryError(''); setBusy(false); }
+  async function categorize(requestId: string, category: 'active' | 'dismissed') {
+    if (!scope || !listing || !hooks.modules.reviews || savingCategory.current) return;
+    const review = listing.requests.find(item => item.request.request_id === requestId);
+    if (!review) return;
+    const token = generation.current;
+    savingCategory.current = true; setCategorizing(requestId); setCategoryError('');
+    try {
+      const saved = await saveReviewCategory(hooks.modules.reviews, scope, listing, review, category);
+      if (generation.current === token) setListing(current => current ? withReviewCategory(current, saved) : current);
+    } catch (cause) { if (generation.current === token) setCategoryError(cause instanceof Error ? cause.message : String(cause)); }
+    finally { savingCategory.current = false; setCategorizing(null); }
+  }
+  return { connections, connectionId, repository, workspace, storage, queueFilter, setQueueFilter, categorizing, categoryError,
     scope, listing, opened, initializing, busy, error, service: hooks.modules.reviews,
     actions: { setConnectionId(value: string) { resetSource(); storage.clearConnection(); setConnectionId(value); }, setRepository(value: string) { resetSource(); storage.chooseRepository(value); }, setWorkspace(value: string) { resetSource(); storage.chooseWorkspace(value); }, load: () => selected && void load({ connectionId: selected.id, installationId: selected.installationId, repository, workspace }, true),
-      refresh: () => scope && void load(scope), updateListing: setListing } };
+      refresh: () => scope && void load(scope), updateListing: setListing, categorize } };
 }

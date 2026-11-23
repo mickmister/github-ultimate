@@ -27,9 +27,9 @@ export async function writeReview(request: ReviewWrite, reviewer: string, read: 
   if (!currentEntry) throw new Error('This request is no longer present in the workspace.');
   const current = parseReviewRequest(documentText(await reader.blob(currentEntry)));
   if (current.workspace !== request.workspace || current.request_id !== value.request.id) throw new Error('Current request identity mismatch.');
-  if (current.status === 'withdrawn') throw new Error('This request has been withdrawn. Existing responses remain available.');
+  if (current.status === 'withdrawn' && value.kind !== 'review-queue-state') throw new Error('This request has been withdrawn. Existing responses remain available.');
   await validateReviewArtifact(opened.request, value, pin => reviews.read(pin));
-  if (opened.request.process) await reviews.read(opened.request.process.config);
+  if (opened.request.process && value.kind !== 'review-queue-state') await reviews.read(opened.request.process.config);
   const finish = async (receipt: ReviewReceipt): Promise<ReviewReceipt> => {
     if (value.kind !== 'review-response' || !opened.request.process && !opened.request.response_effect) return receipt;
     if (!opened.request.process && value.request.version !== currentEntry.sha) return { ...receipt, dispatch: { kind: 'vk', state: 'pending', message: 'Response saved against a superseded request. Automatic VK notification was withheld.' } };
@@ -49,7 +49,7 @@ export async function writeReview(request: ReviewWrite, reviewer: string, read: 
   const base = `/repos/${request.repository}/git`;
   const blob = oidResult.parse(await mutate(`${base}/blobs`, 'POST', { content: text, encoding: 'utf-8' }));
   const tree = oidResult.parse(await mutate(`${base}/trees`, 'POST', { base_tree: head.snapshot.tree.sha, tree: [{ path, mode: '100644', type: 'blob', sha: blob.sha }] }));
-  const commit = oidResult.parse(await mutate(`${base}/commits`, 'POST', { message: `${value.kind === 'review-draft' ? 'Save review draft' : 'Submit review response'} ${value.request.id}`, tree: tree.sha, parents: [head.snapshot.commit] }));
+  const commit = oidResult.parse(await mutate(`${base}/commits`, 'POST', { message: `${value.kind === 'review-queue-state' ? 'Categorize review' : value.kind === 'review-draft' ? 'Save review draft' : 'Submit review response'} ${value.request.id}`, tree: tree.sha, parents: [head.snapshot.commit] }));
   await mutate(`${base}/refs/documents/${request.workspace}`, 'PATCH', { sha: commit.sha, force: false });
   // Verify both bytes and path membership after the write before issuing a receipt.
   const saved = await reviews.read({ resource, version_kind: 'git-blob', version: blob.sha, snapshot: commit.sha });
