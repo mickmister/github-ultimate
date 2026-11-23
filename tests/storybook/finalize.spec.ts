@@ -26,7 +26,7 @@ for (const zen of [false, true]) {
   });
 }
 
-test('phone Finalize respects reduced motion and discussion-only forms', async ({ page }) => {
+test('phone Finalize respects reduced motion and always offers both submission choices', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await page.goto('/iframe.html?id=forms--discussion-only&viewMode=story');
@@ -34,8 +34,8 @@ test('phone Finalize respects reduced motion and discussion-only forms', async (
   await page.getByRole('button', { name: 'Finalize', exact: true }).last().click();
   await expect(choices).toBeInViewport({ ratio: 1 });
   await expect(choices).toBeFocused();
-  await expect(choices.getByRole('button')).toHaveCount(1);
-  await expect(choices.getByRole('button')).toHaveCSS('animation-name', 'none');
+  await expect(choices.getByRole('button')).toHaveCount(2);
+  for (const button of await choices.getByRole('button').all()) await expect(button).toHaveCSS('animation-name', 'none');
   await expect(choices).toHaveCSS('outline-style', 'solid');
   await expect(page.locator('.preview')).toBeHidden();
   await page.locator('.wizard-header').getByRole('button', { name: 'Previous', exact: true }).click();
