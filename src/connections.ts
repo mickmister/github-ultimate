@@ -61,7 +61,7 @@ const installationSchema = z.object({
 const repoSchema = z.object({ full_name: z.string(), private: z.boolean(), default_branch: z.string() });
 export type Installation = z.infer<typeof installationSchema>;
 export type Repository = z.infer<typeof repoSchema>;
-export class ConnectionError extends Error {}
+export class ConnectionError extends Error { override name = 'ConnectionError'; }
 class ConnectionTransportError extends ConnectionError {}
 
 function publicConnection(record: ConnectionRecord) {

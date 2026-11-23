@@ -4,6 +4,8 @@ import { pageKVBytes, PageKVService, type PageKVStore } from './page-kv';
 import type { MobileGitHub } from './mobile-github';
 import { mobileReviewTransferMethod } from './mobile-transfer-protocol';
 import { parseShellTheme, type ShellTheme } from './mobile-theme';
+import { mobilePiMethod } from './mobile-pi-protocol';
+import type { MobilePi } from './mobile-pi';
 export const mobileProtocol = 1;
 export const alohakScheme = 'alohak';
 export const maxMobileMessageBytes = 16 * 1024;
@@ -69,7 +71,7 @@ export class MobileFixtureBroker {
   private fixtureEpoch = 0;
   private documentEpoch = 0;
   private pendingFixtures = 0;
-  constructor(store?: PageKVStore, private github?: MobileGitHub, private onTheme?: (theme: ShellTheme) => void) {
+  constructor(store?: PageKVStore, private github?: MobileGitHub, private onTheme?: (theme: ShellTheme) => void, private pi?: MobilePi) {
     if (store) this.storage = new PageKVService(store, url => Boolean(this.storageGrant && matchesMobileGrant(this.storageGrant, url)));
   }
   approveStorage(grant?: MobileGrant) { this.storageGrant = grant && { ...grant }; }
@@ -80,12 +82,17 @@ export class MobileFixtureBroker {
     if (pageKVBytes(raw) > maxMobileMessageBytes) return { jsonrpc: '2.0', id: null, error: { code: -32600, message: 'Message exceeds 16 KiB.' } };
     let input: Record<string, unknown>;
     try { input = JSON.parse(raw); } catch { return this.handle(context, raw); }
-    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== mobileReviewTransferMethod && input.method !== 'fixture.delay' && input.method !== 'theme.set') return this.handle(context, raw);
+    if (!plain(input) || typeof input.method !== 'string' || !input.method.startsWith('kv.') && input.method !== 'github.request' && input.method !== mobileReviewTransferMethod && input.method !== mobilePiMethod && input.method !== 'fixture.delay' && input.method !== 'theme.set') return this.handle(context, raw);
     const id = typeof input.id === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(input.id) ? input.id : null;
     const error = (message: string): MobileReply => ({ jsonrpc: '2.0', id, error: { code: -32001, message } });
     const epoch = this.documentEpoch;
     const current = () => epoch === this.documentEpoch && this.isCurrent(context);
     if (!id || input.jsonrpc !== '2.0' || !only(input, ['jsonrpc', 'id', 'method', 'params']) || !plain(input.params)) return error('Invalid or excessive native RPC.');
+    if (input.method === mobilePiMethod) {
+      if (!this.pi || !current()) return error('Native Pi is unavailable. Update Alohak and configure inference and S3 in native settings.');
+      try { return { jsonrpc: '2.0', id, result: await this.pi.handle(context.documentURL, input.params, current) }; }
+      catch (cause) { return error(cause instanceof Error && cause.name === 'ConnectionError' ? cause.message : 'Native Pi request is unavailable. Check native settings.'); }
+    }
     if (input.method === 'theme.set') {
       if (!current() || !this.onTheme) return error('Native theme or document unavailable.');
       try { this.onTheme(parseShellTheme(input.params)); return { jsonrpc: '2.0', id, result: {} }; }
@@ -120,8 +127,8 @@ export class MobileFixtureBroker {
     } catch (cause) { return error(cause instanceof Error ? cause.message : 'Page storage failed.'); }
   }
   // Native callbacks supply document identity; payload fields never do.
-  activate(document: MobileDocument) { this.github?.cancelTransfers(); this.documentEpoch++; this.active = { ...document }; }
-  invalidate() { this.github?.cancelTransfers(); this.active = undefined; this.fixtureEpoch++; this.documentEpoch++; }
+  activate(document: MobileDocument) { this.pi?.clear(); this.github?.cancelTransfers(); this.documentEpoch++; this.active = { ...document }; }
+  invalidate() { this.pi?.clear(); this.github?.cancelTransfers(); this.active = undefined; this.fixtureEpoch++; this.documentEpoch++; }
   approve(grant?: MobileGrant) { this.fixtureEpoch++; this.grant = grant && { ...grant }; }
   handle(context: MobileDocument & { isMainFrame: boolean }, raw: string): MobileReply {
     let id: string | null = null;

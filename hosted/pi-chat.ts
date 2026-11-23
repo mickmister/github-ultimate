@@ -1,0 +1,120 @@
+import { Agent, type AgentMessage } from '@earendil-works/pi-agent-core';
+import { z } from 'zod';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+import { checkpointSchema } from './pi-session';
+import { inferenceStream, piModel, type PiBridge } from './pi-transport';
+import { backblaze, checkpointReference, type PublicS3Connection, type S3Listing, type S3Object } from '../src/s3-protocol';
+import type { PublicInferenceConnection } from '../src/inference-protocol';
+import type { ChatSnapshot, SavedChat } from './pi-chat-contract';
+
+const digest = (bytes: Uint8Array) => bytesToHex(sha256(bytes));
+const storageIdentity = (storage: PublicS3Connection) => ({ endpoint: storage.endpoint, bucket: storage.bucket, prefix: storage.prefix, region: storage.region, addressing: storage.addressing });
+export const chatStorageId = (storage: PublicS3Connection) => digest(new TextEncoder().encode(JSON.stringify(storageIdentity(storage))));
+const chatSchema = z.object({
+  kind: z.literal('browser-pi-checkpoint'), schema_version: z.literal(2), profile: z.literal('pi-web-chat-1'),
+  session_id: z.string().uuid(), branch_id: z.string().uuid(), parent: z.string().max(4096).nullable(),
+  created_at: z.string().datetime(), title: z.string().max(100), model: z.string().min(1).max(200),
+  storage: z.string().regex(/^[a-f0-9]{64}$/), phase: z.enum(['idle', 'pending', 'interrupted']),
+  messages: checkpointSchema.shape.messages.refine(messages => messages.every(message =>
+    message.role === 'user' ? typeof message.content === 'string' || message.content.every(block => block.type === 'text') :
+      message.role === 'assistant' && message.content.every(block => block.type === 'text')), 'Only text chat messages are supported.'),
+}).strict();
+export type ChatCheckpoint = z.infer<typeof chatSchema>;
+
+/** Immutable, readback-verified chat checkpoints use the existing privileged S3
+ * checkpoint operation, including B2's ordinary PUT + exact-version contract. */
+export class ChatStorage {
+  constructor(private bridge: PiBridge, readonly connection: PublicS3Connection) {}
+  async list(token?: string): Promise<{ chats: SavedChat[]; token?: string }> {
+    const prefix = `${this.connection.prefix}pi-sessions/`;
+    const listing = await this.bridge<S3Listing>({ operation: 's3List', id: this.connection.id, revision: this.connection.revision, prefix, versions: backblaze(this.connection.endpoint), ...(token ? { continuationToken: token } : {}) });
+    return { chats: listing.objects.flatMap(object => {
+      const match = /^([a-f0-9-]{36})\/([^/]+)-[a-f0-9]{64}\.json$/.exec(object.key.slice(prefix.length));
+      if (!object.key.startsWith(prefix) || !match || !z.string().uuid().safeParse(match[1]).success) return [];
+      return [{ sessionId: match[1], reference: checkpointReference(object.key, object.versionId), label: `${match[1].slice(0, 8)} · ${match[2].slice(0, 19)}` }];
+    }).reverse(), token: listing.continuationToken };
+  }
+  async read(sessionId: string, reference: string): Promise<ChatCheckpoint> {
+    z.string().uuid().parse(sessionId);
+    const [key, fragment, extra] = reference.split('#');
+    const versionId = fragment?.startsWith('versionId=') ? decodeURIComponent(fragment.slice(10)) : undefined;
+    const hash = /-([a-f0-9]{64})\.json$/.exec(key)?.[1];
+    if (extra || fragment && !versionId || !key.startsWith(`${this.connection.prefix}pi-sessions/${sessionId}/`) || !hash || backblaze(this.connection.endpoint) && !versionId) throw Error('Choose an exact checkpoint within the selected storage and conversation.');
+    const object = await this.bridge<S3Object>({ operation: 's3Read', id: this.connection.id, revision: this.connection.revision, key, ...(versionId ? { versionId } : {}) });
+    if (object.key !== key || object.size > 4 * 1024 * 1024 || versionId && object.versionId !== versionId) throw Error('Invalid chat checkpoint receipt.');
+    const bytes = Uint8Array.from(atob(object.base64), character => character.charCodeAt(0));
+    if (bytes.length !== object.size || digest(bytes) !== hash) throw Error('Chat checkpoint integrity check failed.');
+    const checkpoint = chatSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+    if (checkpoint.session_id !== sessionId || checkpoint.storage !== chatStorageId(this.connection)) throw Error('This conversation belongs to another storage location.');
+    return checkpoint;
+  }
+  async save(checkpoint: ChatCheckpoint): Promise<string> {
+    if (!this.connection.allowRead || !this.connection.allowUpload || this.connection.allowOverwrite) throw Error('Chat storage requires reads and uploads, with overwrites disabled.');
+    const json = JSON.stringify(chatSchema.parse(checkpoint)), bytes = new TextEncoder().encode(json);
+    if (bytes.length > 4 * 1024 * 1024) throw Error('Conversation exceeds the 4 MiB checkpoint limit.');
+    let binary = ''; for (let offset = 0; offset < bytes.length; offset += 16384) binary += String.fromCharCode(...bytes.subarray(offset, offset + 16384));
+    const receipt = z.object({ key: z.string(), versionId: z.string().optional(), sha256: z.literal(digest(bytes)) }).parse(await this.bridge({ operation: 's3Checkpoint', id: this.connection.id, revision: this.connection.revision, sessionId: checkpoint.session_id, base64: btoa(binary) }));
+    const reference = checkpointReference(receipt.key, receipt.versionId);
+    if (JSON.stringify(await this.read(checkpoint.session_id, reference)) !== json) throw Error('Saved chat readback differs from its checkpoint.');
+    return reference;
+  }
+}
+
+export class BrowserChat {
+  private agent: Agent;
+  private listeners = new Set<() => void>();
+  private checkpoint: ChatCheckpoint;
+  private stopped = false;
+  private reference?: string;
+  private state: ChatSnapshot;
+  constructor(private storage: ChatStorage, private inference: PublicInferenceConnection, bridge: PiBridge, restored?: { checkpoint: ChatCheckpoint; reference: string }) {
+    if (restored && restored.checkpoint.model !== inference.model) throw Error('Select an inference connection with the saved conversation’s model.');
+    this.checkpoint = restored ? { ...restored.checkpoint, branch_id: crypto.randomUUID(), phase: restored.checkpoint.phase === 'pending' ? 'interrupted' : restored.checkpoint.phase } : {
+      kind: 'browser-pi-checkpoint', schema_version: 2, profile: 'pi-web-chat-1', session_id: crypto.randomUUID(), branch_id: crypto.randomUUID(), parent: null, created_at: new Date().toISOString(), title: 'New conversation', model: inference.model, storage: chatStorageId(storage.connection), phase: 'idle', messages: [],
+    };
+    this.reference = restored?.reference;
+    this.agent = new Agent({ initialState: { systemPrompt: 'You are Pi, running in the browser. Answer using this conversation. No filesystem, shell or other tools are available.', model: piModel(inference), messages: this.checkpoint.messages as AgentMessage[], thinkingLevel: 'off', tools: [] }, streamFn: inferenceStream(bridge, inference), finishTurn: () => ({ action: 'end' }) });
+    this.state = { title: this.checkpoint.title, messages: [], busy: false, dirty: !restored, phase: this.checkpoint.phase };
+    this.agent.subscribe(() => this.publish()); this.publish();
+  }
+  snapshot = () => this.state;
+  subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
+  private publish() {
+    this.state = { ...this.state, sessionId: this.checkpoint.session_id, reference: this.reference, title: this.checkpoint.title, phase: this.checkpoint.phase, messages: this.agent.state.messages.filter(message => message.role !== 'system') };
+    for (const listener of this.listeners) listener();
+  }
+  private async save() {
+    this.state = { ...this.state, dirty: true }; this.publish();
+    const candidate = { ...this.checkpoint, parent: this.reference ?? null, created_at: new Date().toISOString(), messages: this.agent.state.messages.filter(message => message.role !== 'system') as ChatCheckpoint['messages'] };
+    this.reference = await this.storage.save(candidate); this.checkpoint = candidate;
+    this.state = { ...this.state, dirty: false }; this.publish();
+  }
+  async retrySave() {
+    if (this.state.busy) return;
+    this.state = { ...this.state, busy: true, error: undefined }; this.publish();
+    try { await this.save(); } catch (error) { this.state = { ...this.state, error: error instanceof Error ? error.message : 'Chat save failed.' }; }
+    finally { this.state = { ...this.state, busy: false }; this.publish(); }
+  }
+  async send(text?: string) {
+    if (this.state.busy || this.state.dirty && this.reference || !text && this.checkpoint.phase === 'idle') throw Error('Save this conversation before continuing.');
+    if (text !== undefined && (!text.trim() || text.length > 128 * 1024)) throw Error('Enter text up to 128 KiB.');
+    if (text && this.checkpoint.phase !== 'idle') throw Error('Resolve the interrupted turn before sending another prompt.');
+    this.stopped = false; this.state = { ...this.state, busy: true, error: undefined };
+    if (text) { this.agent.state.messages = [...this.agent.state.messages, { role: 'user', content: text, timestamp: Date.now() }]; if (this.checkpoint.title === 'New conversation') this.checkpoint.title = text.trim().slice(0, 100); }
+    this.checkpoint.phase = 'pending'; this.publish();
+    try {
+      await this.save(); // No inference may start before the user's message is durable.
+      if (this.stopped) { this.checkpoint.phase = 'interrupted'; await this.save(); return; }
+      await this.agent.continue();
+      this.checkpoint.phase = 'idle';
+      const last = this.agent.state.messages.at(-1);
+      if (last?.role === 'assistant' && last.errorMessage) this.state = { ...this.state, error: last.errorMessage };
+      await this.save();
+    } catch (error) {
+      this.state = { ...this.state, error: error instanceof Error ? error.message : 'Conversation failed.' };
+      if (this.checkpoint.phase === 'pending') this.checkpoint.phase = 'interrupted';
+    } finally { this.state = { ...this.state, busy: false }; this.publish(); }
+  }
+  stop() { this.stopped = true; this.agent.abort(); }
+}

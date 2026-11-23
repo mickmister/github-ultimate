@@ -12,6 +12,7 @@ const configuration = z.object({
   model: z.string().trim().min(1).max(200),
   headers: z.array(z.object({ name: headerName, value: z.string().max(8192).regex(/^[\x20-\x7e]*$/) }).strict()).max(20).default([]),
 }).strict();
+export const inferenceConfigurationSchema = configuration;
 const grant = { origin: z.string().max(300), subpath: z.string().max(1000) };
 export const inferenceSettingsSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('list') }).strict(),

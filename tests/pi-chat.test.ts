@@ -1,0 +1,83 @@
+import { expect, test } from 'vitest';
+import { BrowserChat, ChatStorage, type ChatCheckpoint } from '../hosted/pi-chat';
+import type { PiBridge } from '../hosted/pi-transport';
+import type { PublicS3Connection } from '../src/s3-protocol';
+import type { PublicInferenceConnection } from '../src/inference-protocol';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
+
+function fixture() {
+  const storage: PublicS3Connection = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Storage', endpoint: 'https://s3.example/', bucket: 'chats', prefix: 'workspace/', region: 'us-east-1', addressing: 'path', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [] };
+  const inference: PublicInferenceConnection = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Model', model: 'test-model', hostedGrants: [] };
+  const objects = new Map<string, string>(), requests: { messages: { role: string; content: string }[] }[] = [];
+  let failSave = false;
+  const bridge: PiBridge = async request => {
+    if (request.operation === 's3Checkpoint') {
+      if (failSave) throw Error('Storage offline');
+      const bytes = Uint8Array.from(atob(request.base64), character => character.charCodeAt(0)), hash = bytesToHex(sha256(bytes));
+      const key = `${storage.prefix}pi-sessions/${request.sessionId}/2026-11-23-${crypto.randomUUID()}-${hash}.json`;
+      objects.set(key, request.base64); return { key, sha256: hash } as never;
+    }
+    if (request.operation === 's3Read') {
+      const base64 = objects.get(request.key)!;
+      return { key: request.key, base64, size: atob(base64).length } as never;
+    }
+    if (request.operation === 'inferenceComplete') {
+      const body = JSON.parse(request.body); requests.push(body);
+      const last = [...objects.values()].at(-1)!;
+      const pending = JSON.parse(Buffer.from(last, 'base64').toString());
+      expect(pending.phase).toBe('pending');
+      expect(pending.messages.at(-1).role).toBe('user');
+      return { choices: [{ finish_reason: 'stop', message: { content: `Reply ${requests.length}: Café 🌴` } }] } as never;
+    }
+    if (request.operation === 's3List') return { objects: [...objects.keys()].map(key => ({ key, size: 1 })) } as never;
+    throw Error(`Unexpected operation ${request.operation}`);
+  };
+  return { storage, inference, bridge, objects, requests, setFailSave(value: boolean) { failSave = value; } };
+}
+
+test('chat durably journals the user before inference and restores with new device-local connection IDs', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), chat = new BrowserChat(store, f.inference, f.bridge);
+  await chat.retrySave(); await chat.send('Hello');
+  expect(chat.snapshot().dirty).toBe(false);
+  const saved = await store.read(chat.snapshot().sessionId!, chat.snapshot().reference!);
+  expect(saved.messages.map(message => message.role)).toEqual(['user', 'assistant']);
+  const otherStore = new ChatStorage(f.bridge, { ...f.storage, id: crypto.randomUUID(), revision: crypto.randomUUID() });
+  const other = new BrowserChat(otherStore, { ...f.inference, id: crypto.randomUUID(), revision: crypto.randomUUID() }, f.bridge, { checkpoint: await otherStore.read(saved.session_id, chat.snapshot().reference!), reference: chat.snapshot().reference! });
+  expect(f.requests).toHaveLength(1);
+  await other.send('Continue');
+  expect(f.requests[1].messages).toContainEqual({ role: 'assistant', content: 'Reply 1: Café 🌴' });
+  expect((await otherStore.read(saved.session_id, other.snapshot().reference!)).messages).toHaveLength(4);
+});
+
+test('independent device continuations preserve separate branches and exact ancestry', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), original = new BrowserChat(store, f.inference, f.bridge);
+  await original.retrySave(); await original.send('Start');
+  const reference = original.snapshot().reference!, checkpoint = await store.read(original.snapshot().sessionId!, reference);
+  const left = new BrowserChat(store, f.inference, f.bridge, { checkpoint, reference }), right = new BrowserChat(store, f.inference, f.bridge, { checkpoint, reference });
+  await left.send('Left'); await right.send('Right');
+  const records = [...f.objects.values()].map(base64 => JSON.parse(Buffer.from(base64, 'base64').toString()) as ChatCheckpoint);
+  const children = records.filter(record => record.parent === reference);
+  expect(children).toHaveLength(2); expect(new Set(children.map(record => record.branch_id)).size).toBe(2);
+  expect(left.snapshot().reference).not.toBe(right.snapshot().reference);
+});
+
+test('failed user save blocks inference; retry and explicit interrupted continuation send only once', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), chat = new BrowserChat(store, f.inference, f.bridge);
+  await chat.retrySave(); f.setFailSave(true); await chat.send('Keep this message');
+  expect(f.requests).toHaveLength(0); expect(chat.snapshot()).toMatchObject({ dirty: true, phase: 'interrupted', error: 'Storage offline' });
+  f.setFailSave(false); await chat.retrySave();
+  const checkpoint = await store.read(chat.snapshot().sessionId!, chat.snapshot().reference!);
+  const restored = new BrowserChat(store, f.inference, f.bridge, { checkpoint, reference: chat.snapshot().reference! });
+  expect(restored.snapshot().phase).toBe('interrupted'); expect(f.requests).toHaveLength(0);
+  await restored.send(); expect(f.requests).toHaveLength(1);
+  expect(f.requests[0].messages.filter(message => message.role === 'user')).toEqual([{ role: 'user', content: 'Keep this message' }]);
+});
+
+test('checkpoint byte tampering and a mismatched model are rejected', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), chat = new BrowserChat(store, f.inference, f.bridge);
+  await chat.retrySave(); const reference = chat.snapshot().reference!, checkpoint = await store.read(chat.snapshot().sessionId!, reference);
+  expect(() => new BrowserChat(store, { ...f.inference, model: 'different' }, f.bridge, { checkpoint, reference })).toThrow('saved conversation');
+  f.objects.set(reference, btoa('{}'));
+  await expect(store.read(checkpoint.session_id, reference)).rejects.toThrow('integrity');
+});

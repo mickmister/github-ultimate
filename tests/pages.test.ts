@@ -91,7 +91,7 @@ test('hosted build preserves legacy pages and adds a client-only Start shell und
   const demoBytes = await payloadSize('hosted-dist/pi-web');
   expect(demoBytes).toBeLessThan(12 * 1024 * 1024);
   const demoBuild = JSON.parse(await readFile('hosted-dist/pi-web/build.json', 'utf8'));
-  expect(demoBuild).toMatchObject({ branch: 'test/subpath', demo: true, basePath: `/github-ultimate/previews/${previewDirectory('test/subpath')}/pi-web/`, upstream: { repository: 'agegr/pi-web', commit: '432366bd510c72ce7b678a6cb1220f9cac1ed56c' } });
+  expect(demoBuild).toMatchObject({ branch: 'test/subpath', demo: false, basePath: `/github-ultimate/previews/${previewDirectory('test/subpath')}/pi-web/`, upstream: { repository: 'agegr/pi-web', commit: '432366bd510c72ce7b678a6cb1220f9cac1ed56c' } });
   expect(html).toContain('href="./pi-web/"');
   expect(await payloadSize('hosted-dist') - await payloadSize('hosted-dist/app') - await payloadSize('hosted-dist/isolation') - piBytes - demoBytes).toBeLessThan(66 * 1024);
   expect(await payloadSize('hosted-dist/isolation')).toBeLessThan(32 * 1024);

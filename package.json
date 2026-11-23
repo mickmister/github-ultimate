@@ -20,7 +20,7 @@
     "lint:ui-customization-fences": "OPENLINT_POLICY_DIR=.github/openlint ol check --preset ui-customization-fences --target . src hosted webapp/src",
     "hosted:build": "node scripts/build-hosted.mjs",
     "pi:build": "node scripts/build-pi.mjs",
-    "pi-web:install": "npm --prefix pi-web/demo ci --ignore-scripts --no-audit --no-fund",
+    "pi-web:install": "npm --prefix pi-web/client ci --ignore-scripts --no-audit --no-fund",
     "pi-web:build": "node scripts/build-pi-web.mjs",
     "test:pi-web": "playwright test --config playwright.pi-web.config.ts",
     "hosted:storybook:stage": "node scripts/stage-hosted-storybook.mjs",

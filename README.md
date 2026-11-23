@@ -77,9 +77,9 @@ Dashboard links accept private `https://node.tailnet.ts.net/` hosts without quer
 new [TanStack Start SPA](docs/webapp.md) at `app/` inside each branch preview.
 `pnpm run pages:build` also includes the mock-data web-app Storybook at
 `storybook/`; CI publishes both through the same GitHub Pages branch preview.
-The vendored [Pi Web static demo](docs/pi-web-demo.md) is published at `pi-web/`.
+The [S3-backed Pi Web chat](docs/pi-web-demo.md) is published at `pi-web/`.
 Run `pnpm run pi-web:install` once before building hosted pages locally; its
-independent upstream npm lockfile pins the demo dependencies.
+independent npm lockfile pins the retained frontend dependencies.
 CI maintains one current preview per branch in `gh-pages` and publishes the
 assembled site through GitHub Pages. Origin-to-connection grants are configured
 in the extension; hosted pages never receive credentials. See

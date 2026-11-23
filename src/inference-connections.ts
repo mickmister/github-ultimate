@@ -3,6 +3,7 @@ import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from '
 import { trustedOrigin } from './hosted-protocol';
 import { boundedJSON } from './git-reads';
 import { ConnectionError } from './connections';
+import { utf8Bytes } from './utf8';
 
 export type InferenceRecord = InferenceConfiguration & { id: string; revision: string; hostedGrants: HostedGrant[] };
 export interface InferenceStore {
@@ -19,7 +20,8 @@ export class InferenceConnections {
   private cancelled = new Map<string, number>();
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
-  constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true) {}
+  constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms), private combine = (signals: AbortSignal[]) => AbortSignal.any(signals)) {}
+  cancelActive() { for (const job of this.active.values()) job.controller.abort(); }
   handle(input: unknown) {
     const request = inferenceSettingsSchema.parse(input);
     if (request.operation !== 'list') {
@@ -34,7 +36,7 @@ export class InferenceConnections {
     if (request.operation === 'add') {
       if (!await this.hasHostAccess(inferenceURL(request.url).origin)) throw new ConnectionError('Grant browser access to the inference endpoint first.');
       const { operation: _, ...config } = request;
-      const record: InferenceRecord = { ...config, id: crypto.randomUUID(), revision: crypto.randomUUID(), hostedGrants: [] };
+      const record: InferenceRecord = { ...config, id: this.newId(), revision: this.newId(), hostedGrants: [] };
       await this.store.put(record); return publicRecord(record);
     }
     const record = await this.store.get(request.id);
@@ -43,12 +45,13 @@ export class InferenceConnections {
     const grant = { origin: trustedOrigin(request.origin), subpath: trustedSubpath(request.subpath) };
     record.hostedGrants = record.hostedGrants.filter(item => item.origin !== grant.origin || item.subpath !== grant.subpath);
     if (request.operation === 'grantOrigin') record.hostedGrants.push(grant);
-    record.revision = crypto.randomUUID();
+    record.revision = this.newId();
     await this.store.put(record); return publicRecord(record);
   }
-  async handleHosted(documentURL: string, input: unknown) {
+  async handleHosted(documentURL: string, input: unknown, current: () => boolean = () => true) {
     const source = loadedDocument(documentURL), request = inferenceHostedSchema.parse(input), epoch = this.epoch;
     const approved = (await this.store.all()).filter(record => record.hostedGrants.some(grant => matchesGrant(grant, source)));
+    if (!current()) throw new ConnectionError('Inference document changed.');
     if (request.operation === 'inferenceConnections') return approved.map(publicRecord);
     const record = approved.find(record => record.id === request.id);
     if (!record || record.revision !== request.revision) throw new ConnectionError('Inference connection access changed. Reconnect explicitly.');
@@ -64,11 +67,11 @@ export class InferenceConnections {
       return null;
     }
     const url = inferenceURL(record.url);
-    if (!await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || epoch !== this.epoch) throw new ConnectionError('Inference endpoint or page access changed.');
+    if (!current() || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || epoch !== this.epoch) throw new ConnectionError('Inference endpoint or page access changed.');
     if (this.cancelled.has(key)) throw new ConnectionError('Inference cancelled.');
     if (this.active.size >= 2 || this.active.has(request.requestId)) throw new ConnectionError('Inference is busy or this request is already active.');
     let body: Record<string, unknown>;
-    if (new TextEncoder().encode(request.body).length > 1024 * 1024) throw new ConnectionError('Inference request exceeds 1 MiB.');
+    if (utf8Bytes(request.body) > 1024 * 1024) throw new ConnectionError('Inference request exceeds 1 MiB.');
     try { body = JSON.parse(request.body); } catch { throw new ConnectionError('Invalid inference JSON.'); }
     if (!body || Array.isArray(body) || typeof body !== 'object' || !Array.isArray(body.messages) || !body.messages.length || Object.keys(body).some(key => !['messages', 'tools'].includes(key))) throw new ConnectionError('Expected messages and optional tools only.');
     const controller = new AbortController();
@@ -78,10 +81,10 @@ export class InferenceConnections {
       const headers = new Headers();
       for (const header of record.headers) headers.set(header.name, header.value);
       headers.set('Content-Type', 'application/json');
-      response = await this.fetcher(url.href, { method: 'POST', headers, body: JSON.stringify({ ...body, model: record.model, stream: false, max_tokens: 4096 }), credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.any([controller.signal, AbortSignal.timeout(90000)]) });
+      response = await this.fetcher(url.href, { method: 'POST', headers, body: JSON.stringify({ ...body, model: record.model, stream: false, max_tokens: 4096 }), credentials: 'omit', redirect: 'error', cache: 'no-store', signal: this.combine([controller.signal, this.timeout(90000)]) });
       if (!response.ok) { await response.body?.cancel(); throw new ConnectionError(`Inference returned HTTP ${response.status}. Check the endpoint and configured headers.`); }
       const result = await boundedJSON(response, 2 * 1024 * 1024);
-      if (controller.signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+      if (!current() || controller.signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
       return result;
     } catch (error) {
       await response?.body?.cancel().catch(() => {});

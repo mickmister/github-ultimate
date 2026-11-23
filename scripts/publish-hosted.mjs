@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// Bound the app, mock-data Storybook and Pi Web demo, including local assets.
+// Bound the app, mock-data Storybook and Pi Web chat, including local assets.
 export const previewLimit = 36 * 1024 * 1024;
 export const siteLimit = 50 * 1024 * 1024;
 export function previewDirectory(branch) {

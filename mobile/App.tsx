@@ -14,6 +14,8 @@ import CacheSettings from './CacheSettings';
 import VdConnections from './VdConnections';
 import { MobileSettingsStore, type MobileSettings } from '../src/mobile-settings';
 import { MobileLifecycle } from '../src/mobile-lifecycle';
+import { pi } from './pi';
+import { PiConnections } from './PiConnections';
 
 export default function App() {
   const systemMode = useColorScheme();
@@ -38,7 +40,7 @@ export default function App() {
   const [navigation, setNavigation] = useState({ key: '', back: false, forward: false });
   const [settingsBusy, setSettingsBusy] = useState(true);
   const settings = useRef(new MobileSettingsStore(AsyncStorage)).current;
-  const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage), github, setShellTheme)).current;
+  const broker = useRef(new MobileFixtureBroker(new AsyncPageKVStore(AsyncStorage), github, setShellTheme, pi)).current;
   const webView = useRef<AlohakWebViewHandle>(null);
   const viewKey = `${entry}:${reload}`;
   const currentViewKey = useRef(viewKey); currentViewKey.current = viewKey;
@@ -140,6 +142,7 @@ export default function App() {
       {showDiagnostics && <><Text selectable>Mobile build commit: {String(Constants.expoConfig?.extra?.buildCommit ?? 'unavailable')}</Text><Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text></>}
       <GitHubConnections grant={grant} />
       <VdConnections grant={grant} />
+      <PiConnections grant={grant} />
       <CacheSettings />
     </ScrollView>}
     {error ? <Text accessibilityRole="alert" style={[styles.error, { color: theme.error }]}>{error}</Text> : null}

@@ -1,37 +1,21 @@
-import { Agent } from '@earendil-works/pi-agent-core';
 import { bridgeRequest } from './client';
-import { inferenceStream, piModel } from './pi-transport';
+import { BrowserChat, ChatStorage, chatStorageId } from './pi-chat';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
+import type { PublicS3Connection } from '../src/s3-protocol';
+import type {} from './pi-chat-contract';
+import { mobilePiRequest } from '../src/mobile-pi-client';
+import type { PiBridge } from './pi-transport';
 
-// Loaded as a separate browser bundle so the upstream demo keeps its independent
-// npm graph. No endpoint, header or provider credential enters the Pi Web page.
+// Keep native Pi transfer assembly out of the independently budgeted legacy pages.
+const bridge: PiBridge = (request, timeoutMs) => bridgeRequest(request, timeoutMs, mobilePiRequest);
+
 window.piWebExtension = {
-  connections: () => bridgeRequest<PublicInferenceConnection[]>({ operation: 'inferenceConnections' }),
-  create(connection: PublicInferenceConnection) {
-    const agent = new Agent({
-      initialState: {
-        systemPrompt: 'You are Pi, running in the browser. Answer the user using this conversation. No filesystem, shell or other tools are available in this session.',
-        model: piModel(connection), thinkingLevel: 'off', tools: [],
-      },
-      streamFn: inferenceStream(bridgeRequest, connection),
-      finishTurn: () => ({ action: 'end' }),
-    });
-    return {
-      systemPrompt: agent.state.systemPrompt,
-      prompt: (text: string) => agent.prompt(text),
-      abort: () => agent.abort(),
-      subscribe: (listener: (event: unknown) => void) => agent.subscribe(listener),
-    };
+  connections: async () => ({ inference: await bridge<PublicInferenceConnection[]>({ operation: 'inferenceConnections' }), storage: await bridge<PublicS3Connection[]>({ operation: 's3Connections' }) }),
+  storageId: chatStorageId,
+  list: (storage: PublicS3Connection, token?: string) => new ChatStorage(bridge, storage).list(token),
+  create: (inference: PublicInferenceConnection, storage: PublicS3Connection) => new BrowserChat(new ChatStorage(bridge, storage), inference, bridge),
+  restore: async (inference: PublicInferenceConnection, storage: PublicS3Connection, sessionId: string, reference: string) => {
+    const objects = new ChatStorage(bridge, storage);
+    return new BrowserChat(objects, inference, bridge, { checkpoint: await objects.read(sessionId, reference), reference });
   },
 };
-
-declare global {
-  interface Window { piWebExtension: {
-    connections(): Promise<PublicInferenceConnection[]>;
-    create(connection: PublicInferenceConnection): {
-      systemPrompt: string;
-      prompt(text: string): Promise<void>; abort(): void;
-      subscribe(listener: (event: unknown) => void): () => void;
-    };
-  } }
-}

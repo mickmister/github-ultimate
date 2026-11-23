@@ -1,87 +1,83 @@
-# Pi Web static demo
+# Pi Web: durable browser conversations
 
-The branch preview includes agegr's Pi Web UI at `pi-web/`, alongside the existing
-application at `app/`. The hosted dashboard links to it as **Pi Web demo**.
-See [`pi-web/UPSTREAM.md`](../pi-web/UPSTREAM.md) for the exact source pin,
-license, local modifications and update procedure.
+The `/pi-web/` branch preview now runs a real text-only Pi 1.5.2 agent and stores
+its conversations in the selected private S3 location. The old static demo and
+tab-memory-only adapter have been superseded. The production source is
+`pi-web/client/`; upstream provenance and license remain in `pi-web/UPSTREAM.md`.
 
-## Build and verify
+## Browser setup
 
-```sh
-pnpm install --frozen-lockfile
-pnpm run pi-web:install
-pnpm run pi-web:build
-pnpm run test:pi-web
-```
+1. Install/reload the current browser extension. Configure an OpenAI-compatible
+   inference connection and S3 storage with reads/uploads enabled and overwrites
+   disabled. Keep the same endpoint, bucket, prefix, region and addressing on each
+   device; local connection UUIDs and credentials can differ.
+2. Grant both connections the Pi Web origin and exact preview subpath. A grant for
+   the sibling `app/` or old `pi/` entry does not cover `/pi-web/`.
+3. Reload Pi Web. If exactly one connection of each kind is available, it is
+   selected automatically. Otherwise use Connections and choose explicitly.
+4. Create **New conversation**, wait for **Saved to S3**, and send text. A settled
+   reply is saved automatically. The URL contains the exact conversation,
+   checkpoint/version reference and a fingerprint of the storage location.
+5. Reopen that URL to restore without resending. On another authorized device,
+   use the same location and an inference connection with the saved model.
+   **Conversations** loads paginated saved checkpoint references; select the
+   continuation you want. **Refresh conversations** discovers other device saves.
 
-`pi-web:build` writes `hosted-dist/pi-web/`. `hosted:build` and `pages:build`
-also build/stage it automatically. CI installs the demo's frozen npm graph before
-building; browser jobs consume the static output and do not need a Pi server.
-The upstream Node application is retained as source but is not started or
-packaged into the demo deployment.
+## Mobile setup
 
-The build derives the full base path from `GITHUB_REPOSITORY` and
-`GITHUB_REF_NAME` (or the current branch locally):
+Alohak's native settings now include inference and S3 chat connections. Endpoints,
+headers and signing credentials remain native; secrets use generation-bound secure
+vault chunks and never AsyncStorage. Set the deployment to the `/pi-web/` URL and
+grant both connections to it. This requires a mobile update containing the new Pi
+bridge; a website refresh cannot update an older installed native JavaScript bundle.
 
-```text
-/<repository>/previews/<branch-preview>/pi-web/?session=<session-id>
-```
+The native path reuses the S3 and inference engines, a portable SigV4 signer and
+the existing original-document authorization. Large requests and responses use
+bounded ordered transfers, keeping every native ingress frame within 16 KiB.
+Navigation/background invalidation clears transfer state and aborts native model
+requests. This does not implement native-owned or lock-screen Pi execution.
 
-Serve `hosted-dist/pi-web/` at that exact prefix when inspecting a local build.
-The browser tests run a real static server at the generated prefix, with no API
-fallback. Navigation uses query parameters. Refresh requests the same existing
-directory; preserve its trailing slash. `build.json` records the source SHA,
-upstream pin and base path, and the published directory includes the upstream
-MIT license. The demo has a 12 MiB budget within the 36 MiB branch-preview and
-50 MiB total-site limits. These are repository-defined budgets, not GitHub limits.
+## Durability and continuation
 
-## Demo behavior
+`hosted/pi-chat.ts` validates the `pi-web-chat-1` checkpoint profile. It uses the
+existing `s3Checkpoint` broker operation under the approved
+`pi-sessions/<session UUID>/` prefix, verifies payload SHA-256 and reads back the
+exact stored object. B2 uses ordinary PUT and requires a returned version ID;
+restore uses that exact version. Other endpoints retain create-only PUT behavior.
 
-### Real browser Pi session through the extension
+The user message is saved before inference starts. Completed, failed or aborted
+replies are saved after settlement. A save failure keeps the in-memory state,
+shows **Not saved** and blocks further sends until **Retry session save** succeeds.
+An unsaved in-memory reply can still be lost if the page/process is killed.
 
-1. In the browser extension's Connections settings, configure an inference
-   connection using an OpenAI-compatible chat-completions endpoint, model and
-   required headers. Existing connections can be reused.
-2. Grant that connection access to origin `https://mickmister.github.io` and subpath
-   `/github-ultimate/previews/b-vk-46e5-vd-multi-instanc-0940c2d95906d253/pi-web/`.
-   A grant for the sibling `app/` page does not cover `pi-web/`.
-3. Reload Pi Web after granting access. Click **Connect inference**, select the
-   connection, then **New real Pi session**. Send a text prompt in the chat.
-4. Continue in that session for follow-up turns. **Open real session** returns to
-   the most recently created real session after browsing the sample chats.
+A page reloaded from a pending checkpoint shows an interrupted turn. It never
+automatically reissues the request; **Continue interrupted turn** is explicit.
+Each restored device continuation gets a separate branch identity and records
+its exact parent reference. There is no mutable latest pointer, cross-device lock,
+last-write-wins overwrite or automatic branch merge. Links pin checkpoints;
+refresh and choose a newer checkpoint to see another device's continuation.
 
-The real session uses the existing Pi 1.5.2 agent core and extension inference
-transport. The extension retains provider URLs and credential headers; the page
-receives only connection metadata and responses. Stop cancels the inference
-request. Provider errors are displayed without falling back to canned replies.
-The current transport returns a complete response, not token-by-token streaming.
+The production entry does not patch global fetch/EventSource and ships no sample
+repository, fake provider account or canned conversation. It retains upstream rich
+message rendering. Tools, shell/filesystem, streaming token deltas, model switching
+within a conversation, native background execution and old workspace-agent
+checkpoint migration are outside this text-chat slice.
 
-Real sessions are text-only and stay in memory in this tab. Reloading or closing
-the page loses them. They do not require GitHub or S3 connections. Shell, files,
-model changes, branching and compaction are not supported in these sessions;
-unsupported commands are rejected instead of invoking the demo simulator.
-The displayed project files and other sample sessions remain demonstration data.
+## Checks
 
-The separate `extension-runtime.js` bundle is built from the parent pnpm graph,
-so the Next demo does not install a second Pi runtime or require a Node server.
-Browser tests exercise the packaged extension, real Pi agent and private-header
-broker with a controlled provider fixture. They do not establish acceptance
-against a user's configured external provider.
+- Root, mobile and client typechecks; client lint and production static export.
+- Chat tests: pre-inference durability, save failure/retry, portable connection IDs,
+  restored history, divergent branches, model mismatch and tampered bytes.
+- Native tests: secure-vault chunk restart, frame bounds, large responses, document
+  invalidation and SigV4 conformance against the existing WebCrypto signer.
+- Production Chromium/WebKit tests: six orientations, draft continuity, S3
+  save/reload, independent-device restore/continue, branches, no global mock API
+  traffic and no published demo manifest.
+- Packaged Chromium extension: real brokers, private headers, signed B2 versioned
+  checkpoints, reload/history continuation and save denial before inference.
 
-### Sample sessions
-
-Sessions, model accounts, tool calls and responses are simulated in the browser.
-In sample sessions, no provider, Pi process, shell, Git checkout or private storage is contacted.
-The upstream demo supports in-memory prompts, branches, files and terminal-like
-responses. This does not demonstrate real agent execution or durable recovery.
-
-The file explorer receives only `pi-web/demo/fixtures/files.json`. Its welcome
-README is a local fixture; other entries are selected public upstream source
-files. The generator validates containment and regular-file/size bounds before
-copying. It does not enumerate the surrounding Git repository. New public file
-entries require an explicit fixture-manifest edit.
-
-Tests cover six viewport orientations in Chromium and WebKit, rotation/draft
-retention, query deep links, refresh/back-forward, session switching, simulated
-tool replies, local assets, license and fixture boundaries. These are browser
-emulation checks, not physical-device acceptance.
+Remote services are controlled fixtures in these tests. Native wire emulation and
+an iOS bundle export are not installed-device acceptance. Actual user inference,
+B2 credentials, physical cross-device behavior and release installation need
+separate verification. The older `/app/#/agent` keeps its existing workspace/tools
+and checkpoint contract.

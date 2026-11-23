@@ -5,7 +5,7 @@ on:
       platform:
         description: Platform to update
         type: choice
-        default: all
+        default: ios
         options: [all, android, ios]
       profile:
         description: EAS channel and environment
