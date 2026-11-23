@@ -65,6 +65,8 @@ async function main() {
     input.revision_id ??= `revision-${crypto.randomUUID()}`;
     if (values['vk-origin'] && !['handoff', 'none'].includes(values['vk-origin'])) throw new Error('--vk-origin must be handoff or none.');
     const prior = values.expected ? parseReviewRequest(read(requestResource(input.request_id)).text) : undefined;
+    // Amendments retain creation time; legacy requests remain undated.
+    input.created_at = prior ? prior.created_at : input.created_at ?? new Date().toISOString();
     const request = parseReviewRequest(JSON.stringify(reviewOrigin(input, prior, process.env, values['vk-origin'] as 'handoff' | 'none' | undefined)));
     if (request.workspace !== workspace) throw new Error('Request workspace does not match --workspace.');
     const resources = listing();

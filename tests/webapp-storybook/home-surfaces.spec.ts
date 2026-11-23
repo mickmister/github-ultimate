@@ -1,5 +1,23 @@
 import { expect, test } from '@playwright/test';
 
+test('dismissal survives reload and surface swaps and can be restored', async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/iframe.html?id=web-app-home-surfaces--adaptive&viewMode=story');
+  const rows = page.locator('.home-requests li');
+  await expect(rows).toHaveCount(4);
+  await rows.first().getByRole('button', { name: 'Dismiss', exact: true }).click();
+  await expect(rows).toHaveCount(3);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(rows).toHaveCount(3);
+  await page.reload();
+  await expect(rows).toHaveCount(3);
+  await page.getByRole('checkbox', { name: 'Show dismissed requests', exact: true }).check();
+  await expect(rows).toHaveCount(4);
+  await page.getByRole('button', { name: 'Restore', exact: true }).click();
+  await page.getByRole('checkbox', { name: 'Show dismissed requests', exact: true }).uncheck();
+  await expect(rows).toHaveCount(4);
+});
+
 const orientations = [
   ['phone', 'portrait', 390, 844], ['phone', 'landscape', 844, 390],
   ['tablet', 'portrait', 820, 1180], ['tablet', 'landscape', 1180, 820],

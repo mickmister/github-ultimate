@@ -53,6 +53,7 @@ test('captured selection, draft, caret, pinned context and queue failure survive
   await page.getByRole('button', { name: 'Add to queue', exact: true }).click();
   await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
   await page.getByLabel('Comment 1', { exact: true }).fill('Edited queue draft');
+  await expect.poll(() => page.evaluate(() => JSON.parse(sessionStorage.getItem('feedback:survival')!).interactions[0].comment)).toBe('Edited queue draft');
   await page.evaluate(() => Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('Denied')) } }));
   await page.getByRole('button', { name: 'Copy Content & clear Content', exact: true }).click();
   await expect(page.getByRole('dialog')).toContainText('Your comments are still queued');
