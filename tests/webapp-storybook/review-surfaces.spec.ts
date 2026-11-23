@@ -1,11 +1,45 @@
 import { expect, test } from '@playwright/test';
-import type { ReviewFixtureState } from '../../webapp/stories/reviews.fixtures';
+import { createReviewFixture, reviewScope, type ReviewFixtureState } from '../../webapp/stories/reviews.fixtures';
+import { artifactResource, type ReviewArtifact } from '../../src/review-protocol';
 
 const orientations = [
   ['phone', 'portrait', 390, 844], ['phone', 'landscape', 844, 390],
   ['tablet', 'portrait', 820, 1180], ['tablet', 'landscape', 1180, 820],
   ['desktop', 'portrait', 900, 1440], ['desktop', 'landscape', 1440, 900],
 ] as const;
+
+test('review queue hides remote dismissed and completed requests by default and filters both categories', async ({ page }) => {
+  const listing = await createReviewFixture().modules.reviews!.list(reviewScope);
+  const [dismissed, completed] = listing.requests;
+  const values: ReviewArtifact[] = [
+    { kind: 'review-queue-state', schema_version: 1, transport: 'workspace-resources', id: 'queue-state', reviewer: listing.reviewer,
+      request: { id: dismissed.request.request_id, version: dismissed.pin.version, snapshot: dismissed.pin.snapshot }, category: 'dismissed', forms: [], comments: [], progress: [] },
+    { kind: 'review-response', schema_version: 1, transport: 'workspace-resources', id: 'completed-response', reviewer: listing.reviewer,
+      request: { id: completed.request.request_id, version: completed.pin.version, snapshot: completed.pin.snapshot }, intent: 'feedback', comments: [], progress: [],
+      forms: completed.request.members.flatMap(member => member.kind === 'form' ? [{ member_id: member.id, bead_id: member.bead_id, form_id: member.form_id, dsl: member.dsl, answers: {}, intent: 'discussion' as const }] : []) },
+  ];
+  let state: ReviewFixtureState = { artifacts: values.map(value => ({ value, pin: { resource: artifactResource(value), version_kind: 'git-blob', version: 'a'.repeat(40), snapshot: '1'.repeat(40) } })), revision: 1 };
+  await page.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') state = route.request().postDataJSON();
+    await route.fulfill({ json: state });
+  });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto('/iframe.html?id=web-app-reviews-inbox-surfaces--adaptive&viewMode=story&remoteFixture=true');
+  const filter = page.getByRole('combobox', { name: 'Queue filter', exact: true });
+  await expect(filter).toHaveValue('active');
+  await expect(page.locator('.review-inbox li')).toHaveCount(0);
+  await filter.selectOption('dismissed');
+  await expect(page.getByRole('link', { name: dismissed.request.title, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: 'Restore', exact: true }).click();
+  await expect(page.locator('.review-inbox li')).toHaveCount(0);
+  await filter.selectOption('active');
+  await expect(page.locator('.review-inbox li')).toHaveCount(1);
+  await filter.selectOption('completed');
+  await expect(page.getByRole('link', { name: completed.request.title, exact: true })).toBeVisible();
+  await page.reload();
+  await expect(filter).toHaveValue('active');
+  await expect(page.locator('.review-inbox li')).toHaveCount(1);
+});
 
 for (const [surface, orientation, width, height] of orientations) {
   test(`submission permission is explicit and persisted on ${surface} ${orientation}`, async ({ page }) => {
@@ -108,14 +142,14 @@ test('inbox source selections and filters survive presentation swaps without mem
   });
   await page.goto('/iframe.html?id=web-app-reviews-inbox-surfaces--adaptive&viewMode=story&remoteFixture=true');
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.getByText('Only waiting for my response', { exact: true }).click();
+  await page.getByRole('combobox', { name: 'Queue filter', exact: true }).selectOption('all');
   for (const [surface, orientation, width, height] of orientations) {
     await page.setViewportSize({ width, height });
     await expect(page.locator(`[data-review-surface=${surface}][data-orientation=${orientation}]`)).toBeVisible();
     if (surface === 'phone' && !await page.getByRole('combobox', { name: 'Workspace', exact: true }).isVisible()) await page.getByText('Source and filters', { exact: true }).click();
     await expect(page.getByRole('combobox', { name: 'Storage repository', exact: true })).toHaveValue('example/storage');
     await expect(page.getByRole('combobox', { name: 'Workspace', exact: true })).toHaveValue('reader-workspace');
-    await expect(page.getByRole('checkbox', { name: 'Only waiting for my response', exact: true })).not.toBeChecked();
+    await expect(page.getByRole('combobox', { name: 'Queue filter', exact: true })).toHaveValue('all');
   }
   expect(reads).toBe(0);
 });

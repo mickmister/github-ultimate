@@ -1,5 +1,6 @@
 import type { AppHooksV1, ConnectionDTO, WorkspaceScope } from '../../app-hooks/contracts';
 import type { ReviewListing } from '../../app-hooks/reviews';
+import { saveReviewCategory, withReviewCategory } from '../reviews/queue';
 
 export interface HomeSource {
   id: string;
@@ -19,11 +20,13 @@ export interface HomeState {
   sources: readonly HomeSource[];
   canEnumerate: boolean;
   supported: boolean;
+  categorizing: readonly string[];
+  categoryError: string;
 }
 const message = (cause: unknown) => cause instanceof Error ? cause.message : String(cause);
 
 export function createHomeController(hooks: AppHooksV1) {
-  let state: HomeState = { busy: false, error: '', connections: [], sources: [], canEnumerate: Boolean(hooks.modules.documents.repositories), supported: Boolean(hooks.modules.reviews) };
+  let state: HomeState = { busy: false, error: '', connections: [], sources: [], canEnumerate: Boolean(hooks.modules.documents.repositories), supported: Boolean(hooks.modules.reviews), categorizing: [], categoryError: '' };
   const listeners = new Set<() => void>();
   let disposed = false, epoch = 0;
   const versions = new Map<string, number>();
@@ -83,7 +86,7 @@ export function createHomeController(hooks: AppHooksV1) {
     if (disposed) return;
     const generation = ++epoch;
     versions.clear();
-    publish({ busy: true, error: '', connections: [], sources: [] });
+    publish({ busy: true, error: '', connections: [], sources: [], categorizing: [], categoryError: '' });
     try {
       const connections = await hooks.modules.documents.connect();
       if (disposed || generation !== epoch) return;
@@ -98,6 +101,21 @@ export function createHomeController(hooks: AppHooksV1) {
     subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     actions: {
       connect,
+      async categorize(sourceId: string, requestId: string, category: 'active' | 'dismissed') {
+        const source = state.sources.find(item => item.id === sourceId), key = JSON.stringify([sourceId, requestId]);
+        if (!source?.scope || !source.listing || !hooks.modules.reviews || state.categorizing.includes(key)) return;
+        const review = source.listing.requests.find(item => item.request.request_id === requestId);
+        if (!review) return;
+        const generation = epoch, version = versions.get(sourceId);
+        publish({ categorizing: [...state.categorizing, key], categoryError: '' });
+        try {
+          const saved = await saveReviewCategory(hooks.modules.reviews, source.scope, source.listing, review, category);
+          if (disposed || generation !== epoch || versions.get(sourceId) !== version) return;
+          publish({ sources: state.sources.map(current => current.listing && current.scope?.repository.toLowerCase() === source.scope!.repository.toLowerCase() && current.scope.workspace === source.scope!.workspace && current.listing.reviewer === source.listing!.reviewer
+            ? { ...current, listing: withReviewCategory(current.listing, saved) } : current) });
+        } catch (cause) { if (generation === epoch) publish({ categoryError: message(cause) }); }
+        finally { if (generation === epoch) publish({ categorizing: state.categorizing.filter(item => item !== key) }); }
+      },
       retry(id: string) { const source = state.sources.find(item => item.id === id); if (source && !source.busy) void load(source); },
       addRepository(connectionId: string, repository: string) {
         const connection = state.connections.find(item => item.id === connectionId);

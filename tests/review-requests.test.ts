@@ -15,6 +15,7 @@ import { MobileFixtureBroker } from '../src/mobile-protocol';
 import { mobileGitHubRequest } from '../src/mobile-github-client';
 import { VdConnections, type VdRecord } from '../src/vd-connections';
 import type { ReviewReceipt } from '../src/review-protocol';
+import { matchesReviewQueue, reviewQueueCategory, saveReviewCategory, withReviewCategory } from '../webapp/src/features/reviews/queue';
 
 vi.mock('../hosted/client', () => ({ bridgeRequest: vi.fn(async (request: any) => request.operation === 'discover' ? { capabilities: [] } : [{ id: 'a6075abf-226e-4c88-977c-e11404e59f32', installation: { id: 1 }, user: { id: 1 } }]) }));
 
@@ -53,6 +54,41 @@ class GitFixture {
   };
 }
 const manifest = JSON.stringify({ schema_version: 1, workspace: scope.workspace, observed_at: '2026-11-12T00:00:00Z', purpose: 'Review requests' });
+test('remote queue categories survive a fresh client, isolate reviewers and restore without workflow delivery', async () => {
+  const f = processFixture(), deliver = vi.fn();
+  const selected = { connectionId: scope.id, ...scope };
+  const listing = await createHostedReviews(f.git.read).list(selected);
+  const service = { ...createHostedReviews(f.git.read), save: (s: unknown, value: ReviewArtifact, expected: string | null) => writeReview({ ...f.input(), text: JSON.stringify(value), expected }, 'github:1', f.git.read, f.git.mutate, deliver) };
+  const saved = await saveReviewCategory(service, selected, listing, listing.requests[0], 'dismissed');
+  expect(saved.pin.resource).toBe('review-requests/reader-01/queue/1.json');
+  expect(deliver).not.toHaveBeenCalled();
+  const fresh = await createHostedReviews(f.git.read).list(selected);
+  expect(reviewQueueCategory(fresh.requests[0], fresh)).toBe('dismissed');
+  expect(matchesReviewQueue(fresh.requests[0], fresh, 'active')).toBe(false);
+  expect(matchesReviewQueue(fresh.requests[0], fresh, 'dismissed')).toBe(true);
+  expect(reviewQueueCategory(fresh.requests[0], { ...fresh, reviewer: 'github:2' })).toBe('active');
+  const restored = await saveReviewCategory(service, selected, fresh, fresh.requests[0], 'active');
+  expect(reviewQueueCategory(fresh.requests[0], withReviewCategory(fresh, restored))).toBe('active');
+  expect((await createHostedReviews(f.git.read).list(selected)).artifacts[0].value).toMatchObject({ kind: 'review-queue-state', category: 'active' });
+  expect(deliver).not.toHaveBeenCalled();
+});
+test('queue writes reject foreign identity and stale expected versions; completed requests are not active', async () => {
+  const f = fixture(), deliver = vi.fn();
+  const { intent: _, ...base } = f.value;
+  const value: ReviewArtifact = { ...base, kind: 'review-queue-state', category: 'dismissed', forms: [], comments: [], progress: [] };
+  const input = { ...f.input(), text: JSON.stringify(value) };
+  await expect(writeReview(input, 'github:2', f.git.read, f.git.mutate, deliver)).rejects.toThrow(/another authenticated reviewer/);
+  expect(f.git.mutations).toHaveLength(0);
+  await writeReview(input, 'github:1', f.git.read, f.git.mutate, deliver);
+  const changed = { ...input, text: JSON.stringify({ ...value, category: 'active' }) };
+  await expect(writeReview(changed, 'github:1', f.git.read, f.git.mutate, deliver)).rejects.toThrow(/conflict/);
+  expect(deliver).not.toHaveBeenCalled();
+  const review = { request: f.request, pin: { resource: 'review-requests/reader-01/request.json', version_kind: 'git-blob' as const, version: f.requestVersion, snapshot: f.snapshot } };
+  const completed = { requests: [review], artifacts: [{ value: f.value, pin: review.pin }], reviewer: 'github:1', acknowledgements: [] };
+  expect(reviewQueueCategory(review, completed)).toBe('completed');
+  expect(matchesReviewQueue(review, completed, 'active')).toBe(false);
+  expect(matchesReviewQueue(review, completed, 'completed')).toBe(true);
+});
 test('exact review open reads its historical pin without discovering refs or fetching unrelated requests', async () => {
   const { git, request, snapshot, requestVersion } = fixture();
   git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/unrelated/request.json': 'unrelated-invalid-manifest' });

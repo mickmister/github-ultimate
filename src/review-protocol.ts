@@ -46,6 +46,8 @@ const artifact = {
 export const reviewArtifactSchema = z.discriminatedUnion('kind', [
   z.object({ ...artifact, kind: z.literal('review-response'), intent: z.enum(['feedback', 'acknowledgement']) }).strict(),
   z.object({ ...artifact, kind: z.literal('review-draft') }).strict(),
+  z.object({ ...artifact, kind: z.literal('review-queue-state'), category: z.enum(['active', 'dismissed']),
+    forms: z.array(formAnswer).max(0), comments: z.array(z.never()).max(0), progress: z.array(key).max(0) }).strict(),
 ]);
 export type ReviewRequest = z.infer<typeof reviewRequestSchema>;
 export type ReviewMember = z.infer<typeof reviewMemberSchema>;
@@ -69,13 +71,18 @@ export function parseReviewArtifact(text: string) {
 export const requestResource = (id: string) => `review-requests/${key.parse(id)}/request.json`;
 export function artifactResource(value: ReviewArtifact) {
   const root = `review-requests/${value.request.id}`;
-  return value.kind === 'review-response' ? `${root}/responses/${value.id}.json`
+  return value.kind === 'review-queue-state' ? `${root}/queue/${value.reviewer.slice(7)}.json`
+    : value.kind === 'review-response' ? `${root}/responses/${value.id}.json`
     : `${root}/drafts/${value.reviewer.slice(7)}/${value.request.version}.json`;
 }
 export function samePin(a: ReviewPin, b: ReviewPin) {
   return a.resource === b.resource && a.version_kind === b.version_kind && a.version === b.version && a.snapshot === b.snapshot;
 }
 export async function validateReviewArtifact(request: ReviewRequest, value: ReviewArtifact, read: (pin: ReviewPin) => Promise<string>) {
+  if (value.kind === 'review-queue-state') {
+    if (value.request.id !== request.request_id) throw new Error('Queue state requires the matching request.');
+    return;
+  }
   if (value.request.id !== request.request_id || request.status !== 'published') throw new Error('Responses require the matching published request revision.');
   if (value.kind === 'review-response' && value.comments.some(comment => comment.kind === 'feature-comment')) throw new Error('Feature feedback requires separate app intake; it cannot submit a content review or continue its process.');
   for (const field of [value.forms.map(form => form.member_id), value.progress, value.comments.map(comment => comment.id)]) {

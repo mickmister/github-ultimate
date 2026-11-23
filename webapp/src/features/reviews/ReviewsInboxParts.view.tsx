@@ -2,7 +2,8 @@ import type { ReviewWorkspaceModel } from './ReviewWorkspace.view';
 import { reviewHref } from './navigation';
 import { reviewStatus } from './model';
 import { reviewsCopy as copy } from './Reviews.copy';
-import { ReviewCheckbox } from './ReviewCheckbox.view';
+import { ReviewQueueFilterView } from './ReviewQueueFilter.view';
+import { matchesReviewQueue, reviewQueueCategory } from './queue';
 import { LoadingIndicator } from '../../views/LoadingIndicator.view';
 
 export function ReviewSource({ connections, connectionId, repository, workspace, storage, busy, actions }: ReviewWorkspaceModel) {
@@ -26,15 +27,18 @@ export function ReviewSource({ connections, connectionId, repository, workspace,
     <button disabled={busy || !connectionId || !repository || !workspace || storage.workspacesBusy}>{copy.open.text}</button>
   </form>;
 }
-export function ReviewFilters({ listing, waitingOnly, setWaitingOnly }: ReviewWorkspaceModel) {
-  return listing && <ReviewCheckbox label={copy.waiting.text} checked={waitingOnly} onChange={setWaitingOnly} />;
+export function ReviewFilters({ listing, queueFilter, setQueueFilter }: ReviewWorkspaceModel) {
+  return listing && <ReviewQueueFilterView value={queueFilter} onChange={setQueueFilter} />;
 }
-export function ReviewInboxList({ scope, listing, waitingOnly, busy, actions }: ReviewWorkspaceModel) {
+export function ReviewInboxList({ scope, listing, queueFilter, busy, categorizing, categoryError, actions }: ReviewWorkspaceModel) {
   if (!scope || !listing) return null;
-  const requests = listing.requests.filter(review => !waitingOnly || review.request.status === 'published' && reviewStatus(review, listing.artifacts, listing.reviewer) !== 'Responded');
+  const requests = listing.requests.filter(review => matchesReviewQueue(review, listing, queueFilter));
   return <section aria-label={copy.inbox.text} className="review-request-list"><div className="section-heading"><h2>{scope.workspace}</h2><button disabled={busy} onClick={actions.refresh}>{copy.refresh.text}</button></div>
     {busy && <LoadingIndicator compact label={copy.loading.text} />}
-    {!requests.length && <p>{waitingOnly ? copy.emptyWaiting.text : copy.empty.text}</p>}
-    <ul className="review-inbox">{requests.map(review => <li key={review.request.request_id}><h3><a href={reviewHref(scope, review)}>{review.request.title}</a></h3><p>{review.request.purpose}</p><p>{reviewStatus(review, listing.artifacts, listing.reviewer)}{copy.separator.text}{review.request.bead_id}</p></li>)}</ul>
+    {categoryError && <p role="alert">{categoryError}</p>}
+    {!requests.length && <p>{copy.empty.text}</p>}
+    <ul className="review-inbox">{requests.map(review => <li key={review.request.request_id}><h3><a href={reviewHref(scope, review)}>{review.request.title}</a></h3><p>{review.request.purpose}</p><p>{reviewQueueCategory(review, listing) === 'dismissed' ? copy.queueDismissed.text : reviewQueueCategory(review, listing) === 'completed' ? copy.queueCompleted.text : reviewStatus(review, listing.artifacts, listing.reviewer)}{copy.separator.text}{review.request.bead_id}</p>
+      <button disabled={categorizing !== null} onClick={() => void actions.categorize(review.request.request_id, reviewQueueCategory(review, listing) === 'dismissed' ? 'active' : 'dismissed')}>{categorizing === review.request.request_id ? copy.savingCategory.text : reviewQueueCategory(review, listing) === 'dismissed' ? copy.restore.text : copy.dismiss.text}</button>
+    </li>)}</ul>
   </section>;
 }

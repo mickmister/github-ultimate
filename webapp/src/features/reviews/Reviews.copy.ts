@@ -1,4 +1,12 @@
 export const reviewsCopy = {
+  queueFilter: { purpose: 'label', text: 'Queue filter' },
+  queueActive: { purpose: 'label', text: 'Active' },
+  queueDismissed: { purpose: 'label', text: 'Dismissed' },
+  queueCompleted: { purpose: 'label', text: 'Completed' },
+  queueAll: { purpose: 'label', text: 'All requests' },
+  dismiss: { purpose: 'action', text: 'Dismiss' },
+  restore: { purpose: 'action', text: 'Restore' },
+  savingCategory: { purpose: 'status', text: 'Saving category…' },
   allowCodeChanges: { text: 'Allow code-file changes for these next steps', purpose: 'permission' },
   separator: { text: ' · ', purpose: 'label' },
   private: { text: ' · private', purpose: 'permission' },
