@@ -48,7 +48,7 @@ for (const [surface, orientation, width, height] of [
         const loader = page.getByRole('status', { name: 'Loading review requests…', exact: true });
         await expectCenteredLoader(loader);
         await expect(page.locator('[data-review-surface]')).toHaveCount(0);
-        await expect(page.getByRole('checkbox', { name: 'Only waiting for my response', exact: true })).toHaveCount(0);
+        await expect(page.getByRole('combobox', { name: 'Queue filter', exact: true })).toHaveCount(0);
         connection.release();
         if (detail) {
           await expect.poll(() => opening).toBe(true);
@@ -56,7 +56,7 @@ for (const [surface, orientation, width, height] of [
           request.release();
           const memberLoader = page.getByRole('status', { name: 'Loading Reader plan…', exact: true });
           await expectCenteredLoader(memberLoader);
-          await expect(page.getByRole('checkbox', { name: 'Only waiting for my response', exact: true })).toHaveCount(0);
+          await expect(page.getByRole('combobox', { name: 'Queue filter', exact: true })).toHaveCount(0);
           contents.release();
           // Reading is not held behind restoration of drafts/receipts.
           await expect(page.getByText('The full target document is pinned to this packet.')).toBeVisible();
@@ -64,21 +64,19 @@ for (const [surface, orientation, width, height] of [
           await expect(memberLoader).toHaveCount(0);
           listing.release();
           await expect(page.getByRole('region', { name: 'Focused review session', exact: true })).toBeVisible();
-          await expect(page.getByRole('checkbox', { name: 'Only waiting for my response', exact: true })).toHaveCount(0);
+          await expect(page.getByRole('combobox', { name: 'Queue filter', exact: true })).toHaveCount(0);
         } else {
           listing.release();
           if (surface === 'phone') await page.getByText('Source and filters', { exact: true }).click();
-          const filter = page.getByRole('checkbox', { name: 'Only waiting for my response', exact: true });
-          await expect(filter).toBeChecked();
-          const control = page.locator('.review-checkbox [data-part="control"]').first();
-          const size = (await control.boundingBox())!;
-          expect(size.width).toBe(24); expect(size.height).toBe(24);
-          await page.getByText('Only waiting for my response', { exact: true }).click();
+          const filter = page.getByRole('combobox', { name: 'Queue filter', exact: true });
+          await expect(filter).toHaveValue('active');
+          await expect(filter).toBeEnabled();
+          await filter.selectOption('all');
           refresh = gate();
           await page.getByRole('button', { name: 'Refresh requests', exact: true }).click();
           await expect(loader).toBeVisible();
           await expect(page.getByRole('link', { name: 'Reader follow-up', exact: true })).toBeVisible();
-          await expect(filter).not.toBeChecked();
+          await expect(filter).toHaveValue('all');
           refresh.release();
           await expect(loader).toHaveCount(0);
         }
@@ -102,12 +100,11 @@ for (const [surface, orientation, width, height] of [
       await page.goto(`/iframe.html?id=web-app-home-surfaces--${surface}-${orientation}&viewMode=story&remoteFixture=true`);
       const requests = page.getByRole('region', { name: 'Review requests', exact: true });
       await expectCenteredLoader(requests.getByRole('status', { name: 'Loading sources…', exact: true }));
-      await expect(page.getByRole('checkbox')).toHaveCount(0);
+      await expect(page.getByRole('combobox', { name: 'Queue filter', exact: true })).toHaveCount(0);
       sources.release();
-      const filter = page.getByRole('checkbox', { name: 'Waiting for my response', exact: true });
-      await expect(filter).toBeChecked();
-      const size = (await filter.boundingBox())!;
-      expect(size.width).toBe(24); expect(size.height).toBe(24);
+      const filter = page.getByRole('combobox', { name: 'Queue filter', exact: true });
+      await expect(filter).toHaveValue('active');
+      await expect(filter).toBeEnabled();
     } finally { sources.release(); }
   });
 }
