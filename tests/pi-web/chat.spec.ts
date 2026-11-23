@@ -7,6 +7,16 @@ const root = resolve('hosted-dist/pi-web');
 let server: Server, origin: string, base: string;
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain' };
 test.beforeAll(async () => {
+  if (process.env.PI_WEB_PUBLIC_URL) {
+    const url = new URL(process.env.PI_WEB_PUBLIC_URL);
+    origin = url.origin; base = url.pathname;
+    const response = await fetch(`${origin}${base}build.json`);
+    expect(response.ok).toBe(true);
+    const metadata = await response.json();
+    expect(metadata.demo).toBe(false);
+    if (process.env.PI_WEB_PUBLIC_SHA) expect(metadata.sha).toBe(process.env.PI_WEB_PUBLIC_SHA);
+    return;
+  }
   base = JSON.parse(await readFile(resolve(root, 'build.json'), 'utf8')).basePath;
   server = createServer(async (request, response) => {
     const pathname = decodeURIComponent(new URL(request.url!, 'http://localhost').pathname), filePath = resolve(root, pathname.slice(base.length));
@@ -16,7 +26,7 @@ test.beforeAll(async () => {
   });
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done)); origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
-test.afterAll(async () => { await new Promise<void>(done => server.close(() => done())); });
+test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
 
 for (const [name, width, height] of [['phone portrait',390,844],['phone landscape',844,390],['tablet portrait',820,1180],['tablet landscape',1180,820],['desktop portrait',1080,1440],['desktop landscape',1440,900]] as const) {
   test(`${name}: real S3 chat survives rotation and reload through the native wire protocol`, async ({ page }) => {
