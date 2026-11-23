@@ -70,6 +70,7 @@ for (const [surface, orientation, width, height] of [
           if (surface === 'phone') await page.getByText('Source and filters', { exact: true }).click();
           const filter = page.getByRole('combobox', { name: 'Queue filter', exact: true });
           await expect(filter).toHaveValue('active');
+          await expect(filter).toBeEnabled();
           const size = (await filter.boundingBox())!;
           expect(size.width).toBeGreaterThanOrEqual(24); expect(size.height).toBeGreaterThanOrEqual(24);
           await filter.selectOption('all');
@@ -105,6 +106,7 @@ for (const [surface, orientation, width, height] of [
       sources.release();
       const filter = page.getByRole('combobox', { name: 'Queue filter', exact: true });
       await expect(filter).toHaveValue('active');
+      await expect(filter).toBeEnabled();
       const size = (await filter.boundingBox())!;
       expect(size.width).toBeGreaterThanOrEqual(24); expect(size.height).toBeGreaterThanOrEqual(24);
     } finally { sources.release(); }
