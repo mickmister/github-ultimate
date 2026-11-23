@@ -9,6 +9,14 @@ const files = '019d7e2f-8b44-7c02-9d1a-1b2c3d4e5f02';
 let server: Server, origin: string, base: string;
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.txt': 'text/plain', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff': 'font/woff', '.woff2': 'font/woff2', '.ico': 'image/x-icon' };
 
+function recordPageError(errors: string[], error: Error) {
+  // WebKit can defer ResizeObserver delivery during rotation. This browser
+  // notification is not a script exception; layout and retained state are
+  // checked separately below. Keep rejecting every other page error.
+  if (error.message === 'ResizeObserver loop completed with undelivered notifications.') return;
+  errors.push(error.message);
+}
+
 test.beforeAll(async () => {
   const metadata = JSON.parse(await readFile(resolve(root, 'build.json'), 'utf8'));
   base = metadata.basePath;
@@ -35,7 +43,7 @@ for (const [name, width, height] of [
 ] as const) {
   test(`${name}: real demo UI, nested assets and draft retention`, async ({ page }) => {
     const errors: string[] = [], failed: string[] = [], api: string[] = [];
-    page.on('pageerror', error => errors.push(error.message));
+    page.on('pageerror', error => recordPageError(errors, error));
     page.on('response', response => { if (response.status() >= 400) failed.push(`${response.status()} ${response.url()}`); });
     page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) api.push(request.url()); });
     await page.setViewportSize({ width, height });
@@ -56,7 +64,7 @@ for (const [name, width, height] of [
 
 test('direct session links, refresh, history and simulated tool reply need no backend', async ({ page, request }) => {
   const errors: string[] = [], sockets: string[] = [], api: string[] = [];
-  page.on('pageerror', error => errors.push(error.message));
+  page.on('pageerror', error => recordPageError(errors, error));
   page.on('websocket', socket => sockets.push(socket.url()));
   page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) api.push(request.url()); });
   await page.goto(`${origin}${base}?session=${files}`);
