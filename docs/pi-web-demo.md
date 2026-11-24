@@ -170,9 +170,12 @@ checkpoint migration are outside this text-chat slice.
 
 ### Agent tool availability
 
-The standalone `/pi-web/` chat currently configures `tools: []`. Its S3 saves are
-application lifecycle operations, not model-invokable tools. Storybook tool cards
-demonstrate retained rendering only.
+The standalone `/pi-web/` chat exposes workflow `codemode`, with `workflows_list`,
+`workflow_start`, and `workflow_status` capabilities. See [workflow tooling](pi-workflows.md)
+for workspace binding, bounded Pi continuation and durable recovery. Its S3 saves
+are application lifecycle operations, not model-invokable tools. Storybook's
+file/shell tool cards demonstrate retained rendering only; general read/search
+workspace tools remain a separate follow-up.
 
 The separate `/app/#/agent` workspace agent exposes `github_repositories`,
 `github_probe`, `github_graphql` (read-only), `beads_query`, `codemode`, and

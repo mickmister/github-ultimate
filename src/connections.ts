@@ -175,8 +175,13 @@ export class Connections {
             return record.workflowDeliveries[identity];
           } catch { return delivery; } // The POST or receipt write may have succeeded. Never replay.
         }
-        const entry = Object.entries(deliveries).find(([, value]) => value.executionReference === request.executionReference);
-        if (!entry || entry[1].userId !== request.userId || entry[1].installationId !== request.installationId) throw new ConnectionError('No execution receipt in this authenticated connection. Reconnect the original host; do not start replacement work.');
+        // A shared checkpoint may supply an original receipt on another device.
+        // It grants read-only reconciliation, never launch/deduplication authority.
+        const recovered = request.recoveryReceipt;
+        const owned = Object.entries(deliveries).find(([, value]) => value.executionReference === request.executionReference);
+        const entry = owned
+          ?? (recovered?.executionReference === request.executionReference ? [JSON.stringify([recovered.userId, recovered.installationId, recovered.workspace, recovered.thread, recovered.process]), recovered] as const : undefined);
+        if (!entry || entry[1].userId !== request.userId || entry[1].installationId !== request.installationId) throw new ConnectionError('No execution receipt in this authenticated connection. Recover the original shared receipt; do not start replacement work.');
         const [key, delivery] = entry;
         const runs: any[] = [];
         if (delivery.runId) runs.push(await this.api(record, `/repos/${repo.full_name}/actions/runs/${delivery.runId}`, maxMetadataBytes, 'none'));
@@ -188,8 +193,11 @@ export class Connections {
         const matches = runs.filter(run => run.display_title === workflowRunName(delivery) && run.event === 'workflow_dispatch' && run.head_branch === developmentHost.ref && run.actor?.id === delivery.userId && run.head_sha === delivery.engineCommit && Date.parse(run.created_at) >= Date.parse(delivery.attemptedAt) - 60000);
         if (matches.length !== 1) return { ...delivery, executionState: matches.length ? 'ambiguous' : 'unconfirmed', message: 'No unique exact run association. Inspect; do not redispatch or allocate a replacement process.' };
         const run = z.object({ id: z.number().int().positive(), run_attempt: z.number().int().positive(), status: z.string().max(100), conclusion: z.string().max(100).nullable() }).parse(matches[0]);
-        record.workflowDeliveries = { ...deliveries, [key]: { ...delivery, runId: run.id } }; await this.store.put(record);
-        return { ...record.workflowDeliveries[key], executionState: run.status, conclusion: run.conclusion, attempt: run.run_attempt, runUrl: `https://github.com/${repo.full_name}/actions/runs/${run.id}`, reportName: `threads/${delivery.thread}/development/${delivery.process}.md`, candidateAcceptance: 'unknown-until-bound-report' };
+        const associated = { ...delivery, runId: run.id };
+        // Only update a host-owned launch record. Caller-supplied observations
+        // must not poison the host's effect/idempotency ledger.
+        if (owned) { record.workflowDeliveries = { ...deliveries, [key]: associated }; await this.store.put(record); }
+        return { ...associated, executionState: run.status, conclusion: run.conclusion, attempt: run.run_attempt, runUrl: `https://github.com/${repo.full_name}/actions/runs/${run.id}`, reportName: `threads/${delivery.thread}/development/${delivery.process}.md`, candidateAcceptance: 'unknown-until-bound-report' };
       }
       if (request.operation === 'agentGraphql') {
         if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed.');

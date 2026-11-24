@@ -13,12 +13,20 @@ const catalog = await tools.workflows_list({});
 text(catalog);
 ```
 
+The current conversation's canonical `{repository,workspace}` identity is injected
+into the system context and codemode tool description before each invocation.
+The URL scope must match durable catalog membership. It is fixed for that invocation;
+a later cross-device move blocks fresh workspace-specific effects until refresh.
+Launches must use that workspace and an exact manifest member/base commit.
+Host credentials, grants, actor and installation checks remain authoritative.
+
 Discovery uses the conversation's selected nugs workspace, or an explicit
 `{workspace:{repository,workspace}}` scope. It reads the pinned authored manifest
 and returns source member paths/commits and authorized connection references.
 It does not read or restore Dolt/Beads. Ambiguous storage connections need an
-explicit connectionId; no global/default workspace is inferred. An unassigned
-conversation can still discover supported workflow types. Retained receipt
+explicit connectionId; no global/default workspace is inferred. The core API can
+discover supported workflow types without a selected workspace. The normal Unassigned UI is
+migration-only and does not run inference. Retained receipt
 discovery requires the selected or explicitly supplied original workspace scope.
 
 The designated browser parent agent supplies task text, acceptance criteria,
@@ -32,7 +40,14 @@ cycles. Acceptance does not integrate source or create a PR.
 
 ## Effects and recovery
 
-- The transcript's tool-call intent is saved before the launch capability runs.
+- Pi owns normal tool → result → assistant scheduling. Tools run sequentially.
+  Awaited Pi message-end subscribers save tool intent before execution and completed
+  results before the next inference request. Checkpoint writes are serialized. A
+  required save failure aborts the invocation and requires explicit save recovery.
+- Each workflow's parsed identity/digest is also saved as `workflow_intents` before
+  the host is called. Receipts are separately saved as `workflow_executions`, with
+  their originating storage repository, before codemode proceeds. A failed script
+  or absent final assistant answer does not erase these references.
 - The privileged host checks document origin/path, original authenticated actor,
   installation, repository visibility and Actions write access.
 - Target repository/workflow/ref are host-owned. The broker snapshots the engine
@@ -46,9 +61,29 @@ cycles. Acceptance does not integrate source or create a PR.
   lost its output. Supply the original workspace explicitly after moving a chat.
 - Restoring an unresolved tool call adds an explicit uncertainty observation;
   it never replays that call. Inspect the retained executionReference instead.
-- Receipts currently live in the authenticated device host's connection storage.
-  Page reload and host restart preserve them. Cross-device receipt discovery is
-  not implemented; a different host must not invent replacement work.
+- The host retains its effect ledger; canonical S3 checkpoints share intents and
+  receipts across authorized devices. `workflows_list` returns conversation receipts
+  and can recover a lost reply from the original host's matching intent/receipt.
+  A different host can inspect a shared receipt with the same authenticated GitHub
+  actor/installation and Actions read access. It revalidates the exact run and does
+  not import caller-supplied receipts into its launch-authority ledger.
+- A saved attempted identity with no receipt blocks redispatch, including on a new
+  device. Original-host discovery may recover it; absence is not proof of failure.
+  Restored legacy uncertain tool calls without structured intent prevent new launches
+  in that conversation. Read-only inspection remains available.
+- Stale continuations merge current effect metadata before saving/launching, without
+  merging transcripts. This is not a distributed lock or globally exactly-once
+  dispatch guarantee; simultaneous writers and unpublished/lost knowledge still
+  require explicit uncertainty handling.
+
+Engineering defaults per explicit invocation are 12 model requests, 24 Pi tool
+calls, 64 nested capabilities, five minutes elapsed and 512 KiB of transcript output.
+Reaching a bound saves an interrupted state with a reason; **Continue interrupted
+turn** begins a fresh bounded invocation from saved results. Stop propagates through
+Pi and the QuickJS worker; an external operation already attempted may finish, and
+its returned receipt is still checkpointed. Reload never automatically continues.
+Pause-policy and inspect/branch/takeover product alternatives remain open in
+`task-93j.3.14`; these defaults are not a recorded product-policy decision.
 
 `workflow_status` associates a run using exact title, actor, event, branch,
 expected engine commit and launch window. Multiple matches remain ambiguous.
