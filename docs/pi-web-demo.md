@@ -7,8 +7,10 @@ tab-memory-only adapter have been superseded. The production source is
 
 ## Browser setup
 
-1. Install/reload the current browser extension. Configure an OpenAI-compatible
-   inference connection and S3 storage with reads/uploads enabled and overwrites
+1. Install/reload the current browser extension. Configure a **Connect to ChatGPT**
+   device-code connection or an existing OpenAI-compatible endpoint/header
+   inference connection ([setup and limitations](connections.md#connect-to-chatgpt-browser-inference)),
+   and S3 storage with reads/uploads enabled and overwrites
    disabled. Keep the same endpoint, bucket, prefix, region and addressing on each
    device; local connection UUIDs and credentials can differ.
 2. Grant both connections the Pi Web origin and a directory containing `/pi-web/`.

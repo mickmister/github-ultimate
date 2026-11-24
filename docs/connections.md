@@ -1,4 +1,71 @@
-# Client GitHub App authentication proof
+# Extension connections
+
+## Connect to ChatGPT (browser inference)
+
+The extension settings' **Inference connections → Connect to ChatGPT** form is
+independent of the existing custom URL/model/HTTP-header form. Both methods can
+coexist; adding, reconnecting or disconnecting ChatGPT does not replace custom
+endpoint records.
+
+1. Reload an extension build containing this feature, then open its connection
+   settings. Enter a connection name and an explicit model ID available to your
+   ChatGPT account; the suggested `gpt-6.1-sol` is not an entitlement check.
+2. Click **Connect to ChatGPT** and approve browser access to `auth.openai.com`
+   and `chatgpt.com`. Enable device-code login in ChatGPT security settings or
+   workspace permissions if needed.
+3. Open **ChatGPT verification**, enter the displayed one-time code, and approve
+   the account. Leave settings open while it polls. Reloading settings resumes an
+   unexpired pending attempt without creating a second code. Cancelling or an
+   expired/interrupted exchange requires another explicit sign-in.
+4. Once connected, grant the intended hosted origin and original directory path,
+   just as for custom endpoints. Select this named connection in the updated
+   Pi Web/workspace app. A website refresh alone cannot update the extension.
+5. **Save ChatGPT model** changes the connection revision; reload the hosted app.
+   Saved conversations still require their saved model. **Reconnect ChatGPT**
+   starts explicit account authorization. **Disconnect ChatGPT** clears local
+   credentials and pending sign-in; remote revocation is managed in ChatGPT
+   security settings, not implied by local disconnect.
+
+This implements the **Codex device protocol used by pinned Pi 1.5.2**, including
+its public Codex client ID, device-code exchange and fixed
+`https://chatgpt.com/backend-api/codex/responses` destination. It is distinct from
+OpenAI's newer dynamic-agent registration with `chatgpt.tokens.use.direct` and
+public `api.openai.com/v1/responses`. Those credentials/routes are not assumed
+interchangeable. This implementation does not establish independent third-party
+client registration approval, universal account eligibility or a provider
+availability guarantee. If your account rejects this flow, it reports failure;
+it never silently changes client, account, endpoint or billing path. Custom
+API-key/proxy connections remain available by explicit selection.
+
+The host owns all real tokens/account headers. The hosted SDK uses a public
+placeholder and a synthetic URL, with SSE forced through the existing bounded
+broker; it cannot open an authenticated page-owned WebSocket. The host pins model,
+destination and `store:false`/`stream:true`. Existing byte/time/grant limits apply.
+Subscription usage follows your ChatGPT entitlement and limits, not the custom
+endpoint's billing. The displayed token counts are not a subscription price quote.
+
+Device IDs, exchange verifiers and refresh/access tokens remain in
+extension-origin IndexedDB, outside content-script and hosted-page storage.
+This is browser-profile isolation, not an OS-backed or application-encrypted
+vault. Refreshes serialize with settings writes and commit rotating credentials
+before inference. A lost refresh response or failed credential commit requires
+reconnect instead of reusing an uncertain old refresh token. Provider errors are
+redacted, including SSE errors and reflected credentials split across chunks.
+OAuth credentials never enter S3. Responses message/reasoning signatures needed
+for continuation are transcript data and are saved alongside messages; old
+Chat Completions checkpoints remain readable.
+
+Automated coverage uses provider fixtures: device login/reload, pending/denial/
+expiry, rotation/commit failures and races, private transport, tool loops and
+save/restore through a packaged Chromium extension and the production Pi runtime.
+Real-account login/inference/refresh, installed Safari and physical-device
+acceptance remain separate. Native Alohak's settings have not gained this
+ChatGPT connection type in this browser-only slice.
+
+References: [OpenAI device-code instructions](https://developers.openai.com/codex/auth#login-on-headless-devices),
+[Pi's pinned device implementation](https://github.com/earendil-works/pi/blob/b4afdddf44e059c67ccf5097e5317d913521b470/packages/ai/src/auth/oauth/openai-codex.ts).
+
+## GitHub App connections
 
 The extension includes an opt-in **GitHub App connections** page, linked from the
 toolbar popup and available through the browser's extension options. Existing

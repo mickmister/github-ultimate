@@ -53,7 +53,12 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <button type="submit">Save VD connection</button><div id="vd-actions"></div></form>
 <p id="vd-status" role="status" aria-live="polite"></p><div id="vd-connections"></div></section>
 <section aria-labelledby="inference-heading"><h2 id="inference-heading">Inference connections</h2>
-<p>Use a full OpenAI-compatible Chat Completions URL, for example https://provider.example/v1/chat/completions. Optional headers (including Authorization) stay in private extension storage. The hosted Pi POC runs the agent; this connection performs bounded, non-streaming inference requests.</p>
+<form id="chatgpt-connect"><h3>Connect to ChatGPT</h3>
+<p>Sign in using a one-time device code. Enable device-code login in ChatGPT security settings or workspace permissions. This uses Pi's Codex subscription connection, independently of your custom inference endpoints.</p>
+<label>ChatGPT connection name<input name="name" value="ChatGPT" required maxlength="80"></label>
+<label>ChatGPT model<input name="model" value="gpt-6.1-sol" required maxlength="200"></label>
+<button>Connect to ChatGPT</button></form>
+<p>Or use a full OpenAI-compatible Chat Completions URL, for example https://provider.example/v1/chat/completions. Optional headers (including Authorization) stay in private extension storage. Both connection methods support bounded streaming inference in the updated hosted app.</p>
 <form id="inference-add">
 <label>Inference connection name<input name="name" required maxlength="80"></label>
 <label>Inference URL<input name="url" type="url" required></label>

@@ -20,6 +20,9 @@ export const inferenceSettingsSchema = z.discriminatedUnion('operation', [
   configuration.extend({ operation: z.literal('add') }).strict(),
   z.object({ operation: z.literal('remove'), id }).strict(),
   z.object({ operation: z.enum(['grantOrigin', 'revokeOrigin']), id, ...grant }).strict(),
+  z.object({ operation: z.literal('chatgptAdd'), name: configuration.shape.name, model: configuration.shape.model }).strict(),
+  z.object({ operation: z.enum(['chatgptStart', 'chatgptPoll', 'chatgptCancel', 'chatgptDisconnect']), id }).strict(),
+  z.object({ operation: z.literal('chatgptModel'), id, model: configuration.shape.model }).strict(),
 ]);
 export const inferenceHostedSchemas = [
   z.object({ operation: z.literal('inferenceConnections') }).strict(),
@@ -30,6 +33,6 @@ export const inferenceHostedSchemas = [
 ] as const;
 export const inferenceHostedSchema = z.discriminatedUnion('operation', inferenceHostedSchemas);
 export type InferenceConfiguration = z.infer<typeof configuration>;
-export type PublicInferenceConnection = { id: string; revision: string; name: string; model: string; hostedGrants: { origin: string; subpath: string }[]; transport?: 'http-stream-v1' };
+export type PublicInferenceConnection = { id: string; revision: string; name: string; model: string; hostedGrants: { origin: string; subpath: string }[]; transport?: 'http-stream-v1'; provider?: 'chatgpt'; protocol?: 'openai-codex-responses'; authStatus?: 'connected' | 'disconnected' | 'connecting' };
 export type InferenceHTTPResponse = { status: number; headers: Record<string, string>; body?: string };
 export type InferenceHTTPChunk = { text: string; done: boolean };
