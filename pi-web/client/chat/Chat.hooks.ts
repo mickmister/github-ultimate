@@ -66,7 +66,13 @@ export function useChat() {
       if (!target) return;
       const page = await api.list(target); setChats(page.chats);
       const session = params.get('session'), checkpoint = params.get('checkpoint');
-      if (session && checkpoint && model) { const restored = await api.restore(model, target, session, checkpoint); setChat(restored); setShowList(presentation !== 'phone'); }
+      if (session && model) {
+        // Ordinary conversation URLs follow the same canonical head as the
+        // sidebar. Only explicitly shared checkpoint views pin old history.
+        const reference = params.get('view') === 'checkpoint' ? checkpoint : page.chats.find(item => item.sessionId === session)?.reference ?? checkpoint;
+        if (!reference) throw Error('This conversation is not available in the selected storage.');
+        const restored = await api.restore(model, target, session, reference); setChat(restored); setShowList(presentation !== 'phone');
+      }
     });
   }
   const bootstrap = useEffectEvent(() => { void connect(); });
@@ -81,6 +87,10 @@ export function useChat() {
     await action(async () => {
       if (!selectedStorage) throw Error('Choose S3 storage.');
       const api = await runtime(), page = await api.list(selectedStorage);
+      const current = active.current?.snapshot(), latest = page.chats.find(item => item.sessionId === current?.sessionId);
+      if (current && latest && selectedInference && !current.dirty && current.phase === 'idle' && latest.reference !== current.reference && new URL(location.href).searchParams.get('view') !== 'checkpoint') {
+        setChat(await api.restore(selectedInference, selectedStorage, latest.sessionId, latest.reference));
+      }
       setChats(page.chats); setShowList(true);
     });
   }
@@ -88,7 +98,9 @@ export function useChat() {
     await action(async () => {
       if (!selectedStorage || !selectedInference) throw Error('Choose storage and inference connections.');
       if (active.current?.snapshot().dirty) throw Error('Retry saving this conversation before opening another.');
-      setChat(await (await runtime()).restore(selectedInference, selectedStorage, saved.sessionId, saved.reference)); setDraftMode(false); setDraft(''); setShowList(presentation !== 'phone');
+      const restored = await (await runtime()).restore(selectedInference, selectedStorage, saved.sessionId, saved.reference);
+      const url = new URL(location.href); url.searchParams.delete('view'); history.replaceState(null, '', url);
+      setChat(restored); setDraftMode(false); setDraft(''); setShowList(presentation !== 'phone');
     });
   }
   async function create() {
@@ -124,7 +136,15 @@ export function useChat() {
     if (snapshot.busy || snapshot.dirty && snapshot.messages.length) return;
     setChat(undefined); setDraftMode(false); setDraft(''); const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
   }
-  async function copyLink() { try { await copyText(location.href); } catch { setError('Could not copy the link. Copy the page URL from your browser.'); } }
+  async function copyLink() {
+    if (!snapshot.sessionId || !snapshot.reference || !selectedStorage) return;
+    try {
+      const url = new URL(location.href);
+      url.searchParams.set('session', snapshot.sessionId); url.searchParams.set('checkpoint', snapshot.reference);
+      url.searchParams.set('storage', (await runtime()).storageId(selectedStorage)); url.searchParams.set('view', 'checkpoint');
+      await copyText(url.href);
+    } catch { setError('Could not copy the link. Copy the page URL from your browser.'); }
+  }
   // Rendering identity is always the canonical session, even if a host mistakenly
   // repeats catalog entries. The runtime orders newest continuations first.
   const canonical = new Map<string, SavedChat>();

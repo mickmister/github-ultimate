@@ -20,16 +20,23 @@ tab-memory-only adapter have been superseded. The production source is
    or S3 object is created until the first message is sent. That message is saved
    before inference; the settled reply is saved automatically. The URL then contains the exact conversation,
    checkpoint/version reference and a fingerprint of the storage location.
-5. Reopen that URL to restore without resending. On another authorized device,
+5. Reload or reopen the ordinary page URL to restore the conversation's latest
+   saved continuation without resending. On another authorized device,
    use the same location and an inference connection with the saved model.
    **Conversations** shows one title/metadata row per canonical conversation UUID,
    opening its most recently saved continuation. **Refresh conversations** discovers
-   other device saves; search filters conversation titles. Listing resolves all S3
+   other device saves and updates the open conversation when it is settled and
+   saved, retaining an unsent composer draft. Search filters conversation titles. Listing resolves all S3
    pages before grouping, so a conversation never appears once per checkpoint.
    The footer shows the frontend build. Runtime scripts are requested with that
    build pin and must expose catalog protocol v2; incompatible cached scripts
    show a reload message instead of silently returning checkpoint-level entries.
    The view also deduplicates catalog entries by canonical session ID.
+6. **Copy conversation link** creates an explicit historical link with
+   `view=checkpoint`; that link stays pinned even across reloads. Selecting a
+   conversation in the sidebar returns to its latest saved continuation. Older
+   URLs without this explicit mode follow the latest conversation, using their
+   checkpoint reference only as a fallback if no catalog entry exists.
 
 ## Mobile setup
 
@@ -62,7 +69,7 @@ A page reloaded from a pending checkpoint shows an interrupted turn. It never
 automatically reissues the request; **Continue interrupted turn** is explicit.
 Each restored device continuation gets a separate branch identity and records
 its exact parent reference. There is no mutable latest pointer, cross-device lock,
-last-write-wins overwrite or automatic branch merge. Links pin checkpoints;
+last-write-wins overwrite or automatic branch merge. Explicit copied links pin checkpoints;
 refresh and select the conversation to open its most recently saved continuation.
 Selecting that continuation does not merge or delete other branches. Empty drafts
 created by older builds and workspace-agent checkpoints are omitted from the chat

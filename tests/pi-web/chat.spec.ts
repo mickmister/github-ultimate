@@ -67,7 +67,8 @@ test('independent device connections restore the same S3 conversation and preser
     await expect(left.getByRole('log')).toContainText('Real Pi reply 3'); await expect(left.getByRole('status')).toHaveText('Saved to S3');
     const children = [...remote.objects.values()].map(object => JSON.parse(object.text)).filter(checkpoint => checkpoint.parent === parent);
     expect(children).toHaveLength(2); expect(new Set(children.map(child => child.branch_id)).size).toBe(2);
-    await left.goto(right.url()); await expect(left.getByRole('log')).toContainText('Continue on phone'); await expect(left.getByRole('log')).toContainText('Real Pi reply 2');
+    const pinned = new URL(right.url()); pinned.searchParams.set('view', 'checkpoint');
+    await left.goto(pinned.href); await expect(left.getByRole('log')).toContainText('Continue on phone'); await expect(left.getByRole('log')).toContainText('Real Pi reply 2');
     a.dispose(); b.dispose();
   } finally { await first.close(); await second.close(); }
 });
@@ -95,6 +96,37 @@ test('new is only a draft and the upstream-adapted sidebar shows one row per con
     await expect(library.locator('li')).toHaveCount(2);
     await library.getByRole('searchbox', { name: 'Search conversations' }).fill('first'); await expect(library.locator('li')).toHaveCount(1);
   } finally { fixture.dispose(); }
+});
+test('two tabs reload and refresh the latest conversation while explicit checkpoint links stay pinned', async ({ browser }) => {
+  const context = await browser.newContext(), remote = remoteFixture();
+  try {
+    const left = await context.newPage(), right = await context.newPage();
+    const a = await nativeFixture(left, `${origin}${base}`, remote), b = await nativeFixture(right, `${origin}${base}`, remote);
+    await left.goto(`${origin}${base}`); await left.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Shared conversation'); await left.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(left.getByRole('status')).toHaveText('Saved to S3');
+    await left.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { Object.assign(window, { copiedChatLink: text }); } } }); });
+    await left.getByRole('button', { name: 'Copy conversation link', exact: true }).click();
+    const original = new URL(await left.evaluate(() => (window as unknown as { copiedChatLink: string }).copiedChatLink));
+    expect(original.searchParams.get('view')).toBe('checkpoint'); expect(new URL(left.url()).searchParams.has('view')).toBe(false);
+    await right.goto(left.url()); await expect(right.getByRole('log')).toContainText('Real Pi reply 1');
+    await right.getByRole('textbox', { name: 'Message', exact: true }).fill('Added in the other tab'); await right.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(right.getByRole('status')).toHaveText('Saved to S3');
+    await left.reload(); await expect(left.getByRole('log')).toContainText('Added in the other tab'); await expect(left.getByRole('log')).toContainText('Real Pi reply 2');
+    expect(remote.requests).toHaveLength(2); expect(remote.objects.size).toBe(4);
+    const draft = left.getByRole('textbox', { name: 'Message', exact: true }); await draft.fill('Keep my unsent draft');
+    await right.getByRole('textbox', { name: 'Message', exact: true }).fill('Third turn in other tab'); await right.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(right.getByRole('status')).toHaveText('Saved to S3');
+    await left.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
+    await expect(left.getByRole('log')).toContainText('Real Pi reply 3'); await expect(draft).toHaveValue('Keep my unsent draft');
+    await left.goto(original.href); await expect(left.getByRole('log')).toContainText('Real Pi reply 1');
+    await expect(left.getByRole('log')).not.toContainText('Added in the other tab');
+    await left.reload(); await expect(left.getByRole('log')).toContainText('Real Pi reply 1'); await expect(left.getByRole('log')).not.toContainText('Real Pi reply 3');
+    await left.getByRole('navigation', { name: 'Saved conversations' }).getByRole('button', { name: /Shared conversation/ }).click();
+    await expect(left.getByRole('log')).toContainText('Real Pi reply 3'); expect(new URL(left.url()).searchParams.has('view')).toBe(false);
+    expect(remote.requests).toHaveLength(3); expect(remote.objects.size).toBe(6);
+    a.dispose(); b.dispose();
+  } finally { await context.close(); }
 });
 test('build-pinned runtime bypasses stale unversioned code and the UI deduplicates repeated session rows', async ({ page }) => {
   const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);
