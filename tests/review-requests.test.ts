@@ -192,7 +192,7 @@ test('authenticated broker routes a saved process-less response through VD and d
   f.request.response_effect = { kind: 'vk-session', workspace_id: workspaceId, session_id: sessionId };
   const text = JSON.stringify(f.request); f.value.request.version = f.git.blob(text);
   f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
-  const vdRecord: VdRecord = { id: scope.id, revision: scope.id, name: 'VD', origin: 'https://vd.test', repository: scope.repository, workspace: scope.workspace, workspaceId, headers: [], hostedGrants: [{ origin: 'https://review.test', subpath: '/app/' }] };
+  const vdRecord: VdRecord = { id: scope.id, revision: scope.id, name: 'VD', origin: 'https://vd.test', headers: [], hostedGrants: [{ origin: 'https://review.test', subpath: '/app/' }] };
   const journal = new Map<string, ReviewReceipt>(), posts: string[] = [];
   const vd = new VdConnections({ all: async () => [vdRecord], get: async () => vdRecord, put: async () => {}, remove: async () => {}, delivery: async key => journal.get(key), saveDelivery: async (key, receipt) => { journal.set(key, receipt); } }, async (url, init) => {
     let data: unknown;

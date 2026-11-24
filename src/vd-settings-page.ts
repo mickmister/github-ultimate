@@ -21,7 +21,7 @@ function button(parent: HTMLElement, label: string, action: () => Promise<void> 
 async function run(action: () => Promise<void> | void) {
   if (busy) return; busy = true; notice.textContent = '';
   for (const element of document.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('#vd-section input, #vd-section button, #vd-section select')) element.disabled = true;
-  try { await action(); } catch (error) { notice.textContent = error instanceof Error && error.name !== 'ZodError' ? error.message : 'Invalid VD settings. Check the origin, workspace IDs and headers.'; }
+   try { await action(); } catch (error) { notice.textContent = error instanceof Error && error.name !== 'ZodError' ? error.message : 'Invalid VD settings. Check the origin and headers.'; }
   finally {
     busy = false;
     for (const element of document.querySelectorAll<HTMLInputElement | HTMLButtonElement | HTMLSelectElement>('#vd-section input, #vd-section button, #vd-section select')) element.disabled = false;
@@ -42,18 +42,18 @@ function renderHeaders() {
     row.append(nameLabel, modeLabel, valueLabel); button(row, 'Remove header', () => { headers.splice(index, 1); renderHeaders(); }); rows.append(row);
   });
 }
-function input() { return { id: editing, ...Object.fromEntries(['name', 'origin', 'repository', 'workspace', 'workspaceId'].map(name => [name, field(name).value])), headers: structuredClone(headers) }; }
+function input() { return { id: editing, name: field('name').value, origin: field('origin').value, headers: structuredClone(headers) }; }
 function draft() { return vdDraftSchema.parse(input()); }
 function reset() { editing = undefined; headers = []; renderHeaders(); form.reset(); }
 async function reload() {
   const records = await request<PublicVdConnection[]>({ operation: 'list' }); container.replaceChildren();
   for (const record of records) {
     const card = node('article'); card.setAttribute('aria-label', record.name);
-    card.append(node('h3', record.name), node('p', `${record.origin} · ${record.repository} · ${record.workspace} → ${record.workspaceId}`));
+    card.append(node('h3', record.name), node('p', `${record.origin} · All accessible workspaces`));
     for (const header of record.headers) card.append(node('p', `${header.name}: ${header.mode === 'secret' ? (header.configured ? 'Secret configured' : 'Empty secret') : header.value}`));
     button(card, 'Edit VD connection', () => {
       editing = record.id;
-      for (const key of ['name', 'origin', 'repository', 'workspace', 'workspaceId'] as const) field(key).value = record[key];
+      for (const key of ['name', 'origin'] as const) field(key).value = record[key];
       headers = record.headers.map(header => ({ name: header.name, mode: header.mode, ...(header.mode === 'plaintext' ? { value: header.value } : {}) })); renderHeaders();
       notice.textContent = 'Leave saved secrets untouched to retain them. A changed origin requires replacement header values.';
     });
