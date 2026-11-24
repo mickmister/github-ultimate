@@ -3,18 +3,20 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { DesktopChat, PhoneChat, TabletChat } from '../chat/Chat.view';
 import type { ChatModel } from '../chat/Chat.hooks';
 import { useTheme } from '../hooks/useTheme';
+import { usePreviewSlots } from '../chat/PreviewSlots.hooks';
 import { conversation, tools } from './messages';
 
 type Mode = 'conversation' | 'draft' | 'tools' | 'interrupted' | 'save-error';
 function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode; device?: 'phone' | 'tablet' | 'desktop' }) {
   const theme = useTheme(), [draft, setDraft] = useState(''), [search, setSearch] = useState(''), [showList, setShowList] = useState(device !== 'phone');
+  const previews = usePreviewSlots(async () => ({ workspace: 'storybook-workspace', slots: [{ id: 'repo:storybook', title: 'Storybook', service: 'storybook', repository: 'example/repo', url: 'https://preview.example/storybook/' }] }));
   const [draftMode, setDraftMode] = useState(mode === 'draft'), [dirty, setDirty] = useState(mode === 'save-error');
   const [messages, setMessages] = useState(mode === 'draft' ? [] : mode === 'tools' ? tools : conversation);
   const inference = { id: 'model', revision: '1', name: 'Configured inference', model: 'gpt-6.1-sol', hostedGrants: [] };
   const storage = { id: 'storage', revision: '1', name: 'Private conversations', endpoint: 'https://storage.example/', bucket: 'conversations', prefix: 'private/', region: 'us-east-1', addressing: 'path' as const, allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [] };
   const chats = [{ sessionId: 'conversation', reference: 'checkpoint', label: 'Browser conversation architecture', updatedAt: '2026-11-24T10:00:00Z', messageCount: 2 }];
   const model: ChatModel = {
-    theme, presentation: device, inference: [inference], storage: [storage], inferenceId: inference.id, storageId: storage.id, selectedInference: inference, selectedStorage: storage,
+    theme, previews, workspace: undefined, workspaces: [], canCreate: true, chooseWorkspace: () => {}, moveWorkspace: async () => {}, presentation: device, inference: [inference], storage: [storage], inferenceId: inference.id, storageId: storage.id, selectedInference: inference, selectedStorage: storage,
     snapshot: { title: 'Browser conversation architecture', sessionId: draftMode ? undefined : 'conversation', reference: draftMode ? undefined : 'checkpoint', messages, busy: false, dirty, phase: mode === 'interrupted' ? 'interrupted' : 'idle' },
     chats: chats.filter(chat => chat.label.toLowerCase().includes(search.toLowerCase())), search, draftMode, busy: false,
     error: dirty ? 'Storage is unavailable. Your unsaved reply is still in memory.' : '', draft, showList,

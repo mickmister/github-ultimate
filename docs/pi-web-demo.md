@@ -38,6 +38,43 @@ tab-memory-only adapter have been superseded. The production source is
    URLs without this explicit mode follow the latest conversation, using their
    checkpoint reference only as a fallback if no catalog entry exists.
 
+## Workspace browsing and preview links
+
+Choose a nugs workspace in Documents and follow its **Pi Web** link. The GitHub
+connection must also authorize the Pi Web directory. **Conversation workspace**
+filters the sidebar by the storage repository and nugs workspace namespace;
+**Unassigned** contains older conversations and conversations created without a
+workspace. **New conversation** inherits the selected workspace and still writes
+nothing until the first send. Changing workspace preserves an unsent composer draft.
+Under **Connections**, **Move conversation** assigns a saved conversation to an
+existing authorized workspace or back to Unassigned.
+
+Association is a separate immutable, readback-verified `pi-web-catalog-1` record
+under a deterministic metadata UUID in the same S3 checkpoint namespace. Moves do
+not rewrite transcript checkpoints, invalidate pinned history or let an older
+device's next reply undo a move. Reload and catalog refresh read the current
+association. This picker browses existing nugs workspaces; provisioning a new
+workspace from repositories remains pending, as do workspace file tools and
+archive/delete actions.
+
+The composer **Preview slots** menu reads `workspace-config.json` from the selected
+nugs document snapshot. Each repository defines named services with either a
+`github-pages` provider (`baseUrl`, relative `path`) or an explicit `url-template`
+provider (`url`) for Cloudflare/custom hosts. Templates support `{workspace}`,
+`{branch}`, `{owner}`, `{repository}` and `{previewDirectory}`. Branch context comes
+from the matching manifest repository, and `previewDirectory` uses exactly the
+publisher's sanitized branch prefix plus SHA-256 suffix. Example document:
+
+```json
+{"schema_version":1,"repositories":[{"repository":"owner/repo","previewSlots":[{"id":"storybook","title":"Storybook","service":"storybook","provider":{"kind":"github-pages","baseUrl":"https://owner.github.io/repo/","path":"previews/{previewDirectory}/storybook/"}}]}]}
+```
+
+Links open a new tab with no opener and preserve the draft. Refresh rereads the
+configuration; this menu does not start services or deploy them. Missing config
+shows an empty menu; malformed config or unavailable repository context shows an
+explicit error. Git/nugs reads use the existing host GitHub bridge independently
+of inference/S3 transport. Credentials stay with the host.
+
 ## Mobile setup
 
 Alohak's native settings now include inference and S3 chat connections. Endpoints,
