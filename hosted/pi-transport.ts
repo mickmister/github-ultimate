@@ -1,9 +1,15 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Context, Message, Model, Tool } from '@earendil-works/pi-ai';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream';
+import { stream as providerStream } from '@earendil-works/pi-ai/api/openai-completions';
 import { z } from 'zod';
 import type { HostedRequest } from '../src/hosted-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
+import { inferenceFetch } from './pi-fetch';
+
+// The independently bounded historical POC keeps its original transport. The
+// production Pi Web/workspace app bundles include the provider SDK.
+declare const PI_LEGACY_POC: boolean | undefined;
 
 export type PiBridge = <T>(request: HostedRequest, timeoutMs?: number) => Promise<T>;
 export const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
@@ -40,6 +46,11 @@ const responseSchema = z.object({ choices: z.array(z.object({ finish_reason: z.e
 
 /** Pi's stream contract over a single bounded JSON bridge reply. No tokens or endpoint in page memory. */
 export function inferenceStream(bridge: PiBridge, connection: PublicInferenceConnection): StreamFn {
+  if ((typeof PI_LEGACY_POC === 'undefined' || !PI_LEGACY_POC) && connection.transport === 'http-stream-v1') return (model, context, options) => providerStream(model as Model<'openai-completions'>, context, {
+    ...options, apiKey: 'host-owned', fetch: inferenceFetch(bridge, connection), maxRetries: 0,
+  });
+  // Compatibility with already-installed hosts. New hosts advertise the HTTP
+  // transport and use Pi's adapter for serialization, SSE, usage and tool calls.
   return (model, context, options) => {
     const stream = new AssistantMessageEventStream(), requestId = crypto.randomUUID();
     const message: AssistantMessage = { role: 'assistant', content: [], api: model.api, provider: model.provider, model: model.id, usage: emptyUsage(), stopReason: 'stop', timestamp: Date.now() };

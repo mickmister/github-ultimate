@@ -21,7 +21,7 @@ function Conversation({ model: m }: { model: ChatModel }) {
     {m.error && <p role="alert">{m.error}</p>}
     {m.snapshot.dirty && !m.busy && <button onClick={() => void m.retrySave()}>Retry session save</button>}
     {m.snapshot.phase === 'interrupted' && <aside><p>The previous turn was interrupted. It has not been resent.</p><button disabled={m.busy || m.snapshot.dirty} onClick={() => void m.send(true)}>Continue interrupted turn</button></aside>}
-    <div className="chat-transcript" role="log" aria-label="Messages"><Transcript messages={m.snapshot.messages as AgentMessage[]} sessionId={m.snapshot.sessionId} />
+    <div className="chat-transcript" role="log" aria-label="Messages"><Transcript messages={m.snapshot.messages as AgentMessage[]} sessionId={m.snapshot.sessionId} streaming={m.snapshot.streaming} />
       {!m.snapshot.messages.length && <div className="chat-empty"><h2>What can I help you with?</h2><p>Start a conversation. Messages are saved to your selected S3 storage.</p></div>}</div>
     <form className="chat-composer" onSubmit={event => { event.preventDefault(); void m.send(); }}>
       <textarea aria-label="Message" value={m.draft} onChange={e => m.setDraft(e.target.value)} placeholder="Message Pi" rows={1} disabled={!m.snapshot.sessionId && !m.draftMode} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void m.send(); } }} />

@@ -38,7 +38,10 @@ for (const [name, width, height] of [['phone portrait',390,844],['phone landscap
     await expect(page.getByRole('status')).toContainText('Draft');
     expect(remote.objects.size).toBe(0); expect(new URL(page.url()).searchParams.has('session')).toBe(false);
     const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Hello from a real session'); await input.press('Enter');
-    await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect.poll(() => JSON.parse([...remote.objects.values()].at(-1)!.text).messages.at(-1)).toMatchObject({ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Real Pi reply 1: Café 🌴' }] });
+    await expect(page.getByRole('alert').filter({ hasText: /.+/ })).toHaveCount(0);
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴');
     await input.fill('Retain this unsent draft'); await page.setViewportSize({ width: height, height: width }); await expect(input).toHaveValue('Retain this unsent draft');
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
     await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴');
@@ -117,6 +120,21 @@ test('incompatible cached runtime fails explicitly instead of showing checkpoint
   await page.goto(`${origin}${base}`);
   await expect(page.getByRole('alert').filter({ hasText: 'Pi Web resources are from different builds.' })).toHaveText('Pi Web resources are from different builds. Reload the page to update.');
   await expect(page.getByRole('navigation', { name: 'Saved conversations' }).locator('li')).toHaveCount(0);
+});
+test('provider deltas render before completion and the settled transcript restores', async ({ page }) => {
+  let resume!: () => void;
+  const gate = new Promise<void>(resolve => { resume = resolve; });
+  const remote = remoteFixture(() => gate), fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  try {
+    await page.goto(`${origin}${base}`); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Stream visibly'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 1:');
+    await expect(page.getByRole('status')).toHaveText('Working…');
+    expect(JSON.parse([...remote.objects.values()].at(-1)!.text).phase).toBe('pending');
+    resume();
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴'); expect(remote.requests).toHaveLength(1);
+  } finally { resume(); fixture.dispose(); }
 });
 test('production assets contain no canned file manifest and retain provenance', async ({ request }) => {
   expect((await request.get(`${origin}${base}demo-files/manifest.json`)).status()).toBe(404);

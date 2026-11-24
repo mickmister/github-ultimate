@@ -1,7 +1,7 @@
 import type { PublicInferenceConnection } from '../src/inference-protocol';
 import type { PublicS3Connection } from '../src/s3-protocol';
 export type SavedChat = { sessionId: string; reference: string; label: string; updatedAt: string; messageCount: number };
-export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: { role: string; content?: unknown }[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string };
+export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: { role: string; content?: unknown }[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean };
 export interface ChatHandle {
   snapshot(): ChatSnapshot;
   subscribe(listener: () => void): () => void;

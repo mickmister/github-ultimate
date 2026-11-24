@@ -18,7 +18,7 @@ const chatSchema = z.object({
   storage: z.string().regex(/^[a-f0-9]{64}$/), phase: z.enum(['idle', 'pending', 'interrupted']),
   messages: checkpointSchema.shape.messages.refine(messages => messages.every(message =>
     message.role === 'user' ? typeof message.content === 'string' || message.content.every(block => block.type === 'text') :
-      message.role === 'assistant' && message.content.every(block => block.type === 'text')), 'Only text chat messages are supported.'),
+      message.role === 'assistant' && message.content.every(block => block.type === 'text' || block.type === 'thinking')), 'Only text and thinking chat messages are supported.'),
 }).strict();
 export type ChatCheckpoint = z.infer<typeof chatSchema>;
 class OtherCheckpointProfile extends Error {}
@@ -113,7 +113,11 @@ export class BrowserChat {
   snapshot = () => this.state;
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; };
   private publish() {
-    this.state = { ...this.state, sessionId: this.checkpoint.session_id, reference: this.reference, title: this.checkpoint.title, phase: this.checkpoint.phase, messages: this.agent.state.messages.filter(message => message.role !== 'system') };
+    const messages = this.agent.state.messages.filter(message => message.role !== 'system');
+    // Pi mutates its in-flight message. Publish an immutable render snapshot so
+    // upstream memoized renderers observe each delta and the final transition.
+    if (this.agent.state.streamingMessage && this.agent.state.streamingMessage.role !== 'system') messages.push(structuredClone(this.agent.state.streamingMessage));
+    this.state = { ...this.state, streaming: this.agent.state.isStreaming, sessionId: this.checkpoint.session_id, reference: this.reference, title: this.checkpoint.title, phase: this.checkpoint.phase, messages };
     for (const listener of this.listeners) listener();
   }
   private async save() {

@@ -68,9 +68,34 @@ Selecting that continuation does not merge or delete other branches. Empty draft
 created by older builds and workspace-agent checkpoints are omitted from the chat
 sidebar. Immutable checkpoint objects remain internal history.
 
+### Provider transport
+
+Updated extension/native hosts advertise `http-stream-v1`. Pi's OpenAI-compatible
+provider adapter then owns request conversion, SSE decoding, thinking/text/tool
+deltas and usage accounting through a custom `fetch` (`hosted/pi-fetch.ts`).
+The synthetic page URL and API key are placeholders: the host fixes the actual
+configured endpoint/model and applies its private custom headers. No arbitrary
+page URL, credential headers or provider error bodies are forwarded.
+
+`inferenceOpen` returns HTTP status and allowlisted response headers. Ordered,
+pull-based `inferenceRead` requests return bounded text chunks; Stop, revocation,
+document invalidation and a 90-second deadline cancel the host reader. Provider
+responses remain limited to 2 MiB, requests to 1 MiB, and each chunk to 16,384
+UTF-16 code units without splitting Unicode scalars. Native transfers retain the
+existing frame bound and use a portable incremental UTF-8 decoder.
+
+Install/reload an updated extension or receive the corresponding mobile update
+to use this transport. Already-installed hosts without the advertised capability
+continue using the bounded nonstreaming compatibility adapter. Website updates
+alone cannot add a host operation. Streaming render snapshots are immutable so
+the retained memoized upstream UI sees each delta; only settled replies are saved.
+The historical `/pi/` POC is compiled with `PI_LEGACY_POC` and retains its original
+nonstreaming transport and unchanged 768 KiB cap. The production Pi Web/workspace
+app bundles include the SDK within their existing independent budgets.
+
 The production entry does not patch global fetch/EventSource and ships no sample
 repository, fake provider account or canned conversation. It retains upstream rich
-message rendering. Tools, shell/filesystem, streaming token deltas, model switching
+message rendering. Tools, shell/filesystem, model switching
 within a conversation, native background execution and old workspace-agent
 checkpoint migration are outside this text-chat slice.
 

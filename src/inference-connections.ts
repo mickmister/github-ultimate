@@ -3,7 +3,7 @@ import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from '
 import { trustedOrigin } from './hosted-protocol';
 import { boundedJSON } from './git-reads';
 import { ConnectionError } from './connections';
-import { utf8Bytes } from './utf8';
+import { utf8Bytes, UTF8Decoder } from './utf8';
 
 export type InferenceRecord = InferenceConfiguration & { id: string; revision: string; hostedGrants: HostedGrant[] };
 export interface InferenceStore {
@@ -11,22 +11,29 @@ export interface InferenceStore {
   put(record: InferenceRecord): Promise<void>; remove(id: string): Promise<void>;
 }
 function publicRecord({ id, revision, name, model, hostedGrants }: InferenceRecord): PublicInferenceConnection {
-  return { id, revision, name, model, hostedGrants };
+  return { id, revision, name, model, hostedGrants, transport: 'http-stream-v1' };
 }
 
 /** The endpoint and secret headers are extension settings, never page inputs. */
 export class InferenceConnections {
   private active = new Map<string, { controller: AbortController; document: string; id: string }>();
+  private streams = new Map<string, { key: string; reader: ReadableStreamDefaultReader<Uint8Array>; decoder: UTF8Decoder; remainder: string; bytes: number; sequence: number; reading: boolean; timer: ReturnType<typeof setTimeout> }>();
   private cancelled = new Map<string, number>();
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
   constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms), private combine = (signals: AbortSignal[]) => AbortSignal.any(signals)) {}
-  cancelActive() { for (const job of this.active.values()) job.controller.abort(); }
+  cancelActive() { for (const [id, job] of this.active) { job.controller.abort(); this.closeStream(id); } }
+  private closeStream(id: string) {
+    const stream = this.streams.get(id);
+    if (!stream) return;
+    clearTimeout(stream.timer); this.streams.delete(id); this.active.delete(id);
+    void stream.reader.cancel().catch(() => {});
+  }
   handle(input: unknown) {
     const request = inferenceSettingsSchema.parse(input);
     if (request.operation !== 'list') {
       this.epoch++;
-      for (const job of this.active.values()) job.controller.abort();
+      this.cancelActive();
     }
     const work = this.tail.catch(() => {}).then(() => this.executeSettings(request));
     this.tail = work; return work;
@@ -63,17 +70,47 @@ export class InferenceConnections {
       if (this.cancelled.size >= 128) this.cancelled.delete(this.cancelled.keys().next().value!);
       this.cancelled.set(key, Date.now() + 120000);
       const job = this.active.get(request.requestId);
-      if (job?.document === source.href && job.id === record.id) job.controller.abort();
+      if (job?.document === source.href && job.id === record.id) { job.controller.abort(); this.closeStream(request.requestId); }
       return null;
     }
     const url = inferenceURL(record.url);
     if (!current() || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || epoch !== this.epoch) throw new ConnectionError('Inference endpoint or page access changed.');
     if (this.cancelled.has(key)) throw new ConnectionError('Inference cancelled.');
+    if (request.operation === 'inferenceRead') {
+      const stream = this.streams.get(request.requestId), job = this.active.get(request.requestId);
+      if (!stream || stream.key !== key || !job) throw new ConnectionError('Inference stream expired or access changed.');
+      if (stream.reading || stream.sequence !== request.sequence) throw new ConnectionError('Inference stream read order mismatch.');
+      stream.reading = true;
+      try {
+        let done = false;
+        if (!stream.remainder) {
+          const part = await stream.reader.read(); done = part.done;
+          stream.bytes += part.value?.byteLength ?? 0;
+          if (stream.bytes > 2 * 1024 * 1024) throw new ConnectionError('Inference response exceeds 2 MiB.');
+          stream.remainder = stream.decoder.decode(part.value, { stream: !done });
+        }
+        if (!current() || job.controller.signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+        // Pull-based reads keep only one provider chunk in memory. Bound each
+        // JSON reply too, including native bridge transfers and UTF-16 pairs.
+        let end = Math.min(stream.remainder.length, 16384);
+        if (end < stream.remainder.length && /[\uD800-\uDBFF]/.test(stream.remainder[end - 1])) end--;
+        const text = stream.remainder.slice(0, end); stream.remainder = stream.remainder.slice(end);
+        stream.sequence++; stream.reading = false;
+        if (done) this.closeStream(request.requestId);
+        return { text, done };
+      } catch {
+        job.controller.abort(); this.closeStream(request.requestId);
+        throw new ConnectionError('Inference stream failed, was cancelled, timed out or exceeded the response limit.');
+      }
+    }
     if (this.active.size >= 2 || this.active.has(request.requestId)) throw new ConnectionError('Inference is busy or this request is already active.');
     let body: Record<string, unknown>;
     if (utf8Bytes(request.body) > 1024 * 1024) throw new ConnectionError('Inference request exceeds 1 MiB.');
     try { body = JSON.parse(request.body); } catch { throw new ConnectionError('Invalid inference JSON.'); }
-    if (!body || Array.isArray(body) || typeof body !== 'object' || !Array.isArray(body.messages) || !body.messages.length || Object.keys(body).some(key => !['messages', 'tools'].includes(key))) throw new ConnectionError('Expected messages and optional tools only.');
+    const allowed = request.operation === 'inferenceOpen'
+      ? ['messages', 'tools', 'tool_choice', 'model', 'stream', 'stream_options', 'store', 'max_tokens', 'max_completion_tokens', 'temperature', 'top_p', 'presence_penalty', 'frequency_penalty', 'stop', 'reasoning_effort', 'parallel_tool_calls']
+      : ['messages', 'tools'];
+    if (!body || Array.isArray(body) || typeof body !== 'object' || !Array.isArray(body.messages) || !body.messages.length || Object.keys(body).some(key => !allowed.includes(key))) throw new ConnectionError('Expected messages and optional tools or supported sampling options only.');
     const controller = new AbortController();
     let response: Response | undefined;
     this.active.set(request.requestId, { controller, document: source.href, id: record.id });
@@ -81,7 +118,35 @@ export class InferenceConnections {
       const headers = new Headers();
       for (const header of record.headers) headers.set(header.name, header.value);
       headers.set('Content-Type', 'application/json');
-      response = await this.fetcher(url.href, { method: 'POST', headers, body: JSON.stringify({ ...body, model: record.model, stream: false, max_tokens: 4096 }), credentials: 'omit', redirect: 'error', cache: 'no-store', signal: this.combine([controller.signal, this.timeout(90000)]) });
+      const payload: Record<string, unknown> = { ...body, model: record.model, stream: request.operation === 'inferenceOpen' };
+      if (request.operation === 'inferenceOpen') payload.store = false;
+      const tokenField = 'max_completion_tokens' in body ? 'max_completion_tokens' : 'max_tokens';
+      if ('max_completion_tokens' in body) delete payload.max_tokens;
+      payload[tokenField] = typeof body[tokenField] === 'number' ? Math.max(1, Math.min(4096, Math.floor(body[tokenField]))) : 4096;
+      const signal = this.combine([controller.signal, this.timeout(90000)]);
+      response = await this.fetcher(url.href, { method: 'POST', headers, body: JSON.stringify(payload), credentials: 'omit', redirect: 'error', cache: 'no-store', signal });
+      if (request.operation === 'inferenceOpen') {
+        if (!current() || signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+        // Error bodies may reflect credentials. Preserve HTTP semantics without
+        // forwarding provider diagnostics or arbitrary response headers.
+        const status = response.status;
+        const retryAfter = response.headers.get('retry-after');
+        const exposed: Record<string, string> = {};
+        if (retryAfter && /^\d{1,5}$/.test(retryAfter)) exposed['retry-after'] = retryAfter;
+        if (!response.ok) {
+          await response.body?.cancel();
+          return { status, headers: { ...exposed, 'content-type': 'application/json' }, body: JSON.stringify({ error: { message: `Inference returned HTTP ${status}. Check the endpoint and configured headers.` } }) };
+        }
+        const reader = response.body?.getReader();
+        if (!reader) throw new ConnectionError('Inference response has no body.');
+        const timer = setTimeout(() => { controller.abort(); this.closeStream(request.requestId); }, 90000);
+        this.streams.set(request.requestId, { key, reader, decoder: new UTF8Decoder(), remainder: '', bytes: 0, sequence: 0, reading: false, timer });
+        signal.addEventListener('abort', () => { controller.abort(); this.closeStream(request.requestId); }, { once: true });
+        if (signal.aborted) { this.closeStream(request.requestId); throw new ConnectionError('Inference cancelled.'); }
+        const contentType = response.headers.get('content-type');
+        if (contentType) exposed['content-type'] = contentType.startsWith('text/event-stream') ? 'text/event-stream' : 'application/json';
+        return { status, headers: exposed };
+      }
       if (!response.ok) { await response.body?.cancel(); throw new ConnectionError(`Inference returned HTTP ${response.status}. Check the endpoint and configured headers.`); }
       const result = await boundedJSON(response, 2 * 1024 * 1024);
       if (!current() || controller.signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
@@ -91,6 +156,6 @@ export class InferenceConnections {
       // Provider error bodies and fetch errors can contain credentials or URLs.
       if (error instanceof ConnectionError) throw error;
       throw new ConnectionError('Inference failed, was cancelled, timed out or exceeded the response limit.');
-    } finally { this.active.delete(request.requestId); }
+    } finally { if (!this.streams.has(request.requestId)) this.active.delete(request.requestId); }
   }
 }

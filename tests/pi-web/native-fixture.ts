@@ -5,7 +5,7 @@ import { S3Connections, type S3ConnectionRecord } from '../../src/s3-connections
 import { InferenceConnections, type InferenceRecord } from '../../src/inference-connections';
 import { mobileS3Sign } from '../../src/mobile-s3-sign';
 
-export function remoteFixture() {
+export function remoteFixture(streamPause?: () => Promise<void>) {
   const objects = new Map<string, { text: string; version: string }>();
   const requests: { messages: { role: string; content: string }[] }[] = [];
   let failSaves = false;
@@ -16,7 +16,15 @@ export function remoteFixture() {
       const body = await request.json(); requests.push(body);
       const saved = [...objects.values()].map(object => JSON.parse(object.text));
       if (!saved.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages.at(-1)?.content === body.messages.at(-1).content)) throw Error('Inference started before the user message was durable');
-      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: `Real Pi reply ${requests.length}: Café 🌴`, reasoning_content: null, tool_calls: null } }] });
+      const content = `Real Pi reply ${requests.length}: Café 🌴`;
+      if (body.stream) return new Response(new ReadableStream({ async start(controller) {
+        const emit = (delta: unknown, finish_reason: string | null = null) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason }] })}\n\n`));
+        emit({ content: `Real Pi reply ${requests.length}: `, reasoning_content: null, tool_calls: null });
+        await streamPause?.();
+        emit({ content: 'Café 🌴' }); emit({}, 'stop');
+        controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n')); controller.close();
+      } }), { headers: { 'content-type': 'text/event-stream' } });
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content, reasoning_content: null, tool_calls: null } }] });
     }
     if (url.hostname !== 's3.us-west-004.backblazeb2.com' || !request.headers.get('Authorization')?.startsWith('AWS4-HMAC-SHA256 ')) throw Error('Unexpected unsigned request');
     const key = decodeURIComponent(url.pathname.slice('/chats/'.length));

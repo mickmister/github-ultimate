@@ -9,13 +9,14 @@ import { Scratch, scratchSchema, type ScratchState } from '../src/scratch';
 
 const text = z.object({ type: z.literal('text'), text: z.string().max(2 * 1024 * 1024) }).strict();
 const toolCall = z.object({ type: z.literal('toolCall'), id: z.string().min(1).max(200), name: z.string().min(1).max(100), arguments: z.record(z.string(), z.json()) }).strict();
+const thinking = z.object({ type: z.literal('thinking'), thinking: z.string().max(2 * 1024 * 1024), thinkingSignature: z.string().max(2 * 1024 * 1024).optional(), redacted: z.boolean().optional() }).strict();
 const count = z.number().nonnegative();
 const usage = z.object({ input: count, output: count, cacheRead: count, cacheWrite: count, totalTokens: count, cost: z.object({ input: count, output: count, cacheRead: count, cacheWrite: count, total: count }) });
 // Parse only the supported text/tool transcript. Rebuild tools and the system prompt
 // from the current application, never deserialize executable tools from S3.
 const message = z.discriminatedUnion('role', [
   z.object({ role: z.literal('user'), content: z.union([z.string(), z.array(text)]), timestamp: count }),
-  z.object({ role: z.literal('assistant'), content: z.array(z.union([text, toolCall])), api: z.literal('openai-completions'), provider: z.literal('extension'), model: z.string().max(200), usage, stopReason: z.enum(['stop', 'length', 'toolUse', 'error', 'aborted']), errorMessage: z.string().optional(), timestamp: count }),
+  z.object({ role: z.literal('assistant'), content: z.array(z.union([text, thinking, toolCall])), api: z.literal('openai-completions'), provider: z.literal('extension'), model: z.string().max(200), usage, stopReason: z.enum(['stop', 'length', 'toolUse', 'error', 'aborted']), errorMessage: z.string().optional(), timestamp: count }),
   z.object({ role: z.literal('toolResult'), toolCallId: z.string().min(1), toolName: z.string(), content: z.array(text), isError: z.boolean(), timestamp: count }),
 ]);
 // Portable identities permit independently authorized devices with different
