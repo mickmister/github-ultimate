@@ -19,12 +19,14 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
       if (request.headers.get('Authorization') !== 'Bearer private-fixture-secret') throw Error('Missing private inference header');
       const body = await request.json(); requests.push(body);
       const saved = [...objects.values()].map(object => JSON.parse(object.text));
-      if (!saved.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages?.at(-1)?.content === body.messages.at(-1).content)) throw Error('Inference started before the user message was durable');
+      if (!saved.some(checkpoint => checkpoint.phase === 'pending' && (body.messages.at(-1).role === 'tool'
+        ? checkpoint.messages?.at(-1)?.role === 'toolResult' && checkpoint.messages.at(-1).toolCallId === body.messages.at(-1).tool_call_id
+        : checkpoint.messages?.at(-1)?.content === body.messages.at(-1).content))) throw Error('Inference started before its input was durable');
       const content = `Real Pi reply ${requests.length}: Café 🌴`;
       if (body.stream) return new Response(new ReadableStream({ async start(controller) {
         const emit = (delta: unknown, finish_reason: string | null = null) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason }] })}\n\n`));
-        if (toolCode !== undefined) {
-          emit({ tool_calls: [{ index: 0, id: 'call-render', type: 'function', function: { name: 'codemode', arguments: '' } }] });
+        if (toolCode !== undefined && body.messages.at(-1).role !== 'tool') {
+          emit({ tool_calls: [{ index: 0, id: requests.length === 1 ? 'call-render' : `call-render-${requests.length}`, type: 'function', function: { name: 'codemode', arguments: '' } }] });
           await streamPause?.();
           emit({ tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ code: toolCode }) } }] });
           emit({}, 'tool_calls'); controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n')); controller.close(); return;

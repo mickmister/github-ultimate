@@ -3,6 +3,11 @@ import { z } from 'zod';
 /** Shared MCP interface. Hosts own transport, credentials and implementation. */
 export const workflowScope = { id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive() };
 const slug = z.string().regex(/^[a-z0-9][a-z0-9-]{0,39}$/);
+export const workflowDeliverySchema = z.object({
+  executionReference: z.string().uuid(), digest: z.string().regex(/^[a-f0-9]{64}$/), workspace: z.string().min(1).max(160), thread: z.string().min(1).max(80), process: slug,
+  engineCommit: z.string().regex(/^[a-f0-9]{40}$/), userId: z.number().int().positive(), installationId: z.number().int().positive(), attemptedAt: z.string().datetime(),
+  state: z.enum(['dispatch-unknown', 'dispatched']), runId: z.number().int().positive().optional(),
+}).strict();
 export const standaloneRequestSchema = z.object({
   schemaVersion: z.literal(2), process: slug, thread: z.string().regex(/^[a-z0-9][a-z0-9-]{0,79}$/),
   member: z.string().min(1).max(100), baseCommit: z.string().regex(/^[a-f0-9]{40}$/),
@@ -12,7 +17,7 @@ export const workflowStartSchema = z.object({
   ...workflowScope, workspace: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/), request: standaloneRequestSchema,
   allowSourceEffects: z.literal(true),
 }).strict();
-export const workflowStatusSchema = z.object({ ...workflowScope, executionReference: z.string().uuid(), reportWorkspace: z.object({ repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), workspace: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/), connectionId: z.string().uuid().optional() }).strict().optional() }).strict();
+export const workflowStatusSchema = z.object({ ...workflowScope, executionReference: z.string().uuid(), recoveryReceipt: workflowDeliverySchema.optional(), reportWorkspace: z.object({ repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), workspace: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/), connectionId: z.string().uuid().optional() }).strict().optional() }).strict();
 // MCP consumers select an opaque host-issued connection reference. Browser IDs,
 // GitHub actor/installation checks and Kody credential picks stay adapter-owned.
 const connectionRef = z.string().min(1).max(1024);
@@ -36,10 +41,7 @@ export const workflowReportSchema = z.object({
 }).strict().superRefine((report, ctx) => {
   if (new Set(report.evaluations.map(e => e.role)).size !== 3 || report.evaluations.some(e => e.candidate !== report.candidate) || report.status === 'accepted' && (!report.testsPassed || report.evaluations.some(e => e.approval !== 'approve'))) ctx.addIssue({ code: 'custom', message: 'Candidate acceptance lacks bound checks and three explicit approvals.' });
 });
-export type WorkflowDelivery = {
-  executionReference: string; digest: string; workspace: string; thread: string; process: string; engineCommit: string;
-  userId: number; installationId: number; attemptedAt: string; state: 'dispatch-unknown' | 'dispatched'; runId?: number;
-};
+export type WorkflowDelivery = z.infer<typeof workflowDeliverySchema>;
 export function workflowRunName(delivery: Pick<WorkflowDelivery, 'workspace' | 'thread' | 'process'>) {
   return `Development ${delivery.workspace} / ${delivery.thread} / ${delivery.process} · run`;
 }

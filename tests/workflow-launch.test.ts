@@ -76,6 +76,27 @@ test('result acceptance requires exact candidate approvals and passing required 
   for (const patch of [{ testsPassed: false }, { evaluations: report.evaluations.slice(0, 2) }, { evaluations: [report.evaluations[0], report.evaluations[0], report.evaluations[2]] }, { evaluations: report.evaluations.map(e => ({ ...e, candidate: 'c'.repeat(40) })) }]) expect(() => workflowReportSchema.parse({ ...report, ...patch })).toThrow();
 });
 
+test('another authenticated device reconciles a shared receipt without dispatch or importing launch authority', async () => {
+  const original = fixture(), receipt: any = await original.broker.handleHosted(original.page, original.request);
+  const other = fixture(); other.readonly(); other.runs.push(original.run());
+  const request = { operation: 'workflowStatus', ...other.scope, executionReference: receipt.executionReference, recoveryReceipt: receipt };
+  expect(await other.broker.handleHosted(other.page, request)).toMatchObject({ runId: 42, executionState: 'completed' });
+  expect(other.writes()).toBe(0); expect((await other.store.get(other.scope.id))!.workflowDeliveries).toBeUndefined();
+  await expect(other.broker.handleHosted(other.page, { ...request, recoveryReceipt: { ...receipt, userId: 9 } })).rejects.toThrow('authenticated');
+  await expect(other.broker.handleHosted('https://example.test/no-grant/', request)).rejects.toThrow('approved');
+  expect(await other.broker.handleHosted(other.page, { ...request, recoveryReceipt: { ...receipt, engineCommit: 'c'.repeat(40) } })).toMatchObject({ executionState: 'unconfirmed' });
+  expect(other.writes()).toBe(0);
+});
+
+test('a recovered reference cannot overwrite a host-owned receipt with the same workflow identity', async () => {
+  const f = fixture(), receipt: any = await f.broker.handleHosted(f.page, f.request);
+  f.runs.push(f.run());
+  const recovered = { ...receipt, executionReference: crypto.randomUUID(), digest: 'c'.repeat(64) };
+  expect(await f.broker.handleHosted(f.page, { operation: 'workflowStatus', ...f.scope, executionReference: recovered.executionReference, recoveryReceipt: recovered })).toMatchObject({ runId: 42 });
+  expect(Object.values((await f.store.get(f.scope.id))!.workflowDeliveries!)).toEqual([receipt]);
+  expect(f.writes()).toBe(1);
+});
+
 test('native GitHub bridge forwards the same workflow interface and retains host authority checks', async () => {
   const f = fixture(), native = new MobileGitHub(f.broker, () => true);
   expect(await native.hosted(f.page, { operation: 'discover' }, () => true)).toMatchObject({ capabilities: expect.arrayContaining(['workflowCatalog', 'workflowStart', 'workflowStatus']) });

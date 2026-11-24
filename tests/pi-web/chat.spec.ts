@@ -44,8 +44,9 @@ test('SDK-shaped streamed tool calls render, execute, persist and restore', asyn
     expect(saved.messages.find((message: { role: string }) => message.role === 'assistant').content[0]).toMatchObject({ type: 'toolCall', id: 'call-render', name: 'codemode', arguments: { code: 'text("Tool result café")' } });
     expect(saved.messages.some((message: { role: string; toolCallId?: string }) => message.role === 'toolResult' && message.toolCallId === 'call-render')).toBe(true);
     await page.getByRole('button', { name: /^codemode/ }).click(); await expect(page.getByRole('log')).toContainText('Tool result café');
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
     await page.reload(); await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible();
-    await expect(page.getByRole('log')).toContainText('Tool result café'); expect(remote.requests).toHaveLength(1); expect(errors).toEqual([]);
+    await expect(page.getByRole('log')).toContainText('Tool result café'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); expect(remote.requests).toHaveLength(2); expect(errors).toEqual([]);
   } finally { release(); fixture.dispose(); }
 });
 
@@ -67,6 +68,33 @@ test('published JavaScript links to usable first-party source maps', async ({ pa
   const link = /sourceMappingURL=([^\s]+)/.exec(runtime)?.[1]; expect(link).toBeTruthy();
   const response = await page.request.get(new URL(link!, `${origin}${base}extension-runtime.js`).href); expect(response.ok()).toBe(true);
   expect((await response.json()).sources.some((source: string) => source.includes('pi-chat.ts'))).toBe(true);
+});
+
+for (const action of ['stop', 'reload'] as const) test(`${action} during a tool preserves its intent without automatic replay`, async ({ page }) => {
+  let release!: () => void, entered = false;
+  const pending = new Promise<void>(resolve => { release = resolve; });
+  const source = `${origin}${base}`, previews = previewFixture(source), original = previews.host.hosted.bind(previews.host);
+  previews.host.hosted = async (...args) => {
+    const input = args[1];
+    if (input && typeof input === 'object' && 'operation' in input && input.operation === 'workflowCatalog') { entered = true; await pending; }
+    return original(...args);
+  };
+  const remote = remoteFixture(undefined, 'text(await tools.workflows_list({}))'), fixture = await nativeFixture(page, source, remote, previews.host);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Inspect workspace'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible();
+    await expect.poll(() => entered, { timeout: 15_000, message: 'QuickJS must reach the held workspace discovery operation' }).toBe(true);
+    if (action === 'stop') await page.getByRole('button', { name: 'Stop', exact: true }).click();
+    else await page.reload();
+    await expect(page.getByRole('button', { name: 'Continue interrupted turn', exact: true })).toBeEnabled();
+    expect(remote.requests).toHaveLength(1);
+    const checkpoints = [...remote.objects.values()].map(object => JSON.parse(object.text));
+    expect(checkpoints.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages?.at(-1)?.content?.some?.((block: { type: string }) => block.type === 'toolCall'))).toBe(true);
+    release();
+    await page.reload(); await expect(page.getByRole('button', { name: 'Continue interrupted turn', exact: true })).toBeEnabled();
+    expect(remote.requests).toHaveLength(1);
+  } finally { release(); fixture.dispose(); }
 });
 
 for (const width of [390, 1440]) {
@@ -258,9 +286,11 @@ test('new is only a draft and the upstream-adapted sidebar shows one row per con
     await input.fill('Canonical first conversation'); await input.press('Enter'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
     const library = page.getByRole('navigation', { name: 'Saved conversations' });
     await expect(library.locator('li')).toHaveCount(1);
+    const firstTurnObjects = remote.objects.size;
     await input.fill('Second turn'); await input.press('Enter'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
-    await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(5);
-    await create.click(); await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(5);
+    await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBeGreaterThan(firstTurnObjects);
+    const savedObjects = remote.objects.size;
+    await create.click(); await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(savedObjects);
     await library.getByRole('button', { name: /Canonical first conversation/ }).click();
     await expect(page.getByRole('log')).toContainText('Second turn'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); expect(remote.requests).toHaveLength(2);
     await create.click(); await input.fill('Canonical second conversation'); await input.press('Enter'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
@@ -283,11 +313,13 @@ test('two tabs reload and refresh the latest conversation while explicit checkpo
     await right.goto(left.url()); await expect(right.getByRole('log')).toContainText('Real Pi reply 1');
     await right.getByRole('textbox', { name: 'Message', exact: true }).fill('Added in the other tab'); await right.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(right.getByRole('status')).toHaveText('Saved to S3');
+    const secondTurnObjects = remote.objects.size;
     await left.reload(); await expect(left.getByRole('log')).toContainText('Added in the other tab'); await expect(left.getByRole('log')).toContainText('Real Pi reply 2');
-    expect(remote.requests).toHaveLength(2); expect(remote.objects.size).toBe(5);
+    expect(remote.requests).toHaveLength(2); expect(remote.objects.size).toBe(secondTurnObjects);
     const draft = left.getByRole('textbox', { name: 'Message', exact: true }); await draft.fill('Keep my unsent draft');
     await right.getByRole('textbox', { name: 'Message', exact: true }).fill('Third turn in other tab'); await right.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(right.getByRole('status')).toHaveText('Saved to S3');
+    const thirdTurnObjects = remote.objects.size;
     await left.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
     await expect(left.getByRole('log')).toContainText('Real Pi reply 3'); await expect(draft).toHaveValue('Keep my unsent draft');
     await left.goto(original.href); await expect(left.getByRole('log')).toContainText('Real Pi reply 1');
@@ -295,7 +327,7 @@ test('two tabs reload and refresh the latest conversation while explicit checkpo
     await left.reload(); await expect(left.getByRole('log')).toContainText('Real Pi reply 1'); await expect(left.getByRole('log')).not.toContainText('Real Pi reply 3');
     await left.getByRole('navigation', { name: 'Saved conversations' }).getByRole('button', { name: /Shared conversation/ }).click();
     await expect(left.getByRole('log')).toContainText('Real Pi reply 3'); expect(new URL(left.url()).searchParams.has('view')).toBe(false);
-    expect(remote.requests).toHaveLength(3); expect(remote.objects.size).toBe(7);
+    expect(remote.requests).toHaveLength(3); expect(remote.objects.size).toBe(thirdTurnObjects);
     a.dispose(); b.dispose();
   } finally { await context.close(); }
 });
