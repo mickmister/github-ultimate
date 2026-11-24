@@ -180,7 +180,7 @@ export class BrowserChat {
   private async save() {
     this.state = { ...this.state, dirty: true }; this.publish();
     if (this.initialWorkspace) { await this.storage.assign(this.checkpoint.session_id, this.initialWorkspace); this.initialWorkspace = undefined; }
-    const candidate = { ...this.checkpoint, parent: this.reference ?? null, created_at: new Date().toISOString(), messages: this.agent.state.messages.filter(message => message.role !== 'system') as ChatCheckpoint['messages'] };
+    const candidate = chatSchema.parse({ ...this.checkpoint, parent: this.reference ?? null, created_at: new Date().toISOString(), messages: this.agent.state.messages.filter(message => message.role !== 'system') });
     this.reference = await this.storage.save(candidate); this.checkpoint = candidate;
     this.state = { ...this.state, dirty: false }; this.publish();
   }

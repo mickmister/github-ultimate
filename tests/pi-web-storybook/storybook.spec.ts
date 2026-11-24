@@ -24,11 +24,13 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
 
-test('render boundary contains a transcript failure and retries without losing the composer', async ({ page }) => {
+test('message boundary keeps neighboring messages and composer visible during failure and retry', async ({ page }) => {
   await page.goto(`${origin}/iframe.html?id=pi-web-error-recovery--transcript&viewMode=story`);
   const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Keep my unsent draft');
   await page.getByRole('button', { name: 'Break renderer', exact: true }).click();
-  await expect(page.getByRole('alert', { name: 'conversation display error' })).toBeVisible();
+  await expect(page.getByRole('alert', { name: 'message display error' })).toBeVisible();
+  await expect(page.getByText('Healthy message before failure', { exact: true })).toBeVisible();
+  await expect(page.getByText('Healthy message after failure', { exact: true })).toBeVisible();
   await expect(input).toHaveValue('Keep my unsent draft'); await input.fill('Still usable after failure');
   await page.getByRole('button', { name: 'Repair renderer', exact: true }).click();
   await page.getByRole('button', { name: 'Retry display', exact: true }).click();

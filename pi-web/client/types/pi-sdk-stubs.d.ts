@@ -1,6 +1,6 @@
-// The demo only ships Pi Web's browser code. A few copied modules keep
-// type-only (or server-only) imports from the pi SDK; declare the
-// names they use loosely so the demo typechecks without the agent runtime.
+// Legacy copied Node-only helpers reference coding-agent APIs which are not
+// shipped by this browser application. The actual pi-ai/agent-core packages
+// MUST resolve their published types; never shadow those modules with stubs.
 /* eslint-disable @typescript-eslint/no-explicit-any */
 declare module "@earendil-works/pi-coding-agent" {
   export type AgentSessionEvent = any;
@@ -12,12 +12,4 @@ declare module "@earendil-works/pi-coding-agent" {
   export type SlashCommandInfo = any;
   export type Theme = any;
   export function getAgentDir(): string;
-}
-declare module "@earendil-works/pi-agent-core" {
-  export type AgentMessage = any;
-  export type ThinkingLevel = "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
-}
-declare module "@earendil-works/pi-ai" {
-  export type ImageContent = any;
-  export type TextContent = any;
 }

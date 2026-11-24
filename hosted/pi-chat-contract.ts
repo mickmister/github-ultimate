@@ -1,9 +1,12 @@
 import type { PublicInferenceConnection } from '../src/inference-protocol';
 import type { PublicS3Connection } from '../src/s3-protocol';
 import type { PreviewCatalog } from './preview-slots';
+import type { AgentMessage } from '@earendil-works/pi-agent-core';
+/** Canonical runtime messages come from the pinned published Pi SDK. */
+export type ChatMessage = Extract<AgentMessage, { role: 'user' | 'assistant' | 'toolResult' }>;
 export type ChatWorkspace = { repository: string; workspace: string };
 export type SavedChat = { sessionId: string; reference: string; label: string; updatedAt: string; messageCount: number; workspace?: ChatWorkspace };
-export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: { role: string; content?: unknown }[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean };
+export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: ChatMessage[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean };
 export interface ChatHandle {
   snapshot(): ChatSnapshot;
   subscribe(listener: () => void): () => void;

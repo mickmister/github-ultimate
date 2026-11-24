@@ -7,7 +7,8 @@ import { SessionSidebar as Library } from './SessionSidebar.view';
 import { PreviewSlots } from './PreviewSlots.view';
 import { workspaceKey } from './Chat.hooks';
 import { ChatIcon } from './ChatIcon.view';
-import { displayMessages } from './transcript-adapter';
+import { displayMessage } from './transcript-adapter';
+import type { ChatMessage } from '../../../hosted/pi-chat-contract';
 import { ErrorBoundary } from './ErrorBoundary.view';
 
 function Connections({ model: m }: { model: ChatModel }) {
@@ -23,10 +24,18 @@ function Settings({ model: m }: { model: ChatModel }) {
 }
 export function Transcript({ messages, sessionId, streaming = false }: { messages: AgentMessage[]; sessionId?: string; streaming?: boolean }) {
   const results = new Map(messages.filter((message): message is ToolResultMessage => message.role === 'toolResult').map(message => [message.toolCallId, message]));
-  return <div className="chat-transcript-content">{messages.map((message, index) => <MessageView key={index} message={message} toolResults={results} isStreaming={streaming && index === messages.length - 1} showTimestamp sessionId={sessionId} />)}</div>;
+  return <div className="chat-transcript-content">{messages.map((message, index) => <ErrorBoundary key={`${sessionId ?? 'draft'}:${index}`} scope="message" retry><MessageView message={message} toolResults={results} isStreaming={streaming && index === messages.length - 1} showTimestamp sessionId={sessionId} /></ErrorBoundary>)}</div>;
 }
-function RuntimeTranscript({ model: m }: { model: ChatModel }) {
-  return <Transcript messages={displayMessages(m.snapshot.messages)} sessionId={m.snapshot.sessionId} streaming={m.snapshot.streaming} />;
+function RuntimeMessage({ message, results, streaming, sessionId }: { message: ChatMessage; results: Map<string, Extract<ChatMessage, { role: 'toolResult' }>>; streaming: boolean; sessionId?: string }) {
+  const toolResults = new Map<string, ToolResultMessage>();
+  if (message.role === 'assistant') for (const block of message.content) if (block.type === 'toolCall') {
+    const result = results.get(block.id); if (result) toolResults.set(block.id, displayMessage(result));
+  }
+  return <MessageView message={displayMessage(message)} toolResults={toolResults} isStreaming={streaming} showTimestamp sessionId={sessionId} />;
+}
+export function CanonicalTranscript({ messages, sessionId, streaming = false }: { messages: ChatMessage[]; sessionId?: string; streaming?: boolean }) {
+  const results = new Map(messages.filter(message => message.role === 'toolResult').map(message => [message.toolCallId, message]));
+  return <div className="chat-transcript-content">{messages.map((message, index) => <ErrorBoundary key={`${sessionId ?? 'draft'}:${index}`} scope="message" retry><RuntimeMessage message={message} results={results} streaming={streaming && index === messages.length - 1} sessionId={sessionId} /></ErrorBoundary>)}</div>;
 }
 function Conversation({ model: m }: { model: ChatModel }) {
   return <section className="chat-conversation" aria-label="Conversation"><header><h1>{m.draftMode ? 'New conversation' : m.snapshot.title}</h1><div className="chat-conversation-actions"><p role="status">{m.busy ? m.snapshot.dirty ? 'Saving…' : 'Working…' : m.snapshot.dirty ? 'Not saved' : m.snapshot.reference ? 'Saved to S3' : m.draftMode ? 'Draft · saved when you send your first message.' : 'Connect inference and S3 to begin.'}</p>{(m.snapshot.sessionId || m.draftMode) && <><button className="chat-icon-button" title="Copy conversation link" aria-label="Copy conversation link" disabled={!m.snapshot.reference || m.snapshot.dirty} onClick={() => void m.copyLink()}><ChatIcon name="link" /></button><button className="chat-icon-button" title="Close conversation" aria-label="Close conversation" disabled={m.busy || m.snapshot.dirty && Boolean(m.snapshot.messages.length)} onClick={m.close}><ChatIcon name="close" /></button></>}</div></header>
@@ -35,7 +44,7 @@ function Conversation({ model: m }: { model: ChatModel }) {
     {m.route.kind === 'inbox' && <p>Unassigned migration inbox. Select a saved conversation and move it into a workspace in Settings → Connections to continue.</p>}
     {m.snapshot.dirty && !m.busy && <button onClick={() => void m.retrySave()}>Retry session save</button>}
     {m.snapshot.phase === 'interrupted' && <aside><p>The previous turn was interrupted. It has not been resent.</p><button disabled={m.busy || m.snapshot.dirty} onClick={() => void m.send(true)}>Continue interrupted turn</button></aside>}
-    <div className="chat-transcript" role="log" aria-label="Messages"><ErrorBoundary scope="conversation" retry key={m.snapshot.sessionId ?? 'draft'}><RuntimeTranscript model={m} /></ErrorBoundary>
+    <div className="chat-transcript" role="log" aria-label="Messages"><ErrorBoundary scope="conversation" retry key={m.snapshot.sessionId ?? 'draft'}><CanonicalTranscript messages={m.snapshot.messages} sessionId={m.snapshot.sessionId} streaming={m.snapshot.streaming} /></ErrorBoundary>
       {!m.snapshot.messages.length && <div className="chat-empty"><h2>What can I help you with?</h2><p>Start a conversation. Messages are saved to your selected S3 storage.</p></div>}</div>
     <form className="chat-composer" onSubmit={event => { event.preventDefault(); void m.send(); }}>
       <textarea aria-label="Message" value={m.draft} onChange={e => m.setDraft(e.target.value)} placeholder="Message Alohak" rows={1} disabled={!m.workspace || !m.snapshot.sessionId && !m.draftMode} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void m.send(); } }} />

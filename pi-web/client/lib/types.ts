@@ -1,4 +1,6 @@
-// Types mirrored from pi-mono coding-agent session-manager
+// Presentation types for the imported coding-agent renderer. These are NOT the
+// canonical Pi SDK wire contract; use hosted/pi-chat-contract and the typed
+// transcript adapter for runtime messages. Some renderer field names differ.
 
 export interface SessionHeader {
   type: "session";

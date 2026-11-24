@@ -5,7 +5,7 @@ import { DesktopChat, PhoneChat, TabletChat } from '../chat/Chat.view';
 import type { ChatModel } from '../chat/Chat.hooks';
 import { useTheme } from '../hooks/useTheme';
 import { usePreviewSlots } from '../chat/PreviewSlots.hooks';
-import { conversation, tools } from './messages';
+import { conversation, tools } from './sdk-messages';
 
 type Mode = 'conversation' | 'draft' | 'tools' | 'interrupted' | 'save-error';
 function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode; device?: 'phone' | 'tablet' | 'desktop' }) {
@@ -27,7 +27,7 @@ function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode;
     connect: async () => {}, list: async () => { setShowList(true); },
     open: async () => { setMessages(conversation); setDraftMode(false); setShowList(device !== 'phone'); },
     create: async () => { setDraftMode(true); setMessages([]); setDraft(''); setShowList(device !== 'phone'); },
-    send: async () => { if (!draft.trim()) return; setMessages(previous => [...previous, { role: 'user', content: draft }]); setDraft(''); setDraftMode(false); },
+    send: async () => { if (!draft.trim()) return; setMessages(previous => [...previous, { role: 'user', content: draft, timestamp: Date.now() }]); setDraft(''); setDraftMode(false); },
     close: () => { setDraftMode(true); setMessages([]); }, copyLink: async () => {}, stop: () => {}, retrySave: async () => { setDirty(false); },
   };
   const View = device === 'phone' ? PhoneChat : device === 'tablet' ? TabletChat : DesktopChat;

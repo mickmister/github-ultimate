@@ -1,4 +1,5 @@
 import type { AgentMessage } from '@earendil-works/pi-agent-core';
+import type { ChatMessage } from './pi-chat-contract';
 import { z } from 'zod';
 import type { PublicS3Connection, S3Object } from '../src/s3-protocol';
 import { backblaze, checkpointReference } from '../src/s3-protocol';
@@ -18,7 +19,7 @@ const message = z.discriminatedUnion('role', [
   z.object({ role: z.literal('user'), content: z.union([z.string(), z.array(text)]), timestamp: count }),
   z.object({ role: z.literal('assistant'), content: z.array(z.union([text, thinking, toolCall])), api: z.literal('openai-completions'), provider: z.literal('extension'), model: z.string().max(200), usage, stopReason: z.enum(['stop', 'length', 'toolUse', 'error', 'aborted']), errorMessage: z.string().optional(), timestamp: count }),
   z.object({ role: z.literal('toolResult'), toolCallId: z.string().min(1), toolName: z.string(), content: z.array(text), isError: z.boolean(), timestamp: count }),
-]);
+]) satisfies z.ZodType<ChatMessage>;
 // Portable identities permit independently authorized devices with different
 // local connection UUIDs. Each request still uses that device's current revision.
 export const sessionBindingSchema = z.object({ runtime: z.literal('earendil-pi-1.5.2-text-v1'), inferenceModel: z.string().min(1).max(200), githubAppId: z.number().int().positive(), githubUserId: z.number().int().positive(), installationId: z.number().int().positive(), storageEndpoint: z.string().max(2000), storageBucket: z.string().max(63), storagePrefix: z.string().max(1024), storageRegion: z.string().max(100), storageAddressing: z.enum(['path', 'virtual']), beads: z.object({ repository: z.string().max(220), workspace: z.string().max(200) }).strict().optional() }).strict();

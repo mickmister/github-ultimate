@@ -190,8 +190,10 @@ adapter maps them to the imported renderer's `toolCallId`, `toolName`, and `inpu
 canonical S3 checkpoints retain the SDK format. Partial streamed calls are safe to
 render before their name/arguments have arrived.
 
-A transcript ErrorBoundary contains renderer failures without unmounting the chat
-hook/composer. **Retry display** retries rendering only, never inference/tools.
+Each message has its own ErrorBoundary, including its SDK-to-display conversion,
+so one failed message leaves neighboring messages visible. A transcript boundary
+backs this up without unmounting the chat hook/composer. **Retry display** retries
+rendering only, never inference/tools.
 An outer application ErrorBoundary offers explicit reload/home navigation for
 larger failures and shows the build/stack. Reload restores only saved state.
 
@@ -201,6 +203,15 @@ source/lines. UI maps embed application source; dependency-only maps are compact
 empty maps, and mixed maps omit dependency source text. Runtime maps retain source
 paths/mappings without embedded source text. Maps count toward the unchanged
 12 MiB Pi Web budget. No conversations or credentials are included in build maps.
+
+`ChatSnapshot.messages` derives from the pinned published Pi SDK's `AgentMessage`
+union. The display adapter uses the published content types and exhaustive
+switches, rather than casts to the renderer's historical types. Chat Storybook
+fixtures satisfy the same SDK contract. Client checks reject SDK types that become
+`any`; parent checks reject direct SDK/renderer interchange. Demo-era ambient
+stubs for `pi-agent-core` and `pi-ai` have been removed. The persistence schema
+remains the runtime validator for supported saved messages and is compile-checked
+as producing SDK-compatible messages. TypeScript alone cannot validate fetched JSON.
 
 ### Pi Web Storybook
 
