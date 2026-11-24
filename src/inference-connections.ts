@@ -74,7 +74,7 @@ export class InferenceConnections {
       return null;
     }
     const url = inferenceURL(record.url);
-    if (!current() || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || epoch !== this.epoch) throw new ConnectionError('Inference endpoint or page access changed.');
+    if (!await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || !current() || epoch !== this.epoch) throw new ConnectionError('Inference endpoint or page access changed.');
     if (this.cancelled.has(key)) throw new ConnectionError('Inference cancelled.');
     if (request.operation === 'inferenceRead') {
       const stream = this.streams.get(request.requestId), job = this.active.get(request.requestId);
@@ -89,7 +89,7 @@ export class InferenceConnections {
           if (stream.bytes > 2 * 1024 * 1024) throw new ConnectionError('Inference response exceeds 2 MiB.');
           stream.remainder = stream.decoder.decode(part.value, { stream: !done });
         }
-        if (!current() || job.controller.signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+        if (!await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || !current() || job.controller.signal.aborted || epoch !== this.epoch) throw new ConnectionError('Inference cancelled or access changed.');
         // Pull-based reads keep only one provider chunk in memory. Bound each
         // JSON reply too, including native bridge transfers and UTF-16 pairs.
         let end = Math.min(stream.remainder.length, 16384);
@@ -126,7 +126,7 @@ export class InferenceConnections {
       const signal = this.combine([controller.signal, this.timeout(90000)]);
       response = await this.fetcher(url.href, { method: 'POST', headers, body: JSON.stringify(payload), credentials: 'omit', redirect: 'error', cache: 'no-store', signal });
       if (request.operation === 'inferenceOpen') {
-        if (!current() || signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+        if (!await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || !current() || signal.aborted || epoch !== this.epoch) throw new ConnectionError('Inference cancelled or access changed.');
         // Error bodies may reflect credentials. Preserve HTTP semantics without
         // forwarding provider diagnostics or arbitrary response headers.
         const status = response.status;
@@ -149,7 +149,7 @@ export class InferenceConnections {
       }
       if (!response.ok) { await response.body?.cancel(); throw new ConnectionError(`Inference returned HTTP ${response.status}. Check the endpoint and configured headers.`); }
       const result = await boundedJSON(response, 2 * 1024 * 1024);
-      if (!current() || controller.signal.aborted || epoch !== this.epoch || !await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+      if (!await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || !current() || controller.signal.aborted || epoch !== this.epoch) throw new ConnectionError('Inference cancelled or access changed.');
       return result;
     } catch (error) {
       await response?.body?.cancel().catch(() => {});

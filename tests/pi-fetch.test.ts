@@ -9,10 +9,10 @@ import { normalizeContext } from '@earendil-works/pi-ai/utils/transcript';
 import { UTF8Decoder } from '../src/utf8';
 
 const page = 'https://app.example/agent/pi.html';
-function fixture(fetcher: typeof fetch) {
+function fixture(fetcher: typeof fetch, hasHostAccess?: (origin: string) => Promise<boolean>) {
   const record: InferenceRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Private provider', model: 'configured-model', url: 'https://provider.example/custom/chat/completions', headers: [{ name: 'Authorization', value: 'Bearer private-secret' }, { name: 'X-Custom', value: 'custom-secret' }], hostedGrants: [{ origin: 'https://app.example', subpath: '/agent/' }] };
   const store: InferenceStore = { all: async () => [record], get: async () => record, put: async () => {}, remove: async () => {} };
-  const broker = new InferenceConnections(store, fetcher);
+  const broker = new InferenceConnections(store, fetcher, hasHostAccess);
   const bridge: PiBridge = async <T>(request: Parameters<PiBridge>[0]) => await broker.handleHosted(page, request) as T;
   const connection = { id: record.id, revision: record.revision, model: record.model, name: record.name, hostedGrants: [], transport: 'http-stream-v1' as const };
   return { broker, bridge, connection, record };
@@ -132,5 +132,24 @@ describe('Pi provider adapter over host HTTP transport', () => {
       const decoder = new UTF8Decoder(); decoder.decode(Uint8Array.of(0xf0, 0x9f), { stream: true });
       expect(() => decoder.decode()).toThrow('UTF-8');
     } finally { vi.unstubAllGlobals(); }
+  });
+  it('does not release a chunk when revocation overtakes asynchronous permission checks', async () => {
+    let providerRead = false, blocked = false, ready!: () => void, resume!: () => void;
+    const checking = new Promise<void>(resolve => { ready = resolve; }), gate = new Promise<void>(resolve => { resume = resolve; });
+    const { broker, bridge, record } = fixture(async () => new Response(new ReadableStream({ pull(controller) { providerRead = true; controller.enqueue(new TextEncoder().encode('Late text')); } }, { highWaterMark: 0 })), async () => { if (providerRead && !blocked) { blocked = true; ready(); await gate; } return true; });
+    const identity = { id: record.id, revision: record.revision, requestId: crypto.randomUUID() };
+    await bridge({ operation: 'inferenceOpen', ...identity, body: JSON.stringify({ messages: [{}] }) });
+    const reading = bridge({ operation: 'inferenceRead', ...identity, sequence: 0 }); await checking;
+    await broker.handle({ operation: 'revokeOrigin', id: record.id, origin: 'https://app.example', subpath: '/agent/' }); resume();
+    await expect(reading).rejects.toThrow('cancelled');
+  });
+  it('does not start inference if the native document changes during authorization', async () => {
+    let current = true, ready!: () => void, resume!: () => void;
+    const checking = new Promise<void>(resolve => { ready = resolve; }), gate = new Promise<void>(resolve => { resume = resolve; });
+    const fetcher = vi.fn<typeof fetch>(async () => new Response('Should not fetch'));
+    const { broker, record } = fixture(fetcher, async () => { ready(); await gate; return true; });
+    const opening = broker.handleHosted(page, { operation: 'inferenceOpen', id: record.id, revision: record.revision, requestId: crypto.randomUUID(), body: JSON.stringify({ messages: [{}] }) }, () => current);
+    await checking; current = false; resume();
+    await expect(opening).rejects.toThrow('access changed'); expect(fetcher).not.toHaveBeenCalled();
   });
 });
