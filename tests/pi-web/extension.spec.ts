@@ -59,7 +59,7 @@ test('packaged extension saves and restores real Pi chats through signed version
     const storage = settings.getByRole('article', { name: 'Shared chats', exact: true });
     await storage.getByLabel('S3 hosted origin').fill('https://agent.example'); await storage.getByLabel('S3 hosted subpath').fill(base); await storage.getByRole('button', { name: 'Grant hosted S3 access' }).click();
     const page = await context.newPage(); await page.goto(`https://agent.example${base}`);
-    await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeEnabled(); await page.getByRole('button', { name: 'New conversation', exact: true }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeEnabled(); await page.getByRole('button', { name: 'New conversation', exact: true }).click(); await expect(page.getByRole('status')).toContainText('Draft'); expect(remote.objects.size).toBe(0);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hello through extension'); await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('log')).toContainText('Real Pi reply 1'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
     await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 1'); expect(remote.requests).toHaveLength(1);

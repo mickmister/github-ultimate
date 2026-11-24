@@ -29,16 +29,18 @@ export function useChat() {
   const presentation = useSyncExternalStore(subscribeDevice, deviceSnapshot, () => 'desktop');
   const [inference, setInference] = useState<PublicInferenceConnection[]>([]), [storage, setStorage] = useState<PublicS3Connection[]>([]);
   const [inferenceId, setInferenceId] = useState(''), [storageId, setStorageId] = useState('');
-  const [chats, setChats] = useState<SavedChat[]>([]), [token, setToken] = useState<string>();
+  const [chats, setChats] = useState<SavedChat[]>([]), [search, setSearch] = useState('');
+  const [draftMode, setDraftMode] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [draft, setDraft] = useState('');
   const [showList, setShowList] = useState(false);
   const generation = useRef(0);
+  const working = useRef(false);
   const selectedStorage = storage.find(item => item.id === storageId), selectedInference = inference.find(item => item.id === inferenceId);
   async function action(work: () => Promise<void>) {
-    if (busy || active.current?.snapshot().busy) return;
-    setBusy(true); setError('');
+    if (working.current || active.current?.snapshot().busy) return;
+    working.current = true; setBusy(true); setError('');
     try { await work(); } catch (error) { setError(error instanceof Error ? error.message : 'Connection failed.'); }
-    finally { setBusy(false); }
+    finally { working.current = false; setBusy(false); }
   }
   async function connect() {
     await action(async () => {
@@ -53,7 +55,7 @@ export function useChat() {
       setStorageId(target?.id ?? ''); setInferenceId(model?.id ?? '');
       if (expected && !target) throw Error('Configure and grant the S3 location used by this conversation, then reconnect.');
       if (!target) return;
-      const page = await api.list(target); setChats(page.chats); setToken(page.token);
+      const page = await api.list(target); setChats(page.chats);
       const session = params.get('session'), checkpoint = params.get('checkpoint');
       if (session && checkpoint && model) { const restored = await api.restore(model, target, session, checkpoint); setChat(restored); setShowList(false); }
     });
@@ -66,47 +68,55 @@ export function useChat() {
     url.searchParams.set('session', snapshot.sessionId); url.searchParams.set('checkpoint', snapshot.reference);
     void runtime().then(api => { url.searchParams.set('storage', api.storageId(selectedStorage)); history.replaceState(null, '', url); });
   }, [snapshot.sessionId, snapshot.reference, selectedStorage]);
-  async function list(next = false) {
+  async function list() {
     await action(async () => {
       if (!selectedStorage) throw Error('Choose S3 storage.');
-      const api = await runtime(), page = await api.list(selectedStorage, next ? token : undefined);
-      setChats(previous => next ? [...previous, ...page.chats] : page.chats); setToken(page.token); setShowList(true);
+      const api = await runtime(), page = await api.list(selectedStorage);
+      setChats(page.chats); setShowList(true);
     });
   }
   async function open(saved: SavedChat) {
     await action(async () => {
       if (!selectedStorage || !selectedInference) throw Error('Choose storage and inference connections.');
       if (active.current?.snapshot().dirty) throw Error('Retry saving this conversation before opening another.');
-      setChat(await (await runtime()).restore(selectedInference, selectedStorage, saved.sessionId, saved.reference)); setShowList(false);
+      setChat(await (await runtime()).restore(selectedInference, selectedStorage, saved.sessionId, saved.reference)); setDraftMode(false); setDraft(''); setShowList(false);
     });
   }
   async function create() {
     await action(async () => {
       if (!selectedStorage || !selectedInference) throw Error('Choose storage and inference connections.');
       if (active.current?.snapshot().dirty) throw Error('Retry saving this conversation before creating another.');
-      const api = await runtime(), next = api.create(selectedInference, selectedStorage);
-      setChat(next); setDraft(''); setShowList(false); await next.retrySave();
-      try { localStorage.setItem('pi-web:storage', api.storageId(selectedStorage)); } catch { /* S3 owns the conversation. */ }
+      setChat(undefined); active.current = undefined; setDraftMode(true); setDraft(''); setShowList(false);
+      const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
     });
   }
   async function send(resume = false) {
-    if (!chat || busy || snapshot.busy) return;
     const text = draft;
     if (!resume && !text.trim()) return;
-    setDraft(''); setError('');
-    try { await chat.send(resume ? undefined : text); } catch (error) { if (!resume) setDraft(text); setError(error instanceof Error ? error.message : 'Could not send.'); }
+    await action(async () => {
+      if (!selectedStorage || !selectedInference) throw Error('Choose storage and inference connections.');
+      const api = await runtime(); let next = active.current;
+      if (!next) {
+        if (!draftMode || resume) return;
+        next = api.create(selectedInference, selectedStorage); active.current = next; setChat(next); setDraftMode(false);
+        try { localStorage.setItem('pi-web:storage', api.storageId(selectedStorage)); } catch { /* S3 owns the conversation. */ }
+      }
+      setDraft('');
+      try { await next.send(resume ? undefined : text); } catch (error) { if (!resume) setDraft(text); throw error; }
+      if (next.snapshot().reference) setChats((await api.list(selectedStorage)).chats);
+    });
   }
   function chooseStorage(id: string) {
     if (snapshot.busy || snapshot.dirty) return;
-    setStorageId(id); setChats([]); setToken(undefined); setChat(undefined); setShowList(true);
+    setStorageId(id); setChats([]); setChat(undefined); setDraftMode(false); setShowList(true);
     const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
   }
   function close() {
     if (snapshot.busy || snapshot.dirty && snapshot.messages.length) return;
-    setChat(undefined); const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
+    setChat(undefined); setDraftMode(false); setDraft(''); const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
   }
   async function copyLink() { try { await copyText(location.href); } catch { setError('Could not copy the link. Copy the page URL from your browser.'); } }
-  return { snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats, token, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
-    setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => chat?.retrySave() };
+  return { snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: chats.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
+    setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) setChats((await (await runtime()).list(selectedStorage)).chats); }) };
 }
 export type ChatModel = ReturnType<typeof useChat>;

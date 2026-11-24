@@ -19,6 +19,13 @@ duplicated root frontend, Node API/session manager, CLI, container packaging and
 upstream-only tests/workflows were retired. Their exact historical source remains
 at the pins above. This is a maintained selective fork, not a pristine vendor tree.
 
+The original `SessionSidebar.tsx` was not retained wholesale: it couples session
+rows to the Node session API, filesystem explorer, project/worktree operations and
+terminal controls. `client/chat/SessionSidebar.view.tsx` adapts its compact title,
+time/message-count and selected-row presentation to canonical S3 conversations,
+with search and actions owned by the shared feature hook. Original source remains
+recoverable at the import pin for further selective reuse.
+
 The parent builds Pi 1.5.2 separately and keeps provider/S3 credentials in the
 extension or Alohak native host. UI sessions use the versioned `pi-web-chat-1`
 profile, independently of the older workspace-agent checkpoint schema. Existing

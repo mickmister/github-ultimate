@@ -35,7 +35,8 @@ for (const [name, width, height] of [['phone portrait',390,844],['phone landscap
     page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) api.push(request.url()); });
     await page.setViewportSize({ width, height }); await page.goto(`${origin}${base}`);
     const create = page.getByRole('button', { name: 'New conversation', exact: true }); await expect(create).toBeEnabled(); await create.click();
-    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect(page.getByRole('status')).toContainText('Draft');
+    expect(remote.objects.size).toBe(0); expect(new URL(page.url()).searchParams.has('session')).toBe(false);
     const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Hello from a real session'); await input.press('Enter');
     await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
     await input.fill('Retain this unsent draft'); await page.setViewportSize({ width: height, height: width }); await expect(input).toHaveValue('Retain this unsent draft');
@@ -52,7 +53,7 @@ test('independent device connections restore the same S3 conversation and preser
     const a = await nativeFixture(left, `${origin}${base}`, remote), b = await nativeFixture(right, `${origin}${base}`, remote);
     expect(a.storage.id).not.toBe(b.storage.id); expect(a.inference.id).not.toBe(b.inference.id);
     await left.goto(`${origin}${base}`); await expect(left.getByRole('button', { name: 'New conversation' })).toBeEnabled(); await left.getByRole('button', { name: 'New conversation' }).click();
-    await expect(left.getByRole('status')).toHaveText('Saved to S3'); await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Start on desktop'); await left.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(left.getByRole('status')).toContainText('Draft'); await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Start on desktop'); await left.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(left.getByRole('status')).toHaveText('Saved to S3'); await expect(left.getByRole('log')).toContainText('Real Pi reply 1');
     const link = left.url(), parent = new URL(link).searchParams.get('checkpoint');
     await right.goto(link); await expect(right.getByRole('log')).toContainText('Real Pi reply 1'); expect(remote.requests).toHaveLength(1);
@@ -66,6 +67,31 @@ test('independent device connections restore the same S3 conversation and preser
     await left.goto(right.url()); await expect(left.getByRole('log')).toContainText('Continue on phone'); await expect(left.getByRole('log')).toContainText('Real Pi reply 2');
     a.dispose(); b.dispose();
   } finally { await first.close(); await second.close(); }
+});
+test('new is only a draft and the upstream-adapted sidebar shows one row per conversation', async ({ page }) => {
+  const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  try {
+    await page.goto(`${origin}${base}`);
+    const create = page.getByRole('button', { name: 'New conversation', exact: true }), input = page.getByRole('textbox', { name: 'Message', exact: true });
+    await expect(create).toBeEnabled(); await create.click(); await expect(input).toBeEnabled();
+    await input.fill('Unsent draft'); await page.setViewportSize({ width: 390, height: 844 }); await expect(input).toHaveValue('Unsent draft');
+    await page.getByRole('button', { name: 'Close conversation', exact: true }).click();
+    await create.click(); await page.reload(); await expect(create).toBeEnabled();
+    expect(remote.objects.size).toBe(0); expect(remote.requests).toHaveLength(0);
+    expect(new URL(page.url()).searchParams.has('session')).toBe(false);
+    await page.setViewportSize({ width: 1440, height: 900 }); await create.click();
+    await input.fill('Canonical first conversation'); await input.press('Enter'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    const library = page.getByRole('navigation', { name: 'Saved conversations' });
+    await expect(library.locator('li')).toHaveCount(1);
+    await input.fill('Second turn'); await input.press('Enter'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(4);
+    await create.click(); await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(4);
+    await library.getByRole('button', { name: /Canonical first conversation/ }).click();
+    await expect(page.getByRole('log')).toContainText('Second turn'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); expect(remote.requests).toHaveLength(2);
+    await create.click(); await input.fill('Canonical second conversation'); await input.press('Enter'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect(library.locator('li')).toHaveCount(2);
+    await library.getByRole('searchbox', { name: 'Search conversations' }).fill('first'); await expect(library.locator('li')).toHaveCount(1);
+  } finally { fixture.dispose(); }
 });
 test('production assets contain no canned file manifest and retain provenance', async ({ request }) => {
   expect((await request.get(`${origin}${base}demo-files/manifest.json`)).status()).toBe(404);

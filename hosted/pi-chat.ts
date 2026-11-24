@@ -21,19 +21,49 @@ const chatSchema = z.object({
       message.role === 'assistant' && message.content.every(block => block.type === 'text')), 'Only text chat messages are supported.'),
 }).strict();
 export type ChatCheckpoint = z.infer<typeof chatSchema>;
+class OtherCheckpointProfile extends Error {}
 
 /** Immutable, readback-verified chat checkpoints use the existing privileged S3
  * checkpoint operation, including B2's ordinary PUT + exact-version contract. */
 export class ChatStorage {
   constructor(private bridge: PiBridge, readonly connection: PublicS3Connection) {}
-  async list(token?: string): Promise<{ chats: SavedChat[]; token?: string }> {
+  async list(): Promise<{ chats: SavedChat[] }> {
     const prefix = `${this.connection.prefix}pi-sessions/`;
-    const listing = await this.bridge<S3Listing>({ operation: 's3List', id: this.connection.id, revision: this.connection.revision, prefix, versions: backblaze(this.connection.endpoint), ...(token ? { continuationToken: token } : {}) });
-    return { chats: listing.objects.flatMap(object => {
-      const match = /^([a-f0-9-]{36})\/([^/]+)-[a-f0-9]{64}\.json$/.exec(object.key.slice(prefix.length));
-      if (!object.key.startsWith(prefix) || !match || !z.string().uuid().safeParse(match[1]).success) return [];
-      return [{ sessionId: match[1], reference: checkpointReference(object.key, object.versionId), label: `${match[1].slice(0, 8)} · ${match[2].slice(0, 19)}` }];
-    }).reverse(), token: listing.continuationToken };
+    const latest = new Map<string, { timestamp: string; references: string[] }>(), tokens = new Set<string>();
+    let token: string | undefined;
+    do {
+      const listing = await this.bridge<S3Listing>({ operation: 's3List', id: this.connection.id, revision: this.connection.revision, prefix, versions: backblaze(this.connection.endpoint), ...(token ? { continuationToken: token } : {}) });
+      for (const object of listing.objects) {
+        const match = /^([a-f0-9-]{36})\/([^/]+)-[a-f0-9]{64}\.json$/.exec(object.key.slice(prefix.length));
+        if (!object.key.startsWith(prefix) || !match || !z.string().uuid().safeParse(match[1]).success) continue;
+        // Broker-generated keys start with a UTC timestamp. Resolve across every
+        // listing page before choosing one visible row per canonical session.
+        const timestamp = match[2].slice(0, 24), previous = latest.get(match[1]), reference = checkpointReference(object.key, object.versionId);
+        if (!previous || timestamp > previous.timestamp) latest.set(match[1], { timestamp, references: [reference] });
+        else if (timestamp === previous.timestamp && !previous.references.includes(reference)) previous.references.push(reference);
+      }
+      token = listing.continuationToken;
+      if (token && tokens.has(token)) throw Error('Storage repeated a conversation listing page. Retry refreshing.');
+      if (token) tokens.add(token);
+    } while (token);
+    const chats: SavedChat[] = [];
+    for (const [sessionId, item] of latest) {
+      const candidates: { checkpoint: ChatCheckpoint; reference: string }[] = [];
+      for (const reference of item.references) try {
+        candidates.push({ checkpoint: await this.read(sessionId, reference), reference });
+      } catch (error) { if (!(error instanceof OtherCheckpointProfile)) throw error; }
+      // Multiple saves can share a broker timestamp. Prefer a descendant and
+      // completed transcript rather than a random UUID ordering within that ms.
+      candidates.sort((a, b) => a.checkpoint.parent === b.reference ? -1 : b.checkpoint.parent === a.reference ? 1 :
+        b.checkpoint.created_at.localeCompare(a.checkpoint.created_at) || b.checkpoint.messages.length - a.checkpoint.messages.length || a.reference.localeCompare(b.reference));
+      const selected = candidates[0];
+      if (selected) {
+        const { checkpoint, reference } = selected;
+        // Legacy empty drafts and workspace-agent checkpoints are not conversations.
+        if (checkpoint.messages.length) chats.push({ sessionId, reference, label: checkpoint.title, updatedAt: checkpoint.created_at, messageCount: checkpoint.messages.length });
+      }
+    }
+    return { chats: chats.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.sessionId.localeCompare(b.sessionId)) };
   }
   async read(sessionId: string, reference: string): Promise<ChatCheckpoint> {
     z.string().uuid().parse(sessionId);
@@ -45,7 +75,9 @@ export class ChatStorage {
     if (object.key !== key || object.size > 4 * 1024 * 1024 || versionId && object.versionId !== versionId) throw Error('Invalid chat checkpoint receipt.');
     const bytes = Uint8Array.from(atob(object.base64), character => character.charCodeAt(0));
     if (bytes.length !== object.size || digest(bytes) !== hash) throw Error('Chat checkpoint integrity check failed.');
-    const checkpoint = chatSchema.parse(JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)));
+    const raw = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+    if (raw?.schema_version !== 2 || raw?.profile !== 'pi-web-chat-1') throw new OtherCheckpointProfile('Open workspace-agent checkpoints in the Agent screen.');
+    const checkpoint = chatSchema.parse(raw);
     if (checkpoint.session_id !== sessionId || checkpoint.storage !== chatStorageId(this.connection)) throw Error('This conversation belongs to another storage location.');
     return checkpoint;
   }

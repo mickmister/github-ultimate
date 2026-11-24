@@ -11,17 +11,21 @@ tab-memory-only adapter have been superseded. The production source is
    inference connection and S3 storage with reads/uploads enabled and overwrites
    disabled. Keep the same endpoint, bucket, prefix, region and addressing on each
    device; local connection UUIDs and credentials can differ.
-2. Grant both connections the Pi Web origin and exact preview subpath. A grant for
-   the sibling `app/` or old `pi/` entry does not cover `/pi-web/`.
+2. Grant both connections the Pi Web origin and a directory containing `/pi-web/`.
+   The preview's parent directory can cover both `app/` and `pi-web/`. A grant only
+   for the sibling `app/` or old `pi/` entry does not cover `/pi-web/`.
 3. Reload Pi Web. If exactly one connection of each kind is available, it is
    selected automatically. Otherwise use Connections and choose explicitly.
-4. Create **New conversation**, wait for **Saved to S3**, and send text. A settled
-   reply is saved automatically. The URL contains the exact conversation,
+4. Select **New conversation** and compose a draft. No conversation, URL identity
+   or S3 object is created until the first message is sent. That message is saved
+   before inference; the settled reply is saved automatically. The URL then contains the exact conversation,
    checkpoint/version reference and a fingerprint of the storage location.
 5. Reopen that URL to restore without resending. On another authorized device,
    use the same location and an inference connection with the saved model.
-   **Conversations** loads paginated saved checkpoint references; select the
-   continuation you want. **Refresh conversations** discovers other device saves.
+   **Conversations** shows one title/metadata row per canonical conversation UUID,
+   opening its most recently saved continuation. **Refresh conversations** discovers
+   other device saves; search filters conversation titles. Listing resolves all S3
+   pages before grouping, so a conversation never appears once per checkpoint.
 
 ## Mobile setup
 
@@ -55,7 +59,10 @@ automatically reissues the request; **Continue interrupted turn** is explicit.
 Each restored device continuation gets a separate branch identity and records
 its exact parent reference. There is no mutable latest pointer, cross-device lock,
 last-write-wins overwrite or automatic branch merge. Links pin checkpoints;
-refresh and choose a newer checkpoint to see another device's continuation.
+refresh and select the conversation to open its most recently saved continuation.
+Selecting that continuation does not merge or delete other branches. Empty drafts
+created by older builds and workspace-agent checkpoints are omitted from the chat
+sidebar. Immutable checkpoint objects remain internal history.
 
 The production entry does not patch global fetch/EventSource and ships no sample
 repository, fake provider account or canned conversation. It retains upstream rich

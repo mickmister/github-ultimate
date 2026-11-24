@@ -12,7 +12,7 @@ const bridge: PiBridge = (request, timeoutMs) => bridgeRequest(request, timeoutM
 window.piWebExtension = {
   connections: async () => ({ inference: await bridge<PublicInferenceConnection[]>({ operation: 'inferenceConnections' }), storage: await bridge<PublicS3Connection[]>({ operation: 's3Connections' }) }),
   storageId: chatStorageId,
-  list: (storage: PublicS3Connection, token?: string) => new ChatStorage(bridge, storage).list(token),
+  list: (storage: PublicS3Connection) => new ChatStorage(bridge, storage).list(),
   create: (inference: PublicInferenceConnection, storage: PublicS3Connection) => new BrowserChat(new ChatStorage(bridge, storage), inference, bridge),
   restore: async (inference: PublicInferenceConnection, storage: PublicS3Connection, sessionId: string, reference: string) => {
     const objects = new ChatStorage(bridge, storage);

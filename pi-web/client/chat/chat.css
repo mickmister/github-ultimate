@@ -14,6 +14,13 @@
 .chat-composer textarea { flex: 1; min-width: 0; resize: vertical; max-height: 30dvh; font-size: 16px; color: inherit; background: var(--bg-panel); padding: 12px; border: 1px solid var(--border); border-radius: 6px; }
 .chat-library { width: 280px; max-width: 40vw; min-height: 0; overflow-y: auto; border-right: 1px solid var(--border); padding: 12px; }
 .chat-library li { margin-top: 8px; overflow-wrap: anywhere; }
+.chat-library input { width: 100%; min-width: 0; min-height: 44px; margin: 8px 0; padding: 8px; color: inherit; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; }
+/* Adapted upstream SessionItem: compact title/metadata rows, selected accent. */
+.chat-library .chat-session-row { display: flex; flex-direction: column; justify-content: center; gap: 2px; width: 100%; min-height: 54px; padding: 7px 8px 7px 12px; text-align: left; border: 0; border-left: 2px solid transparent; border-radius: 0; background: transparent; overflow: hidden; }
+.chat-library .chat-session-row:hover { background: var(--bg-hover); }
+.chat-library .chat-session-row[aria-current="page"] { background: var(--bg-selected); border-left-color: var(--accent); }
+.chat-session-title { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
+.chat-session-meta { display: flex; flex-wrap: wrap; gap: 8px; color: var(--text-dim); font-size: 11px; }
 .chat-help { font-size: 12px; margin-top: 12px; }
 .chat-phone .chat-library { width: 100%; max-width: none; flex: 1; }
 .chat-phone .chat-conversation { padding: 8px; }
