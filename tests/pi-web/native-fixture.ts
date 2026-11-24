@@ -16,7 +16,7 @@ export function remoteFixture() {
       const body = await request.json(); requests.push(body);
       const saved = [...objects.values()].map(object => JSON.parse(object.text));
       if (!saved.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages.at(-1)?.content === body.messages.at(-1).content)) throw Error('Inference started before the user message was durable');
-      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: `Real Pi reply ${requests.length}: Café 🌴` } }] });
+      return Response.json({ choices: [{ finish_reason: 'stop', message: { content: `Real Pi reply ${requests.length}: Café 🌴`, reasoning_content: null, tool_calls: null } }] });
     }
     if (url.hostname !== 's3.us-west-004.backblazeb2.com' || !request.headers.get('Authorization')?.startsWith('AWS4-HMAC-SHA256 ')) throw Error('Unexpected unsigned request');
     const key = decodeURIComponent(url.pathname.slice('/chats/'.length));

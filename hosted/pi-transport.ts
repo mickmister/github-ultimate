@@ -35,7 +35,7 @@ export function completionBody(context: Context) {
 }
 const responseSchema = z.object({ choices: z.array(z.object({ finish_reason: z.enum(['stop', 'tool_calls', 'length']), message: z.object({
   content: z.string().nullable().optional(), refusal: z.string().nullable().optional(),
-  tool_calls: z.array(z.object({ id: z.string().min(1).max(200), type: z.literal('function'), function: z.object({ name: z.string().min(1).max(100), arguments: z.string().max(65536) }) })).max(16).optional(),
+  tool_calls: z.array(z.object({ id: z.string().min(1).max(200), type: z.literal('function'), function: z.object({ name: z.string().min(1).max(100), arguments: z.string().max(65536) }) })).max(16).nullish(),
 }) })).length(1), usage: z.object({ prompt_tokens: z.number().nonnegative(), completion_tokens: z.number().nonnegative(), total_tokens: z.number().nonnegative() }).optional() });
 
 /** Pi's stream contract over a single bounded JSON bridge reply. No tokens or endpoint in page memory. */
