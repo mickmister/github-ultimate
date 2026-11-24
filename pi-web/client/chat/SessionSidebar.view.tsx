@@ -14,7 +14,6 @@ export function SessionSidebar({ model: m, children }: { model: ChatModel; child
       <span className="chat-session-title" title={item.label}>{item.label}</span>
       <span className="chat-session-meta"><time dateTime={item.updatedAt}>{new Date(item.updatedAt).toLocaleString()}</time><span>{item.messageCount} messages</span></span>
     </button></li>)}</ul>
-    <p className="chat-help">Each conversation opens its most recently saved continuation. Shared links keep their exact history.</p>
     <div className="chat-sidebar-footer">{children}</div>
   </nav>;
 }
