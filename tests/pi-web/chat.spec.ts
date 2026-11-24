@@ -5,6 +5,7 @@ import { extname, resolve, sep } from 'node:path';
 import { nativeFixture, remoteFixture } from './native-fixture';
 import { previewFixture } from './preview-fixture';
 import { previewDirectory } from '../../src/preview-directory';
+import { beadsRuntime } from './beads-runtime';
 const root = resolve('hosted-dist/pi-web');
 let server: Server, origin: string, base: string;
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain' };
@@ -29,6 +30,126 @@ test.beforeAll(async () => {
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done)); origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
+
+test('workspace Beads initializes in the background without delaying ordinary Pi messages', async ({ page }) => {
+  const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  await beadsRuntime(page, true);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => (window as unknown as { beadsLoads: number }).beadsLoads)).toBe(1);
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Reply without Beads');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3'); expect(remote.requests).toHaveLength(1);
+    await page.getByRole('tab', { name: 'Beads', exact: true }).click();
+    await expect(page.getByRole('tabpanel', { name: 'Beads' })).toContainText('Loading Beads…');
+    await page.getByRole('tab', { name: 'Chat', exact: true }).click();
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 1');
+    await page.evaluate(() => (window as unknown as { releaseBeads(): void }).releaseBeads());
+  } finally { fixture.dispose(); }
+});
+
+test('first codemode Beads request waits for the shared load, then results are saved before the answer', async ({ page }) => {
+  const remote = remoteFixture(undefined, 'text(await tools.beads_query({operation:"show",id:"demo-1"}))'), fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  await beadsRuntime(page, true);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Look up demo-1'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible();
+    await page.getByRole('tab', { name: 'Beads', exact: true }).click(); await expect(page.getByRole('tabpanel', { name: 'Beads' })).toContainText('Loading Beads…');
+    expect(remote.requests).toHaveLength(1);
+    await page.evaluate(() => (window as unknown as { releaseBeads(): void }).releaseBeads());
+    await page.getByRole('tab', { name: 'Chat', exact: true }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    expect(remote.requests).toHaveLength(2); expect(JSON.stringify(remote.requests[1])).toContain('Detailed epic from the Beads tool');
+    expect(await page.evaluate(() => (window as unknown as { beadsLoads: number }).beadsLoads)).toBe(1);
+    await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); expect(remote.requests).toHaveLength(2);
+  } finally { fixture.dispose(); }
+});
+
+for (const destination of ['current', 'other', 'new']) test(`Beads context to ${destination} asks for message, preserves drafts and restores references`, async ({ page }) => {
+  const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  await beadsRuntime(page);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Existing target'); await page.getByRole('button', { name: 'Send', exact: true }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    const targetId = new URL(page.url()).searchParams.get('session')!;
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Source conversation'); await page.getByRole('button', { name: 'Send', exact: true }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('@review Keep my unsent draft');
+    await page.getByRole('tab', { name: 'Beads', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Select demo-1', exact: true }).check(); await page.getByRole('checkbox', { name: 'Select demo-2', exact: true }).check();
+    await page.locator('.pi-bead-title').filter({ hasText: 'Improve workspace navigation' }).click({ button: 'right' });
+    const actions = page.getByRole('dialog', { name: 'Beads actions', exact: true });
+    await actions.getByRole('button', { name: 'Attach as Context (2)', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Attach Beads as context', exact: true });
+    await expect(dialog.getByRole('combobox', { name: 'Conversation', exact: true })).toHaveValue('current');
+    await expect(dialog.getByRole('button', { name: 'Send message', exact: true })).toBeDisabled();
+    const objects = remote.objects.size; await dialog.getByRole('button', { name: 'Cancel', exact: true }).click(); expect(remote.objects.size).toBe(objects);
+    await page.getByRole('button', { name: 'Attach as Context (2)', exact: true }).click();
+    await dialog.getByRole('combobox', { name: 'Conversation', exact: true }).selectOption(destination === 'other' ? targetId : destination);
+    await dialog.getByRole('textbox', { name: 'Context message', exact: true }).fill('Compare the selected tasks');
+    await dialog.getByRole('button', { name: 'Send message', exact: true }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    const sent = JSON.stringify(remote.requests.at(-1)); expect(sent).toContain('demo-1'); expect(sent).toContain('Improve workspace navigation'); expect(sent).toContain('demo-2'); expect(sent).toContain('tools.beads_query'); expect(sent).not.toContain('Detailed mobile task');
+    if (destination !== 'current') { await page.getByRole('button', { name: /^Source conversation/ }).click(); }
+    await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('@review Keep my unsent draft');
+    await page.reload(); expect(remote.requests).toHaveLength(3);
+    if (destination === 'current') await expect(page.getByLabel('Attached Beads')).toContainText('demo-1');
+  } finally { fixture.dispose(); }
+});
+
+for (const size of [{ width: 390, height: 844 }, { width: 844, height: 390 }, { width: 768, height: 1024 }, { width: 1024, height: 768 }, { width: 1440, height: 900 }, { width: 900, height: 1440 }]) test(`${size.width}x${size.height}: Beads selection, touch actions, filters and Chat draft survive view changes`, async ({ page }) => {
+  const fixture = await nativeFixture(page, `${origin}${base}`, remoteFixture()); await beadsRuntime(page);
+  try {
+    await page.setViewportSize(size); await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('@custom-prompt draft'); await page.getByRole('tab', { name: 'Beads', exact: true }).click();
+    await page.getByRole('checkbox', { name: 'Select demo-1', exact: true }).check();
+    const card = page.locator('.pi-bead-card').filter({ has: page.getByRole('checkbox', { name: 'Select demo-1', exact: true }) });
+    await card.dispatchEvent('pointerdown', { pointerType: 'touch', clientX: 40, clientY: 50 });
+    await card.dispatchEvent('pointermove', { pointerType: 'touch', clientX: 40, clientY: 80 });
+    await page.waitForTimeout(600); // Exceed the actual long-press threshold after a scroll gesture.
+    await expect(page.getByRole('dialog', { name: 'Beads actions', exact: true })).toHaveCount(0);
+    await card.dispatchEvent('pointerdown', { pointerType: 'touch', clientX: 40, clientY: 50 });
+    await expect(page.getByRole('dialog', { name: 'Beads actions', exact: true })).toBeVisible(); await card.dispatchEvent('pointerup', { pointerType: 'touch' });
+    await page.getByRole('dialog', { name: 'Beads actions' }).getByRole('button', { name: 'Cancel', exact: true }).click();
+    await page.getByRole('button', { name: 'Filters', exact: true }).click(); await page.getByRole('combobox', { name: 'Issue type', exact: true }).selectOption('epic');
+    await expect(page.getByRole('checkbox', { name: 'Select demo-2', exact: true })).toHaveCount(0);
+    await page.getByRole('tab', { name: 'Chat', exact: true }).click(); await expect(page.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('@custom-prompt draft');
+    await page.getByRole('tab', { name: 'Beads', exact: true }).click(); await expect(page.getByRole('checkbox', { name: 'Select demo-1', exact: true })).toBeChecked();
+    await page.setViewportSize({ width: size.height, height: size.width });
+    await expect(page.getByRole('checkbox', { name: 'Select demo-1', exact: true })).toBeChecked();
+    await expect(page.getByRole('combobox', { name: 'Issue type', exact: true })).toHaveValue('epic');
+  } finally { fixture.dispose(); }
+});
+
+test('dedicated title/ID picker retains @ text and saves references before inference, including save retry', async ({ page }) => {
+  const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote); await beadsRuntime(page);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('@review this task');
+    await page.getByRole('button', { name: 'Attach Beads', exact: true }).click();
+    const picker = page.getByRole('dialog', { name: 'Attach Beads', exact: true });
+    await picker.getByRole('textbox', { name: 'Find Beads' }).fill('demo-2'); await expect(picker.getByRole('checkbox')).toHaveCount(1);
+    await picker.getByRole('checkbox').check(); await picker.getByRole('button', { name: 'Add to message (1)' }).click();
+    await expect(page.getByLabel('Beads in draft')).toContainText('Retain mobile draft');
+    remote.setFailSaves(true); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Retry session save' })).toBeVisible(); expect(remote.requests).toHaveLength(0);
+    remote.setFailSaves(false); await page.getByRole('button', { name: 'Retry session save' }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3'); expect(remote.requests).toHaveLength(0);
+    await page.getByRole('button', { name: 'Continue interrupted turn' }).click(); await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    expect(remote.requests).toHaveLength(1); const sent = JSON.stringify(remote.requests[0]); expect(sent).toContain('@review this task'); expect(sent).toContain('demo-2'); expect(sent).toContain('tools.beads_query'); expect(sent).not.toContain('Detailed mobile task');
+    await page.reload(); await expect(page.getByLabel('Attached Beads')).toContainText('demo-2'); expect(remote.requests).toHaveLength(1);
+  } finally { fixture.dispose(); }
+});
+
+test('named Beads filters restore and delete durably', async ({ page }) => {
+  const fixture = await nativeFixture(page, `${origin}${base}`, remoteFixture()); await beadsRuntime(page);
+  try {
+    await page.goto(fixture.url); await page.getByRole('tab', { name: 'Beads', exact: true }).click(); await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Issue type', exact: true }).selectOption('epic'); await page.getByRole('textbox', { name: 'Beads filter name' }).fill('Epics'); await page.getByRole('button', { name: 'Save filters', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Saved Beads filters' })).toHaveValue('Epics'); await expect(page.getByRole('group', { name: 'Beads filters' })).toHaveAttribute('aria-busy', 'false');
+    await page.reload(); await expect(page.getByRole('combobox', { name: 'Saved Beads filters' })).toHaveValue('Epics'); await page.getByRole('button', { name: 'Filters', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Issue type', exact: true })).toHaveValue('epic'); await page.getByRole('button', { name: 'Delete saved filter', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Beads filters' })).toHaveAttribute('aria-busy', 'false'); await page.reload(); await expect(page.getByRole('combobox', { name: 'Saved Beads filters' }).getByRole('option', { name: 'Epics', exact: true })).toHaveCount(0);
+  } finally { fixture.dispose(); }
+});
 
 test('SDK-shaped streamed tool calls render, execute, persist and restore', async ({ page }) => {
   let release!: () => void;
@@ -103,7 +224,7 @@ test(`${width}px: Alohak workspace tabs, discreet sidebar and modal settings ret
   try {
     await page.setViewportSize({ width, height: 900 }); await page.goto(fixture.url);
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
-    await expect(page.getByRole('tab')).toHaveCount(1); await expect(page.getByRole('tab', { name: 'Chat', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tab')).toHaveCount(2); await expect(page.getByRole('tab', { name: 'Chat', exact: true })).toHaveAttribute('aria-selected', 'true');
     const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Keep draft through settings');
     await expect(page.getByRole('combobox', { name: 'Inference connection' })).not.toBeVisible();
     await page.getByRole('button', { name: 'Settings', exact: true }).click();

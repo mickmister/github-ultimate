@@ -1,5 +1,5 @@
 import type { CodemodeResult } from '@earendil-works/pi-codemode/portable';
-import { workflowTools } from '../src/workflow-interface';
+import { piCapabilities as workflowTools } from '../src/pi-capabilities';
 declare const WORKFLOW_WORKER_URL: string;
 
 /** Workflow effects are durable external effects, never scratch transactions. */
@@ -12,7 +12,7 @@ export async function executeWorkflowCode(code: string, call: (name: string, inp
       let closed = false, calls = 0;
       const done = () => { closed = true; clearTimeout(timer); signal?.removeEventListener('abort', abort); worker.terminate(); };
       const abort = () => { done(); reject(Error('Workflow codemode cancelled. Any attempted launch may still be running; inspect its existing identity.')); };
-      const timer = setTimeout(abort, 90_000);
+      const timer = setTimeout(abort, 180_000);
       signal?.addEventListener('abort', abort, { once: true });
       worker.onerror = () => { done(); reject(Error('Workflow worker failed. Inspect attempted launches; do not replay.')); };
       worker.onmessage = async event => {

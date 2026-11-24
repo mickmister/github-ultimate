@@ -178,7 +178,7 @@ export class BrowserChat {
   private pauseReason?: string;
   private budget = new ChatBudget();
   private turnWorkspace?: ChatWorkspace;
-  constructor(private storage: ChatStorage, private inference: PublicInferenceConnection, bridge: PiBridge, restored?: { checkpoint: ChatCheckpoint; reference: string }, private initialWorkspace?: ChatWorkspace, private workflowBridge: PiBridge = bridge, private options: { limits?: Partial<ChatLimits>; workspace?: () => ChatWorkspace | undefined } = {}) {
+  constructor(private storage: ChatStorage, private inference: PublicInferenceConnection, bridge: PiBridge, restored?: { checkpoint: ChatCheckpoint; reference: string }, private initialWorkspace?: ChatWorkspace, private workflowBridge: PiBridge = bridge, private options: { limits?: Partial<ChatLimits>; workspace?: () => ChatWorkspace | undefined; beadsQuery?: import('./pi-workflow-tools').WorkflowToolContext['beadsQuery'] } = {}) {
     if (restored && restored.checkpoint.model !== inference.model) throw Error('Select an inference connection with the saved conversation’s model.');
     this.checkpoint = restored ? { ...restored.checkpoint, branch_id: crypto.randomUUID(), phase: restored.checkpoint.phase === 'pending' ? 'interrupted' : restored.checkpoint.phase } : {
       kind: 'browser-pi-checkpoint', schema_version: 2, profile: 'pi-web-chat-1', session_id: crypto.randomUUID(), branch_id: crypto.randomUUID(), parent: null, created_at: new Date().toISOString(), title: 'New conversation', model: inference.model, storage: chatStorageId(storage.connection), phase: 'idle', messages: [],
@@ -225,6 +225,7 @@ export class BrowserChat {
         await this.requiredSave();
       },
       capability: () => { this.guard(); this.enforce(() => this.budget.capability()); },
+      beadsQuery: this.options.beadsQuery,
     });
   }
   private pause(reason: string) { this.pauseReason ??= reason; this.agent.abort(); }

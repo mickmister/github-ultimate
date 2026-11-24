@@ -1,5 +1,5 @@
 import type { NextConfig } from "next";
-import { dirname } from "path";
+import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
 const configDir = dirname(fileURLToPath(import.meta.url));
@@ -13,8 +13,8 @@ const nextConfig: NextConfig = {
   productionBrowserSourceMaps: true,
   basePath,
   trailingSlash: true,
-  outputFileTracingRoot: configDir,
-  turbopack: { root: configDir },
+  outputFileTracingRoot: resolve(configDir, '../..'),
+  turbopack: { root: resolve(configDir, '../..') },
   images: { unoptimized: true },
   // Next writes AGENTS.md / CLAUDE.md into the project on `next dev` otherwise.
   agentRules: false,

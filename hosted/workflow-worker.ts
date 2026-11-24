@@ -1,6 +1,6 @@
 import { InlineCodemodeSandbox } from '@earendil-works/pi-codemode/portable';
 import wasmUrl from 'virtual:quickjs-url';
-import { workflowTools } from '../src/workflow-interface';
+import { piCapabilities as workflowTools } from '../src/pi-capabilities';
 import { z } from 'zod';
 
 let sequence = 0;
@@ -17,7 +17,7 @@ self.addEventListener('message', async (event: MessageEvent) => {
     const response = await fetch(wasmUrl);
     if (!response.ok || !response.body) throw Error('QuickJS WASM unavailable.');
     const wasm = await WebAssembly.compile(await new Response(response.body.pipeThrough(new DecompressionStream('gzip'))).arrayBuffer());
-    sandbox = new InlineCodemodeSandbox({ wasm, timeoutMs: 60_000, interruptBudget: 20_000, memoryLimitBytes: 32 * 1024 * 1024,
+    sandbox = new InlineCodemodeSandbox({ wasm, timeoutMs: 180_000, interruptBudget: 20_000, memoryLimitBytes: 32 * 1024 * 1024,
       tools: workflowTools.map(({ name, description, schema }) => ({ name, description, inputSchema: z.toJSONSchema(schema), execute: args => {
         const input = schema.parse(args);
         return new Promise((resolve, reject) => { const id = ++sequence; pending.set(id, { resolve, reject }); self.postMessage({ kind: 'call', id, name, input }); });

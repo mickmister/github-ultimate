@@ -6,10 +6,13 @@ import type { ChatModel } from '../chat/Chat.hooks';
 import { useTheme } from '../hooks/useTheme';
 import { usePreviewSlots } from '../chat/PreviewSlots.hooks';
 import { conversation, tools } from './sdk-messages';
+import { useBeads } from '../chat/Beads.hooks';
+import { fixtureWorkspace, storyBeadsHost } from './beads-fixture';
 
-type Mode = 'conversation' | 'draft' | 'tools' | 'interrupted' | 'save-error';
+type Mode = 'conversation' | 'draft' | 'tools' | 'interrupted' | 'save-error' | 'beads';
 function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode; device?: 'phone' | 'tablet' | 'desktop' }) {
   const settings = useSettings(device);
+  const beads = useBeads(fixtureWorkspace, storyBeadsHost), [panel, choosePanel] = useState<'chat' | 'beads'>(mode === 'beads' ? 'beads' : 'chat');
   const theme = useTheme(), [draft, setDraft] = useState(''), [search, setSearch] = useState(''), [showList, setShowList] = useState(device !== 'phone');
   const previews = usePreviewSlots(async () => ({ workspace: 'storybook-workspace', slots: [{ id: 'repo:storybook', title: 'Storybook', service: 'storybook', repository: 'example/repo', url: 'https://preview.example/storybook/' }] }));
   const [draftMode, setDraftMode] = useState(mode === 'draft'), [dirty, setDirty] = useState(mode === 'save-error');
@@ -18,6 +21,8 @@ function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode;
   const storage = { id: 'storage', revision: '1', name: 'Private conversations', endpoint: 'https://storage.example/', bucket: 'conversations', prefix: 'private/', region: 'us-east-1', addressing: 'path' as const, allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [] };
   const chats = [{ sessionId: 'conversation', reference: 'checkpoint', label: 'Browser conversation architecture', updatedAt: '2026-11-24T10:00:00Z', messageCount: 2 }];
   const model: ChatModel = {
+    beads, panel, choosePanel, attachment: undefined, attach: () => {}, sendAttachment: async () => {}, destinationSearch: '', setDestinationSearch: () => {}, closeAttachment: () => {}, changeAttachment: () => {},
+    draftBeads: [], removeDraftBead: () => {}, pickerOpen: false, pickerSearch: '', setPickerSearch: () => {}, openPicker: () => {}, closePicker: () => {}, addPickedBeads: () => {}, workspaceChats: [],
     ...settings, openAlohak: () => {},
     theme, previews, route: { kind: 'workspace', workspace: { repository: 'example/storage', workspace: 'storybook-workspace' } }, movedConversation: undefined, followConversation: async () => {}, workspace: { repository: 'example/storage', workspace: 'storybook-workspace' }, workspaces: [], canCreate: true, chooseWorkspace: () => {}, moveWorkspace: async () => {}, presentation: device, inference: [inference], storage: [storage], inferenceId: inference.id, storageId: storage.id, selectedInference: inference, selectedStorage: storage,
     snapshot: { title: 'Browser conversation architecture', sessionId: draftMode ? undefined : 'conversation', reference: draftMode ? undefined : 'checkpoint', messages, busy: false, dirty, phase: mode === 'interrupted' ? 'interrupted' : 'idle' },
@@ -43,3 +48,5 @@ export const Interrupted: Story = { args: { mode: 'interrupted' } };
 export const SaveError: Story = { args: { mode: 'save-error' } };
 export const Phone: Story = { args: { device: 'phone' } };
 export const Tablet: Story = { args: { device: 'tablet' } };
+export const Beads: Story = { args: { mode: 'beads' } };
+export const PhoneBeads: Story = { args: { mode: 'beads', device: 'phone' } };

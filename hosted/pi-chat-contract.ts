@@ -16,6 +16,8 @@ export interface ChatHandle {
 }
 export interface PiWebRuntime {
   protocolVersion: 2;
+  beads(workspace?: ChatWorkspace, connectionId?: string): import('./pi-beads').PiBeadsHandle | undefined;
+  preferences(): Promise<import('../src/page-storage').HydratedPageStorage>;
   connections(): Promise<{ inference: PublicInferenceConnection[]; storage: PublicS3Connection[] }>;
   storageId(storage: PublicS3Connection): string;
   list(storage: PublicS3Connection): Promise<{ chats: SavedChat[] }>;
