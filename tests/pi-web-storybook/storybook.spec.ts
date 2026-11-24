@@ -66,7 +66,9 @@ test('retained thinking/tool cards expand results, sidebar toggles and composer 
   await expect(page.getByText('export function newConversation()', { exact: false })).toBeVisible();
   await page.getByRole('button', { name: /^bash / }).click();
   await expect(page.getByText('Test failed: expected no saved conversation before first send.')).toBeVisible();
+  await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('button', { name: 'Toggle light and dark theme' }).click();
+  await page.getByRole('button', { name: 'Close settings', exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark');
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto(`${origin}/iframe.html?id=pi-web-chat--phone&viewMode=story`);

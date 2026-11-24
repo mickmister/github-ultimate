@@ -31,6 +31,35 @@ test.beforeAll(async () => {
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
 
 for (const width of [390, 1440]) {
+test(`${width}px: Alohak workspace tabs, discreet sidebar and modal settings retain the draft`, async ({ page }) => {
+  const fixture = await nativeFixture(page, `${origin}${base}`, remoteFixture());
+  try {
+    await page.setViewportSize({ width, height: 900 }); await page.goto(fixture.url);
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.getByRole('tab')).toHaveCount(1); await expect(page.getByRole('tab', { name: 'Chat', exact: true })).toHaveAttribute('aria-selected', 'true');
+    const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Keep draft through settings');
+    await expect(page.getByRole('combobox', { name: 'Inference connection' })).not.toBeVisible();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    const dialog = page.getByRole('dialog', { name: 'Settings', exact: true }); await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('combobox', { name: 'Inference connection' })).toBeVisible();
+    await page.setViewportSize({ width: 900, height: width }); await expect(dialog).toBeVisible();
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click(); await expect(input).toHaveValue('Keep draft through settings');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click(); await page.keyboard.press('Escape'); await expect(dialog).not.toBeVisible();
+    await expect(page.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
+    await page.setViewportSize({ width, height: 900 });
+    if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
+    const sidebar = page.getByRole('navigation', { name: 'Saved conversations', exact: true });
+    await expect(sidebar.locator('.chat-sidebar-workspace')).toContainText('selected-workspace');
+    await expect(sidebar.getByRole('combobox')).toHaveCount(0);
+    for (const name of ['Refresh conversations', 'New conversation', 'Change workspace', 'Settings']) {
+      await expect(sidebar.getByRole('button', { name, exact: true })).toHaveText('');
+    }
+    await expect(sidebar.getByRole('searchbox', { name: 'Search conversations' })).toHaveAttribute('placeholder', 'Search…');
+    const home = new URL('../app/', fixture.url).href;
+    await page.route(home, route => route.fulfill({ contentType: 'text/html', body: '<h1>Workspace home</h1>' }));
+    await sidebar.getByRole('button', { name: 'Alohak', exact: true }).click(); await expect(page).toHaveURL(home);
+  } finally { fixture.dispose(); }
+});
 test(`${width}px: workspace URL is authoritative for chooser, history, shared links and mismatched conversations`, async ({ page }) => {
   const source = `${origin}${base}`, remote = remoteFixture(), fixture = await nativeFixture(page, source, remote);
   try {
@@ -74,7 +103,7 @@ test('another device moving a conversation cannot silently switch the current UR
       await left.goto(a.url); await left.getByRole('button', { name: 'New conversation', exact: true }).click();
       await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Moved on another device'); await left.getByRole('button', { name: 'Send', exact: true }).click();
       await expect(left.getByRole('status')).toHaveText('Saved to S3'); await right.goto(left.url());
-      await expect(right.getByRole('log')).toContainText('Moved on another device'); await right.locator('.chat-connections > summary').click();
+      await expect(right.getByRole('log')).toContainText('Moved on another device'); await right.getByRole('button', { name: 'Settings', exact: true }).click();
       await right.getByRole('combobox', { name: 'Move conversation to workspace', exact: true }).selectOption(JSON.stringify(['owner/storage', 'other-workspace']));
       await expect(right).toHaveURL(/workspace=other-workspace/); await expect(right.getByRole('status')).toHaveText('Saved to S3');
       await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Retain my unsent draft');
@@ -124,24 +153,27 @@ for (const width of [390, 1440]) {
       const pinned = new URL(page.url()); pinned.searchParams.set('view', 'checkpoint');
       await page.reload(); await expect(page.getByRole('log')).toContainText('Scoped conversation'); expect(remote.requests).toHaveLength(1);
       if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
-      const picker = page.getByRole('combobox', { name: 'Conversation workspace', exact: true }), key = JSON.stringify([previews.navigation.repository, previews.workspace]);
-      await expect(picker).toHaveValue(key);
+      const key = JSON.stringify([previews.navigation.repository, previews.workspace]);
+      await expect(page.locator('.chat-sidebar-workspace')).toContainText(previews.workspace);
       await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(1);
       await fixture.seedLegacy('Unassigned conversation');
-      await picker.selectOption('inbox'); await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Change workspace', exact: true }).click();
+      await page.getByRole('button', { name: 'Unassigned migration inbox', exact: true }).click(); await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(0);
       await page.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
       await page.getByRole('button', { name: /Unassigned conversation.*messages/ }).click();
       await expect(page.getByRole('status')).toHaveText('Saved to S3');
       await expect(input).toBeDisabled(); await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeDisabled();
-      const settings = page.locator('.chat-connections'); await settings.locator('summary').click();
+      await page.getByRole('button', { name: 'Settings', exact: true }).click();
       await page.getByRole('combobox', { name: 'Move conversation to workspace', exact: true }).selectOption(key);
+      await page.getByRole('button', { name: 'Close settings', exact: true }).click();
       await expect(page.getByRole('status')).toHaveText('Saved to S3');
       if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
-      await expect(picker).toHaveValue(key); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(2);
+      await expect(page.locator('.chat-sidebar-workspace')).toContainText(previews.workspace); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(2);
       if (width < 600) await page.getByRole('button', { name: 'Hide conversations', exact: true }).click();
       await input.fill('Keep this unsent draft when changing workspace');
       if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
-      await picker.selectOption('inbox'); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Change workspace', exact: true }).click();
+      await page.getByRole('button', { name: 'Unassigned migration inbox', exact: true }).click(); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(0);
       if (width < 600) await page.getByRole('button', { name: 'Hide conversations', exact: true }).click();
       await expect(input).toHaveValue('Keep this unsent draft when changing workspace');
       await page.goto(pinned.href); await expect(page.getByRole('log')).toContainText('Scoped conversation'); await expect(page.getByRole('log')).not.toContainText('Unassigned conversation');

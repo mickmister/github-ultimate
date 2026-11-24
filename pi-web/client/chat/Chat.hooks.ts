@@ -6,6 +6,8 @@ import type { PublicS3Connection } from '../../../src/s3-protocol';
 import { copyText } from '@/lib/clipboard';
 import { useTheme } from '@/hooks/useTheme';
 import { usePreviewSlots } from './PreviewSlots.hooks';
+import { brandDestination } from './brand-navigation';
+import { useSettings } from './Settings.hooks';
 import { chatRoute, inChatScope, routeURL, workspaceKey, type ChatRoute } from './chat-route';
 export { workspaceKey } from './chat-route';
 
@@ -25,7 +27,7 @@ function runtime() {
     document.head.append(script);
   });
 }
-const empty: ChatSnapshot = { title: 'Pi Web', messages: [], busy: false, dirty: false, phase: 'idle' };
+const empty: ChatSnapshot = { title: 'Alohak', messages: [], busy: false, dirty: false, phase: 'idle' };
 const emptySnapshot = () => empty;
 const emptySubscribe = () => () => {};
 function clearConversationURL(url: URL) { for (const key of ['session', 'checkpoint', 'storage', 'view']) url.searchParams.delete(key); return url; }
@@ -33,6 +35,7 @@ const deviceSnapshot = () => innerWidth < 600 ? 'phone' : innerWidth < 1100 ? 't
 function subscribeDevice(listener: () => void) { window.addEventListener('resize', listener); return () => window.removeEventListener('resize', listener); }
 
 export function useChat() {
+  function openAlohak() { location.assign(brandDestination(location.href, navigator.userAgent, navigator.maxTouchPoints, 'alohakNative' in window && Boolean(window.alohakNative))); }
   const theme = useTheme();
   const previews = usePreviewSlots(async () => {
     const api = await runtime();
@@ -43,6 +46,7 @@ export function useChat() {
   const active = useRef<ChatHandle | undefined>(undefined); active.current = chat;
   const snapshot = useSyncExternalStore(chat?.subscribe ?? emptySubscribe, chat?.snapshot ?? emptySnapshot, emptySnapshot);
   const presentation = useSyncExternalStore(subscribeDevice, deviceSnapshot, () => 'desktop');
+  const { settingsDialog, openSettings, closeSettings } = useSettings(presentation);
   const [inference, setInference] = useState<PublicInferenceConnection[]>([]), [storage, setStorage] = useState<PublicS3Connection[]>([]);
   const [inferenceId, setInferenceId] = useState(''), [storageId, setStorageId] = useState('');
   const [chats, setChats] = useState<SavedChat[]>([]), [search, setSearch] = useState('');
@@ -245,6 +249,6 @@ export function useChat() {
     const url = workspaceURL(movedConversation.workspace); url.searchParams.set('session', movedConversation.sessionId); url.searchParams.set('checkpoint', movedConversation.reference); writeURL(url); await connect();
   }
   return { theme, previews: scopedPreviews, route, movedConversation, followConversation, workspace, workspaces, canCreate, chooseWorkspace, moveWorkspace, snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: [...canonical.values()].filter(item => inChatScope(route, item.workspace) && item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
-    setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) setChats((await (await runtime()).list(selectedStorage)).chats); }) };
+    settingsDialog, openSettings, closeSettings, openAlohak, setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) setChats((await (await runtime()).list(selectedStorage)).chats); }) };
 }
 export type ChatModel = ReturnType<typeof useChat>;
