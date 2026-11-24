@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import { Connections, type ConnectionRecord, type ConnectionStore } from '../src/connections';
 import { developmentHost, workflowReportSchema, workflowRunName } from '../src/workflow-interface';
+import { MobileGitHub } from '../src/mobile-github';
 
 function fixture(lost = false) {
   const id = crypto.randomUUID(), userId = 6913320, installationId = 7, engineCommit = 'a'.repeat(40);
@@ -73,4 +74,16 @@ test('result acceptance requires exact candidate approvals and passing required 
   const candidate = 'b'.repeat(40), report = { schemaVersion: 1, workspace: 'workspace', thread: 'conversation', process: 'request-1', executionId: '42-1', status: 'accepted', currentStep: 'candidate-accepted', nextStep: 'human-review-candidate', cycle: 1, candidate, testsPassed: true, evaluations: ['reviewer-1', 'reviewer-2', 'tester'].map(role => ({ role, candidate, approval: 'approve' })) };
   expect(workflowReportSchema.parse(report).status).toBe('accepted');
   for (const patch of [{ testsPassed: false }, { evaluations: report.evaluations.slice(0, 2) }, { evaluations: [report.evaluations[0], report.evaluations[0], report.evaluations[2]] }, { evaluations: report.evaluations.map(e => ({ ...e, candidate: 'c'.repeat(40) })) }]) expect(() => workflowReportSchema.parse({ ...report, ...patch })).toThrow();
+});
+
+test('native GitHub bridge forwards the same workflow interface and retains host authority checks', async () => {
+  const f = fixture(), native = new MobileGitHub(f.broker, () => true);
+  expect(await native.hosted(f.page, { operation: 'discover' }, () => true)).toMatchObject({ capabilities: expect.arrayContaining(['workflowCatalog', 'workflowStart', 'workflowStatus']) });
+  const receipt: any = await native.hosted(f.page, f.request, () => true);
+  expect(await native.hosted(f.page, { operation: 'workflowCatalog', workspace: 'workspace' }, () => true)).toMatchObject({ connections: [{ executions: [receipt] }] });
+  f.runs.push(f.run());
+  expect(await native.hosted(f.page, { operation: 'workflowStatus', ...f.scope, executionReference: receipt.executionReference }, () => true)).toMatchObject({ runId: 42 });
+  await expect(native.hosted(f.page, f.request, () => false)).rejects.toThrow('changed');
+  await expect(new MobileGitHub(f.broker, () => false).hosted(f.page, f.request, () => true)).rejects.toThrow('disabled');
+  expect(f.writes()).toBe(1);
 });

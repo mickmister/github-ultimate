@@ -27,6 +27,7 @@ export const workflowHostedSchemas = [
   workflowStartSchema.extend({ operation: z.literal('workflowStart') }).strict(),
   workflowStatusSchema.extend({ operation: z.literal('workflowStatus') }).strict(),
 ] as const;
+export const workflowOperations = workflowHostedSchemas.map(schema => schema.shape.operation.value);
 export const developmentHost = { repository: 'mickmister/gh-agentic-workflows', workflow: 'development-process.yml', ref: 'vk/46e5-vd-multi-instanc' } as const;
 export const workflowReportSchema = z.object({
   schemaVersion: z.literal(1), workspace: z.string(), thread: z.string(), process: z.string(), executionId: z.string().regex(/^\d+-\d+$/),
