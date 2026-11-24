@@ -1,0 +1,8 @@
+import { defineConfig } from '@playwright/test';
+
+export default defineConfig({
+  testDir: './tests/browser', testMatch: 'tsrs-codemode.spec.ts',
+  outputDir: './test-results/tsrs-codemode', workers: 1, timeout: 60_000,
+  use: { trace: 'off', screenshot: 'off', video: 'off' }, reporter: 'list',
+  projects: [{ name: 'chromium', use: { browserName: 'chromium' } }, { name: 'webkit', use: { browserName: 'webkit' } }],
+});

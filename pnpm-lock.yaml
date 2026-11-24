@@ -242,6 +242,9 @@ importers:
       '@storybook/html-vite':
         specifier: ^10.6.6
         version: 10.6.6(storybook@10.6.6(@types/react@19.3.0)(prettier@3.9.10)(react@19.3.1))(vite@7.3.7(@types/node@22.20.5)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.51.2)(yaml@2.9.1))
+      '@tsrs/wasm':
+        specifier: 7.1.0-beta.tsrs5
+        version: 7.1.0-beta.tsrs5
       '@types/chrome':
         specifier: ^0.1.24
         version: 0.1.43
@@ -2704,6 +2707,11 @@ packages:
 
   '@tsconfig/node16@1.0.4':
     resolution: {integrity: sha512-vxhUy4J8lyeyinH7Azl1pdd43GJhZH/tP2weN8TntQblOY+A0XbT8DJk1/oCPuOOyg/Ja757rG0CgHcWC8OfMA==}
+
+  '@tsrs/wasm@7.1.0-beta.tsrs5':
+    resolution: {integrity: sha512-S8Y952vnSTL3cGClcEreuzshWGZAXnPd0MGU1eaS+A/baGCOg0bXAUHfwsCMyfIkH3wkuD6mlL7x0bv7a5T0iw==}
+    engines: {node: '>=22'}
+    hasBin: true
 
   '@tybys/wasm-util@0.10.4':
     resolution: {integrity: sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A==}
@@ -9444,6 +9452,8 @@ snapshots:
   '@tsconfig/node14@1.0.3': {}
 
   '@tsconfig/node16@1.0.4': {}
+
+  '@tsrs/wasm@7.1.0-beta.tsrs5': {}
 
   '@tybys/wasm-util@0.10.4':
     dependencies:
