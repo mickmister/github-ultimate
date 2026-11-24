@@ -13,9 +13,9 @@ const notoSansMono = Noto_Sans_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Pi Web",
+  title: "Alohak",
   description: "Durable browser Pi conversations with private S3 storage",
-  applicationName: "Pi Web",
+  applicationName: "Alohak",
   icons: {
     icon: [
       {
@@ -35,7 +35,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
-    title: "Pi Web",
+    title: "Alohak",
   },
   formatDetection: {
     telephone: false,

@@ -1,4 +1,4 @@
-# Pi Web: durable browser conversations
+# Alohak: durable browser conversations
 
 The `/pi-web/` branch preview now runs a real text-only Pi 1.5.2 agent and stores
 its conversations in the selected private S3 location. The old static demo and
@@ -15,7 +15,7 @@ tab-memory-only adapter have been superseded. The production source is
    The preview's parent directory can cover both `app/` and `pi-web/`. A grant only
    for the sibling `app/` or old `pi/` entry does not cover `/pi-web/`.
 3. Reload Pi Web. If exactly one connection of each kind is available, it is
-   selected automatically. Otherwise use Connections and choose explicitly.
+   selected automatically. Otherwise open the gear **Settings → Connections** and choose explicitly.
 4. Choose a nugs workspace, then select **New conversation** and compose a draft. No conversation, URL identity
    or S3 object is created until the first message is sent. That message is saved
    before inference; the settled reply is saved automatically. The URL then contains the exact conversation,
@@ -41,7 +41,8 @@ tab-memory-only adapter have been superseded. The production source is
 ## Workspace browsing and preview links
 
 Open Pi Web's workspace chooser, or choose a nugs workspace in Documents and follow its **Pi Web** link. The GitHub
-connection must also authorize the Pi Web directory. **Conversation workspace**
+connection must also authorize the Pi Web directory. The sidebar displays the
+selected workspace name; its switching icon opens the workspace chooser, which
 selects the page scope by the storage repository and nugs workspace namespace.
 The URL's `repository` and `workspace` parameters are authoritative for conversations
 and previews. A bare URL shows the chooser rather than unscoped chat content.
@@ -49,7 +50,7 @@ and previews. A bare URL shows the chooser rather than unscoped chat content.
 metadata; it permits reading/moving them, but no new conversations or inference.
 **New conversation** inherits the selected workspace and still writes
 nothing until the first send. Changing workspace preserves an unsent composer draft.
-Under **Connections**, **Move conversation** assigns a saved conversation to an
+Under **Settings → Connections**, **Move conversation** assigns a saved conversation to an
 existing authorized workspace or back to Unassigned.
 
 **Change workspace** and the preview menu's **Choose workspace** open the in-page
@@ -63,6 +64,14 @@ a unique authorized connection for the explicit storage repository. Ambiguous or
 missing authorization requires choosing the connection in Documents and never
 changes the URL's workspace. Preview data from another scope stays hidden while
 navigation/configuration loads; superseded preview requests cannot replace it.
+
+The workspace navigation has a single **Chat** tab. The sidebar prioritizes the
+conversation list and workspace name, with a subtle title-search field and icon
+buttons for refresh and a new conversation (pencil/draft). Connection selections
+and appearance live in the gear **Settings** modal; it remains open across device
+layout changes without losing the draft. **Alohak** branding opens the exact route
+in the native app from mobile browsers, using the existing navigation-only custom
+scheme. On desktop or inside Alohak it opens the current deployment's `app/` home.
 
 Association is a separate immutable, readback-verified `pi-web-catalog-1` record
 under a deterministic metadata UUID in the same S3 checkpoint namespace. Moves do
