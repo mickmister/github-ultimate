@@ -4,17 +4,19 @@ import { tmpdir } from 'node:os';
 import { resolve, extname } from 'node:path';
 import { createServer } from 'node:http';
 import { remoteFixture } from './native-fixture';
+import { previewFixture } from './preview-fixture';
 
 test('packaged extension saves and restores real Pi chats through signed versioned S3', async ({ browserName }) => {
   test.skip(browserName !== 'chromium', 'Chromium loads the packaged extension; WebKit verifies the native wire adapter.');
   test.setTimeout(120000);
   const profile = await mkdtemp(resolve(tmpdir(), 'pi-web-extension-')), remote = remoteFixture();
   let context: BrowserContext | undefined;
+  let previews: ReturnType<typeof previewFixture>;
   const proxy = createServer(async (incoming, outgoing) => {
     try {
       let text = ''; for await (const chunk of incoming) text += chunk;
       const input = JSON.parse(text);
-      const response = await remote.fetcher(input.url, { method: input.method, headers: input.headers, ...(input.body ? { body: Buffer.from(input.body, 'base64') } : {}) });
+      const response = await (new URL(input.url).hostname === 'api.github.com' ? previews.fetcher : remote.fetcher)(input.url, { method: input.method, headers: input.headers, ...(input.body ? { body: Buffer.from(input.body, 'base64') } : {}) });
       outgoing.setHeader('Content-Type', 'application/json');
       outgoing.end(JSON.stringify({ status: response.status, headers: [...response.headers], body: Buffer.from(await response.arrayBuffer()).toString('base64') }));
     } catch { outgoing.writeHead(500).end(); }
@@ -39,6 +41,12 @@ test('packaged extension saves and restores real Pi chats through signed version
       };
     }, endpoint);
     const root = resolve('hosted-dist/pi-web'), base = JSON.parse(await readFile(resolve(root, 'build.json'), 'utf8')).basePath;
+    previews = previewFixture(`https://agent.example${base}`);
+    await worker.evaluate(async record => {
+      const database = await new Promise<IDBDatabase>((resolve, reject) => { const request = indexedDB.open('github-ultimate-credentials', 4); request.onsuccess = () => resolve(request.result); request.onerror = () => reject(request.error); });
+      await new Promise<void>((resolve, reject) => { const transaction = database.transaction('connections', 'readwrite'); transaction.objectStore('connections').put(record); transaction.oncomplete = () => resolve(); transaction.onerror = () => reject(transaction.error); });
+      database.close();
+    }, previews.record);
     await context.route('https://agent.example/**', async route => {
       const path = new URL(route.request().url()).pathname;
       if (!path.startsWith(base)) return route.fulfill({ status: 404 });
@@ -58,7 +66,7 @@ test('packaged extension saves and restores real Pi chats through signed version
     await settings.getByLabel('S3 access key ID').fill('private-key'); await settings.getByLabel('S3 secret access key').fill('private-s3-secret'); await settings.getByRole('button', { name: 'Save S3 connection', exact: true }).click();
     const storage = settings.getByRole('article', { name: 'Shared chats', exact: true });
     await storage.getByLabel('S3 hosted origin').fill('https://agent.example'); await storage.getByLabel('S3 hosted subpath').fill(base); await storage.getByRole('button', { name: 'Grant hosted S3 access' }).click();
-    const page = await context.newPage(); await page.goto(`https://agent.example${base}`);
+    const page = await context.newPage(); await page.goto(`https://agent.example${base}?${new URLSearchParams({ repository: previews.navigation.repository, workspace: previews.workspace })}`);
     await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeEnabled(); await page.getByRole('button', { name: 'New conversation', exact: true }).click(); await expect(page.getByRole('status')).toContainText('Draft'); expect(remote.objects.size).toBe(0);
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Hello through extension'); await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('log')).toContainText('Real Pi reply 1'); await expect(page.getByRole('status')).toHaveText('Saved to S3');

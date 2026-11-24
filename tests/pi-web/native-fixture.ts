@@ -5,6 +5,9 @@ import { S3Connections, type S3ConnectionRecord } from '../../src/s3-connections
 import { InferenceConnections, type InferenceRecord } from '../../src/inference-connections';
 import { mobileS3Sign } from '../../src/mobile-s3-sign';
 import type { MobileGitHub } from '../../src/mobile-github';
+import { previewFixture } from './preview-fixture';
+import { BrowserChat, ChatStorage } from '../../hosted/pi-chat';
+import type { PiBridge } from '../../hosted/pi-transport';
 
 export function remoteFixture(streamPause?: () => Promise<void>) {
   const objects = new Map<string, { text: string; version: string }>();
@@ -46,12 +49,14 @@ export function remoteFixture(streamPause?: () => Promise<void>) {
   return { objects, requests, fetcher, setFailSaves(value: boolean) { failSaves = value; } };
 }
 export async function nativeFixture(page: Page, source: string, remote: ReturnType<typeof remoteFixture>, github?: MobileGitHub) {
+  const previews = previewFixture(source);
+  const url = new URL(source); url.searchParams.set('repository', previews.navigation.repository); url.searchParams.set('workspace', previews.workspace);
   const origin = new URL(source).origin, subpath = new URL(source).pathname;
   const storage: S3ConnectionRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Shared chats', endpoint: 'https://s3.us-west-004.backblazeb2.com/', bucket: 'chats', prefix: 'workspace/', region: 'us-west-004', addressing: 'path', accessKeyId: 'private-key', secretAccessKey: 'private-s3-secret', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [{ origin, subpath }] };
   const inference: InferenceRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Pi model', model: 'fixture-model', url: 'https://inference.example/chat', headers: [{ name: 'Authorization', value: 'Bearer private-fixture-secret' }], hostedGrants: [{ origin, subpath }] };
   const store = <T extends { id: string }>(record: T) => ({ async all() { return [record]; }, async get(id: string) { return id === record.id ? record : undefined; }, async put() {}, async remove() {} });
   const pi = new MobilePi(new S3Connections(store(storage), remote.fetcher, undefined, undefined, undefined, mobileS3Sign), new InferenceConnections(store(inference), remote.fetcher));
-  const broker = new MobileFixtureBroker(undefined, github, undefined, pi);
+  const broker = new MobileFixtureBroker(undefined, github ?? previews.host, undefined, pi);
   const document = { documentId: crypto.randomUUID(), documentURL: source, isMainFrame: true };
   broker.activate(document);
   await page.exposeFunction('fixtureNativeRequest', async (raw: string) => JSON.stringify(await broker.handleAsync(document, raw)));
@@ -60,5 +65,6 @@ export async function nativeFixture(page: Page, source: string, remote: ReturnTy
       void (window as unknown as { fixtureNativeRequest(raw: string): Promise<string> }).fixtureNativeRequest(raw).then(detail => window.dispatchEvent(new CustomEvent('alohak-native-message', { detail })));
     } } });
   }, { documentId: document.documentId });
-  return { storage, inference, dispose: () => broker.invalidate() };
+  const bridge: PiBridge = (request) => pi.hosted(source, request, () => true) as never;
+  return { storage, inference, url: url.href, previews, async seedLegacy(text: string) { const chat = new BrowserChat(new ChatStorage(bridge, storage), inference, bridge); await chat.send(text); return chat; }, dispose: () => broker.invalidate() };
 }

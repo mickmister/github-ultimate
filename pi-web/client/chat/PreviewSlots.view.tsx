@@ -1,6 +1,6 @@
 import type { PreviewSlotsModel } from './PreviewSlots.hooks';
 
-export function PreviewSlots({ model: m }: { model: PreviewSlotsModel }) {
+export function PreviewSlots({ model: m, chooseWorkspace }: { model: PreviewSlotsModel; chooseWorkspace?(): void }) {
   return <details className="chat-previews" open={m.open} onToggle={event => m.toggle(event.currentTarget.open)}>
     <summary aria-label="Preview slots">Previews ↗</summary>
     <div className="chat-preview-menu" aria-label="Workspace previews">
@@ -11,7 +11,7 @@ export function PreviewSlots({ model: m }: { model: PreviewSlotsModel }) {
       <ul>{m.catalog?.slots.map(slot => <li key={slot.id}>{slot.url
         ? <a href={slot.url} target="_blank" rel="noopener noreferrer" title={`${slot.repository} · ${slot.service}`}>{slot.title}<small>{slot.repository}</small></a>
         : <span title={slot.error}>{slot.title}<small>{slot.error}</small></span>}</li>)}</ul>
-      <div className="chat-preview-actions"><a href="../app/#/documents" target="_blank" rel="noopener noreferrer">Choose workspace</a><button type="button" disabled={m.busy} onClick={() => void m.refresh()}>Refresh previews</button></div>
+      <div className="chat-preview-actions"><button type="button" disabled={m.busy} onClick={chooseWorkspace}>Choose workspace</button><button type="button" disabled={m.busy} onClick={() => void m.refresh()}>Refresh previews</button></div>
     </div>
   </details>;
 }

@@ -30,6 +30,7 @@ function fixture() {
   const send: PiBridge = async <T>(request: Parameters<PiBridge>[0]) => {
     calls.push(request);
     if (request.operation === 'connections') return [{ id: connectionId, appId: 1, name: 'Storage', installation: { id: 123, account: 'owner' } }] as T;
+    if (request.operation === 'repositories') return [{ full_name: 'owner/storage' }] as T;
     if (request.operation === 'loadNavigation') return navigation as T;
     if (request.operation === 'saveNavigation') return null as T;
     if (request.operation === 'gitRefs') return (request.prefix === 'documents/' ? [{ ref: `refs/documents/${workspace}`, object: { sha: 'a'.repeat(40), type: 'commit' } }] : []) as T;
@@ -88,4 +89,11 @@ it('uses explicit workspace context without silent navigation fallback and handl
   expect(f.calls.some(request => request.operation === 'loadNavigation')).toBe(false);
   f.entries.delete('documents/workspace-config.json'); expect((await loadPreviewSlots(f.send, '')).slots).toHaveLength(0);
   await expect(loadPreviewSlots(f.send, '?workspace=other')).rejects.toThrow('Choose a nugs workspace');
+});
+it('resolves device-local authorization from the stable shared workspace URL', async () => {
+  const f = fixture();
+  for (const connection of ['', crypto.randomUUID()]) {
+    const query = new URLSearchParams({ repository: 'owner/storage', workspace, ...(connection ? { connection } : {}) });
+    expect((await loadPreviewSlots(f.send, query.toString())).navigation?.connectionId).toBe(f.navigation.connectionId);
+  }
 });

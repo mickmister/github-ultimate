@@ -30,12 +30,72 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
 
+for (const width of [390, 1440]) {
+test(`${width}px: workspace URL is authoritative for chooser, history, shared links and mismatched conversations`, async ({ page }) => {
+  const source = `${origin}${base}`, remote = remoteFixture(), fixture = await nativeFixture(page, source, remote);
+  try {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(source); await expect(page.getByRole('heading', { name: 'Choose workspace', exact: true })).toBeVisible();
+    await expect(page.getByRole('log')).toHaveCount(0); await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toHaveCount(0);
+    await page.getByRole('combobox', { name: 'Choose workspace', exact: true }).selectOption(JSON.stringify(['owner/storage', 'selected-workspace']));
+    await expect(page).toHaveURL(/workspace=selected-workspace/);
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Only in selected workspace'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3'); const saved = page.url();
+    await page.getByRole('button', { name: 'Change workspace', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Choose workspace', exact: true }).selectOption(JSON.stringify(['owner/storage', 'other-workspace']));
+    await expect(page).toHaveURL(/workspace=other-workspace/); await expect(page.getByRole('log')).not.toContainText('Only in selected workspace');
+    await page.getByLabel('Preview slots', { exact: true }).click();
+    await expect(page.getByRole('link', { name: /Storybook/ })).toHaveAttribute('href', /workspace=other-workspace/);
+    await page.goBack(); await expect(page.getByRole('heading', { name: 'Choose workspace', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Choose workspace', exact: true })).toBeEnabled();
+    await page.goBack(); await expect(page.getByRole('log')).toContainText('Only in selected workspace');
+    await page.goForward(); await expect(page.getByRole('heading', { name: 'Choose workspace', exact: true })).toBeVisible();
+    await expect(page.getByRole('combobox', { name: 'Choose workspace', exact: true })).toBeEnabled();
+    await page.goForward(); await expect(page).toHaveURL(/workspace=other-workspace/); await expect(page.getByRole('log')).not.toContainText('Only in selected workspace');
+    const wrong = new URL(saved); wrong.searchParams.set('workspace', 'other-workspace'); wrong.searchParams.set('connection', crypto.randomUUID());
+    await page.goto(wrong.href); await expect(page.getByRole('alert').filter({ hasText: 'belongs to workspace selected-workspace' })).toBeVisible();
+    await expect(page.getByRole('log')).not.toContainText('Only in selected workspace'); expect(new URL(page.url()).searchParams.get('workspace')).toBe('other-workspace');
+    await page.getByRole('button', { name: 'Open conversation in selected-workspace', exact: true }).click();
+    await expect(page).toHaveURL(/workspace=selected-workspace/); await expect(page.getByRole('log')).toContainText('Only in selected workspace');
+    const oldLink = new URL(saved); oldLink.searchParams.delete('workspace'); oldLink.searchParams.delete('repository');
+    await page.goto(oldLink.href); await expect(page.getByRole('log')).toContainText('Only in selected workspace'); await expect(page).toHaveURL(/workspace=selected-workspace/);
+    expect(remote.requests).toHaveLength(1);
+  } finally { fixture.dispose(); }
+});
+}
+
+test('another device moving a conversation cannot silently switch the current URL scope', async ({ browser }) => {
+  const context = await browser.newContext(), remote = remoteFixture();
+  try {
+    const left = await context.newPage(), right = await context.newPage(), source = `${origin}${base}`;
+    const a = await nativeFixture(left, source, remote), b = await nativeFixture(right, source, remote);
+    try {
+      await left.goto(a.url); await left.getByRole('button', { name: 'New conversation', exact: true }).click();
+      await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Moved on another device'); await left.getByRole('button', { name: 'Send', exact: true }).click();
+      await expect(left.getByRole('status')).toHaveText('Saved to S3'); await right.goto(left.url());
+      await expect(right.getByRole('log')).toContainText('Moved on another device'); await right.locator('.chat-connections > summary').click();
+      await right.getByRole('combobox', { name: 'Move conversation to workspace', exact: true }).selectOption(JSON.stringify(['owner/storage', 'other-workspace']));
+      await expect(right).toHaveURL(/workspace=other-workspace/); await expect(right.getByRole('status')).toHaveText('Saved to S3');
+      await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Retain my unsent draft');
+      await left.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
+      await expect(left.getByRole('alert').filter({ hasText: 'belongs to workspace other-workspace' })).toBeVisible();
+      expect(new URL(left.url()).searchParams.get('workspace')).toBe('selected-workspace');
+      await expect(left.getByRole('log')).not.toContainText('Moved on another device');
+      await expect(left.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('Retain my unsent draft');
+      await left.getByRole('button', { name: 'Open conversation in other-workspace', exact: true }).click();
+      await expect(left).toHaveURL(/workspace=other-workspace/); await expect(left.getByRole('log')).toContainText('Moved on another device');
+      expect(remote.requests).toHaveLength(1);
+    } finally { a.dispose(); b.dispose(); }
+  } finally { await context.close(); }
+});
+
 for (const [name, width, height] of [['phone portrait',390,844],['phone landscape',844,390],['tablet portrait',820,1180],['tablet landscape',1180,820],['desktop portrait',1080,1440],['desktop landscape',1440,900]] as const) {
   test(`${name}: real S3 chat survives rotation and reload through the native wire protocol`, async ({ page }) => {
     const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote), errors: string[] = [], api: string[] = [];
     page.on('pageerror', error => { if (error.message !== 'ResizeObserver loop completed with undelivered notifications.') errors.push(error.message); });
     page.on('request', request => { if (new URL(request.url()).pathname.startsWith('/api/')) api.push(request.url()); });
-    await page.setViewportSize({ width, height }); await page.goto(`${origin}${base}`);
+    await page.setViewportSize({ width, height }); await page.goto(fixture.url);
     const create = page.getByRole('button', { name: 'New conversation', exact: true }); await expect(create).toBeEnabled(); await create.click();
     await expect(page.getByRole('status')).toContainText('Draft');
     expect(remote.objects.size).toBe(0); expect(new URL(page.url()).searchParams.has('session')).toBe(false);
@@ -67,9 +127,12 @@ for (const width of [390, 1440]) {
       const picker = page.getByRole('combobox', { name: 'Conversation workspace', exact: true }), key = JSON.stringify([previews.navigation.repository, previews.workspace]);
       await expect(picker).toHaveValue(key);
       await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(1);
-      await picker.selectOption(''); await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(0);
-      await page.getByRole('button', { name: 'New conversation', exact: true }).click(); await input.fill('Unassigned conversation'); await input.press('Enter');
+      await fixture.seedLegacy('Unassigned conversation');
+      await picker.selectOption('inbox'); await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(0);
+      await page.getByRole('button', { name: 'Refresh conversations', exact: true }).click();
+      await page.getByRole('button', { name: /Unassigned conversation.*messages/ }).click();
       await expect(page.getByRole('status')).toHaveText('Saved to S3');
+      await expect(input).toBeDisabled(); await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeDisabled();
       const settings = page.locator('.chat-connections'); await settings.locator('summary').click();
       await page.getByRole('combobox', { name: 'Move conversation to workspace', exact: true }).selectOption(key);
       await expect(page.getByRole('status')).toHaveText('Saved to S3');
@@ -78,7 +141,7 @@ for (const width of [390, 1440]) {
       if (width < 600) await page.getByRole('button', { name: 'Hide conversations', exact: true }).click();
       await input.fill('Keep this unsent draft when changing workspace');
       if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
-      await picker.selectOption(''); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(0);
+      await picker.selectOption('inbox'); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(0);
       if (width < 600) await page.getByRole('button', { name: 'Hide conversations', exact: true }).click();
       await expect(input).toHaveValue('Keep this unsent draft when changing workspace');
       await page.goto(pinned.href); await expect(page.getByRole('log')).toContainText('Scoped conversation'); await expect(page.getByRole('log')).not.toContainText('Unassigned conversation');
@@ -92,7 +155,7 @@ test('independent device connections restore the same S3 conversation and preser
     const left = await first.newPage(), right = await second.newPage();
     const a = await nativeFixture(left, `${origin}${base}`, remote), b = await nativeFixture(right, `${origin}${base}`, remote);
     expect(a.storage.id).not.toBe(b.storage.id); expect(a.inference.id).not.toBe(b.inference.id);
-    await left.goto(`${origin}${base}`); await expect(left.getByRole('button', { name: 'New conversation' })).toBeEnabled(); await left.getByRole('button', { name: 'New conversation' }).click();
+    await left.goto(a.url); await expect(left.getByRole('button', { name: 'New conversation' })).toBeEnabled(); await left.getByRole('button', { name: 'New conversation' }).click();
     await expect(left.getByRole('status')).toContainText('Draft'); await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Start on desktop'); await left.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(left.getByRole('status')).toHaveText('Saved to S3'); await expect(left.getByRole('log')).toContainText('Real Pi reply 1');
     const link = left.url(), parent = new URL(link).searchParams.get('checkpoint');
@@ -112,7 +175,7 @@ test('independent device connections restore the same S3 conversation and preser
 test('new is only a draft and the upstream-adapted sidebar shows one row per conversation', async ({ page }) => {
   const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);
   try {
-    await page.goto(`${origin}${base}`);
+    await page.goto(fixture.url);
     const create = page.getByRole('button', { name: 'New conversation', exact: true }), input = page.getByRole('textbox', { name: 'Message', exact: true });
     await expect(create).toBeEnabled(); await create.click(); await expect(input).toBeEnabled();
     await input.fill('Unsent draft'); await page.setViewportSize({ width: 390, height: 844 }); await expect(input).toHaveValue('Unsent draft');
@@ -125,8 +188,8 @@ test('new is only a draft and the upstream-adapted sidebar shows one row per con
     const library = page.getByRole('navigation', { name: 'Saved conversations' });
     await expect(library.locator('li')).toHaveCount(1);
     await input.fill('Second turn'); await input.press('Enter'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
-    await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(4);
-    await create.click(); await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(4);
+    await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(5);
+    await create.click(); await expect(library.locator('li')).toHaveCount(1); expect(remote.objects.size).toBe(5);
     await library.getByRole('button', { name: /Canonical first conversation/ }).click();
     await expect(page.getByRole('log')).toContainText('Second turn'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); expect(remote.requests).toHaveLength(2);
     await create.click(); await input.fill('Canonical second conversation'); await input.press('Enter'); await expect(page.getByRole('status')).toHaveText('Saved to S3');
@@ -139,7 +202,7 @@ test('two tabs reload and refresh the latest conversation while explicit checkpo
   try {
     const left = await context.newPage(), right = await context.newPage();
     const a = await nativeFixture(left, `${origin}${base}`, remote), b = await nativeFixture(right, `${origin}${base}`, remote);
-    await left.goto(`${origin}${base}`); await left.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await left.goto(a.url); await left.getByRole('button', { name: 'New conversation', exact: true }).click();
     await left.getByRole('textbox', { name: 'Message', exact: true }).fill('Shared conversation'); await left.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(left.getByRole('status')).toHaveText('Saved to S3');
     await left.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (text: string) => { Object.assign(window, { copiedChatLink: text }); } } }); });
@@ -150,7 +213,7 @@ test('two tabs reload and refresh the latest conversation while explicit checkpo
     await right.getByRole('textbox', { name: 'Message', exact: true }).fill('Added in the other tab'); await right.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(right.getByRole('status')).toHaveText('Saved to S3');
     await left.reload(); await expect(left.getByRole('log')).toContainText('Added in the other tab'); await expect(left.getByRole('log')).toContainText('Real Pi reply 2');
-    expect(remote.requests).toHaveLength(2); expect(remote.objects.size).toBe(4);
+    expect(remote.requests).toHaveLength(2); expect(remote.objects.size).toBe(5);
     const draft = left.getByRole('textbox', { name: 'Message', exact: true }); await draft.fill('Keep my unsent draft');
     await right.getByRole('textbox', { name: 'Message', exact: true }).fill('Third turn in other tab'); await right.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(right.getByRole('status')).toHaveText('Saved to S3');
@@ -161,7 +224,7 @@ test('two tabs reload and refresh the latest conversation while explicit checkpo
     await left.reload(); await expect(left.getByRole('log')).toContainText('Real Pi reply 1'); await expect(left.getByRole('log')).not.toContainText('Real Pi reply 3');
     await left.getByRole('navigation', { name: 'Saved conversations' }).getByRole('button', { name: /Shared conversation/ }).click();
     await expect(left.getByRole('log')).toContainText('Real Pi reply 3'); expect(new URL(left.url()).searchParams.has('view')).toBe(false);
-    expect(remote.requests).toHaveLength(3); expect(remote.objects.size).toBe(6);
+    expect(remote.requests).toHaveLength(3); expect(remote.objects.size).toBe(7);
     a.dispose(); b.dispose();
   } finally { await context.close(); }
 });
@@ -175,7 +238,7 @@ test('build-pinned runtime bypasses stale unversioned code and the UI deduplicat
     await route.fulfill({ response, body: (await response.text()) + '\nconst originalList = window.piWebExtension.list; window.piWebExtension.list = async (...args) => { const page = await originalList(...args); return { chats: page.chats.flatMap(chat => [chat, chat]) }; };' });
   });
   try {
-    await page.goto(`${origin}${base}`); await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeEnabled();
+    await page.goto(fixture.url); await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeEnabled();
     expect(scripts).toHaveLength(1); expect(new URL(scripts[0]).searchParams.get('build')).toMatch(/^[a-f0-9]{8}$/);
     expect(await page.evaluate(() => window.piWebExtension.protocolVersion)).toBe(2);
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
@@ -195,7 +258,7 @@ test('provider deltas render before completion and the settled transcript restor
   const gate = new Promise<void>(resolve => { resume = resolve; });
   const remote = remoteFixture(() => gate), fixture = await nativeFixture(page, `${origin}${base}`, remote);
   try {
-    await page.goto(`${origin}${base}`); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Stream visibly'); await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('log')).toContainText('Real Pi reply 1:');
     await expect(page.getByRole('status')).toHaveText('Working…');

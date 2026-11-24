@@ -83,8 +83,19 @@ type Send = <T>(request: HostedRequest) => Promise<T>;
 export async function loadPreviewSlots(send: Send, search: string): Promise<PreviewCatalog> {
   const params = new URLSearchParams(search), explicit = ['connection', 'repository', 'workspace'].some(key => params.has(key));
   const connections = await send<HostedConnection[]>({ operation: 'connections' });
-  const selected = connections.find(item => item.id === params.get('connection'));
-  const context = explicit ? { connectionId: params.get('connection'), repository: params.get('repository'), workspace: params.get('workspace'), installationId: params.has('installation') ? Number(params.get('installation')) : selected?.installation?.id } : await send<unknown>({ operation: 'loadNavigation' });
+  let selected = connections.find(item => item.id === params.get('connection'));
+  // A shared workspace URL carries remote identity, not another device's local
+  // connection UUID. Resolve a unique locally authorized connection for its store.
+  if (explicit && !selected && params.get('repository')) {
+    const candidates = await Promise.all(connections.filter(item => item.installation).map(async connection => {
+      try { const repositories = await send<{ full_name: string }[]>({ operation: 'repositories', id: connection.id }); return repositories.some(repo => repo.full_name.toLowerCase() === params.get('repository')!.toLowerCase()) ? connection : undefined; }
+      catch { return undefined; }
+    }));
+    const available = candidates.filter((item): item is HostedConnection => Boolean(item));
+    if (available.length !== 1) throw Error('Choose an authorized GitHub connection for this workspace in Documents.');
+    selected = available[0];
+  }
+  const context = explicit ? { connectionId: selected?.id, repository: params.get('repository'), workspace: params.get('workspace'), installationId: params.has('installation') ? Number(params.get('installation')) : selected?.installation?.id } : await send<unknown>({ operation: 'loadNavigation' });
   if (!context) return { slots: [] };
   const parsed = workspaceNavigationSchema.safeParse(context);
   if (!parsed.success) throw Error('Choose a nugs workspace in Documents, then retry previews.');

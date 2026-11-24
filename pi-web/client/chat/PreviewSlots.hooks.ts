@@ -5,13 +5,12 @@ import type { PreviewCatalog } from '../../../hosted/preview-slots';
 export function usePreviewSlots(load: () => Promise<PreviewCatalog>) {
   const [open, setOpen] = useState(false), [busy, setBusy] = useState(false), [error, setError] = useState('');
   const [catalog, setCatalog] = useState<PreviewCatalog>();
-  const pending = useRef(false);
+  const generation = useRef(0);
   async function refresh() {
-    if (pending.current) return;
-    pending.current = true; setBusy(true); setError(''); setCatalog(undefined);
-    try { setCatalog(await load()); }
-    catch (error) { setError(error instanceof Error ? error.message : 'Preview slots could not be loaded.'); }
-    finally { pending.current = false; setBusy(false); }
+    const current = ++generation.current; setBusy(true); setError(''); setCatalog(undefined);
+    try { const result = await load(); if (current === generation.current) setCatalog(result); return result; }
+    catch (error) { if (current === generation.current) setError(error instanceof Error ? error.message : 'Preview slots could not be loaded.'); }
+    finally { if (current === generation.current) setBusy(false); }
   }
   function toggle(next: boolean) { setOpen(next); if (next && !open) void refresh(); }
   return { open, busy, error, catalog, toggle, refresh };

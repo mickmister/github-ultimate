@@ -16,20 +16,23 @@ export function previewFixture(source: string) {
     blobs.set(sha, { sha, size: bytes.length, encoding: 'base64', content: bytes.toString('base64') });
     files.set(path, { path, type: 'blob', mode: '100644', sha, size: bytes.length });
   }
-  file('documents/workspace/manifest.json', { schema_version: 1, workspace, observed_at: '2026-11-24T00:00:00Z', repositories: [{ path: 'repo', branch: `refs/heads/${branch}`, commit: 'c'.repeat(40), publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/owner/repo.git' }] }] });
+   const manifest = (workspace: string) => ({ schema_version: 1, workspace, observed_at: '2026-11-24T00:00:00Z', repositories: [{ path: 'repo', branch: `refs/heads/${branch}`, commit: 'c'.repeat(40), publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/owner/repo.git' }] }] });
+   file('documents/workspace/manifest.json', manifest(workspace));
+   const identities = new Map<string, string>();
   const config = (title: string) => ({ schema_version: 1, repositories: [{ repository: 'owner/repo', previewSlots: [{ id: 'storybook', title, service: 'storybook', provider: { kind: 'github-pages', baseUrl: 'https://preview.example/owner-repo/', path: 'storybook/{previewDirectory}/?workspace={workspace}' } }] }] });
   file('documents/workspace-config.json', config('Storybook'));
   const store = { async all() { return [record]; }, async get(id: string) { return id === record.id ? record : undefined; }, async put() {}, async remove() {} };
-  const connections = new Connections(store, async (input, init) => {
+   const fetcher: typeof fetch = async (input, init) => {
     const url = new URL(String(input)); calls.push(url.pathname);
     if (new Headers(init?.headers).get('authorization') !== 'Bearer private-github-secret') throw Error('Missing GitHub authorization');
     if (url.pathname === '/user/installations') return Response.json({ installations: [{ id: 7, app_id: 123, account: { login: 'owner' }, permissions: { contents: 'read', metadata: 'read' } }] });
     if (url.pathname === '/user/installations/7/repositories') return Response.json({ repositories: [{ full_name: repository, private: true, default_branch: 'main' }] });
-    if (url.pathname.includes('/matching-refs/')) return Response.json(url.pathname.endsWith('/documents/') ? [{ ref: `refs/documents/${workspace}`, object: { sha: String(generation).repeat(40), type: 'commit' } }] : []);
-    if (url.pathname.includes('/commits/')) return Response.json({ sha: url.pathname.split('/').at(-1), tree: { sha: String(generation + 1).repeat(40) } });
-    if (url.pathname.includes('/trees/')) return Response.json({ sha: url.pathname.split('/').at(-1), truncated: false, tree: [...files.values()] });
+     if (url.pathname.includes('/matching-refs/')) return Response.json(url.pathname.endsWith('/documents/') ? [workspace, 'other-workspace'].map(name => { const sha = createHash('sha1').update(`${name}:${generation}`).digest('hex'); identities.set(sha, name); return { ref: `refs/documents/${name}`, object: { sha, type: 'commit' } }; }) : []);
+     if (url.pathname.includes('/commits/')) { const sha = url.pathname.split('/').at(-1)!; return Response.json({ sha, tree: { sha } }); }
+     if (url.pathname.includes('/trees/')) { const sha = url.pathname.split('/').at(-1)!; file('documents/workspace/manifest.json', manifest(identities.get(sha)!)); return Response.json({ sha, truncated: false, tree: [...files.values()] }); }
     if (url.pathname.includes('/blobs/')) return Response.json(blobs.get(url.pathname.split('/').at(-1)!));
     throw Error(`Unexpected fixture route ${url.pathname}`);
-  });
-  return { host: new MobileGitHub(connections, () => true), navigation, branch, workspace, calls, update() { generation++; file('documents/workspace-config.json', config('Updated Storybook')); }, remove() { generation++; files.delete('documents/workspace-config.json'); } };
+   };
+   const connections = new Connections(store, fetcher);
+   return { host: new MobileGitHub(connections, () => true), record, fetcher, navigation, branch, workspace, calls, update() { generation++; file('documents/workspace-config.json', config('Updated Storybook')); }, remove() { generation++; files.delete('documents/workspace-config.json'); } };
 }

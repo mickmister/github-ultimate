@@ -16,7 +16,7 @@ tab-memory-only adapter have been superseded. The production source is
    for the sibling `app/` or old `pi/` entry does not cover `/pi-web/`.
 3. Reload Pi Web. If exactly one connection of each kind is available, it is
    selected automatically. Otherwise use Connections and choose explicitly.
-4. Select **New conversation** and compose a draft. No conversation, URL identity
+4. Choose a nugs workspace, then select **New conversation** and compose a draft. No conversation, URL identity
    or S3 object is created until the first message is sent. That message is saved
    before inference; the settled reply is saved automatically. The URL then contains the exact conversation,
    checkpoint/version reference and a fingerprint of the storage location.
@@ -40,14 +40,29 @@ tab-memory-only adapter have been superseded. The production source is
 
 ## Workspace browsing and preview links
 
-Choose a nugs workspace in Documents and follow its **Pi Web** link. The GitHub
+Open Pi Web's workspace chooser, or choose a nugs workspace in Documents and follow its **Pi Web** link. The GitHub
 connection must also authorize the Pi Web directory. **Conversation workspace**
-filters the sidebar by the storage repository and nugs workspace namespace;
-**Unassigned** contains older conversations and conversations created without a
-workspace. **New conversation** inherits the selected workspace and still writes
+selects the page scope by the storage repository and nugs workspace namespace.
+The URL's `repository` and `workspace` parameters are authoritative for conversations
+and previews. A bare URL shows the chooser rather than unscoped chat content.
+**Unassigned migration inbox** contains older conversations without workspace
+metadata; it permits reading/moving them, but no new conversations or inference.
+**New conversation** inherits the selected workspace and still writes
 nothing until the first send. Changing workspace preserves an unsent composer draft.
 Under **Connections**, **Move conversation** assigns a saved conversation to an
 existing authorized workspace or back to Unassigned.
+
+**Change workspace** and the preview menu's **Choose workspace** open the in-page
+chooser. Switching scopes adds a browser history entry; Back/Forward and reload
+restore that scope. A conversation URL whose current association is elsewhere
+shows an explicit destination instead of changing scope or rendering its transcript.
+Catalog refresh detects moves made on another device and preserves an unsent draft.
+Old unscoped conversation links are upgraded using their durable catalog identity.
+Shared links omit device-local GitHub connection IDs; a receiving device resolves
+a unique authorized connection for the explicit storage repository. Ambiguous or
+missing authorization requires choosing the connection in Documents and never
+changes the URL's workspace. Preview data from another scope stays hidden while
+navigation/configuration loads; superseded preview requests cannot replace it.
 
 Association is a separate immutable, readback-verified `pi-web-catalog-1` record
 under a deterministic metadata UUID in the same S3 checkpoint namespace. Moves do
