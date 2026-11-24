@@ -45,7 +45,7 @@ test('packaged settings connect ChatGPT, resume device login and retain custom e
         if (url.hostname === 'storage.example') {
           const key = decodeURIComponent(url.pathname.slice('/sessions/'.length));
           if (request.method === 'PUT') { state.__objects[key] = raw; return new Response(''); }
-          if (url.searchParams.has('list-type')) return new Response('<ListBucketResult><IsTruncated>false</IsTruncated></ListBucketResult>');
+          if (url.searchParams.has('list-type')) return new Response(`<ListBucketResult><IsTruncated>false</IsTruncated><EncodingType>url</EncodingType>${Object.entries(state.__objects).filter(([key]) => key.startsWith(url.searchParams.get('prefix') ?? '')).map(([key, value]) => `<Contents><Key>${encodeURIComponent(key)}</Key><Size>${new TextEncoder().encode(value as string).length}</Size></Contents>`).join('')}</ListBucketResult>`);
           if (key in state.__objects) return new Response(state.__objects[key]);
         }
         return new Response('', { status: 404 });
@@ -71,12 +71,12 @@ test('packaged settings connect ChatGPT, resume device login and retain custom e
     expect(await settings.content()).not.toMatch(/private-access|private-refresh|private-verifier|private-device-id/);
     await card.getByLabel('Inference hosted origin').fill('https://agent.example');
     await card.getByRole('button', { name: 'Grant inference access', exact: true }).click();
-    const page = await context.newPage(); await page.goto('https://agent.example/');
+    const page = await context.newPage(); await page.goto('https://agent.example/?repository=owner%2Frepo&workspace=oauth-test');
     await page.waitForFunction(() => !!window.piWebExtension);
     const result = JSON.parse(await page.evaluate(async () => {
       const api = window.piWebExtension, connections = await api.connections();
       const inference = connections.inference.find(c => c.provider === 'chatgpt')!, storage = connections.storage[0];
-      const chat = api.create(inference, storage); await chat.send('Hello ChatGPT');
+      const chat = api.create(inference, storage, { repository: 'owner/repo', workspace: 'oauth-test' }); await chat.send('Hello ChatGPT');
       const snapshot = chat.snapshot();
       return JSON.stringify({ connections, snapshot });
     }));
