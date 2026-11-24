@@ -7,7 +7,7 @@ const config: StorybookConfig = {
   staticDirs: ['../public'],
   async viteFinal(config) {
     config.resolve = { ...config.resolve, alias: { ...config.resolve?.alias, '@': fileURLToPath(new URL('../', import.meta.url)) } };
-    config.define = { ...config.define, 'process.env.NEXT_PUBLIC_BASE_PATH': JSON.stringify('') };
+    config.define = { ...config.define, 'process.env.NEXT_PUBLIC_BASE_PATH': JSON.stringify(''), 'process.env.NEXT_PUBLIC_APP_VERSION': JSON.stringify('storybook') };
     return config;
   },
 };

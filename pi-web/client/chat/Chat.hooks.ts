@@ -11,8 +11,13 @@ let loading: Promise<Runtime> | undefined;
 function runtime() {
   return loading ??= new Promise<Runtime>((resolve, reject) => {
     const script = document.createElement('script'); script.type = 'module';
-    script.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/extension-runtime.js`;
-    script.onload = () => resolve(window.piWebExtension);
+    script.src = `${process.env.NEXT_PUBLIC_BASE_PATH ?? ''}/extension-runtime.js?build=${encodeURIComponent(process.env.NEXT_PUBLIC_APP_VERSION ?? 'development')}`;
+    script.onload = () => {
+      if (window.piWebExtension?.protocolVersion !== 2) {
+        loading = undefined; script.remove(); reject(Error('Pi Web resources are from different builds. Reload the page to update.')); return;
+      }
+      resolve(window.piWebExtension);
+    };
     script.onerror = () => { loading = undefined; script.remove(); reject(Error('Could not load Pi. Reload and retry.')); };
     document.head.append(script);
   });
@@ -120,7 +125,11 @@ export function useChat() {
     setChat(undefined); setDraftMode(false); setDraft(''); const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
   }
   async function copyLink() { try { await copyText(location.href); } catch { setError('Could not copy the link. Copy the page URL from your browser.'); } }
-  return { theme, snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: chats.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
+  // Rendering identity is always the canonical session, even if a host mistakenly
+  // repeats catalog entries. The runtime orders newest continuations first.
+  const canonical = new Map<string, SavedChat>();
+  for (const item of chats) if (!canonical.has(item.sessionId)) canonical.set(item.sessionId, item);
+  return { theme, snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: [...canonical.values()].filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
     setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) setChats((await (await runtime()).list(selectedStorage)).chats); }) };
 }
 export type ChatModel = ReturnType<typeof useChat>;

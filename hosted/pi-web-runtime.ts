@@ -10,6 +10,7 @@ import type { PiBridge } from './pi-transport';
 const bridge: PiBridge = (request, timeoutMs) => bridgeRequest(request, timeoutMs, mobilePiRequest);
 
 window.piWebExtension = {
+  protocolVersion: 2,
   connections: async () => ({ inference: await bridge<PublicInferenceConnection[]>({ operation: 'inferenceConnections' }), storage: await bridge<PublicS3Connection[]>({ operation: 's3Connections' }) }),
   storageId: chatStorageId,
   list: (storage: PublicS3Connection) => new ChatStorage(bridge, storage).list(),

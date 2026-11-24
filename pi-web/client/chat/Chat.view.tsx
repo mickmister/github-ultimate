@@ -27,7 +27,7 @@ function Conversation({ model: m }: { model: ChatModel }) {
       <textarea aria-label="Message" value={m.draft} onChange={e => m.setDraft(e.target.value)} placeholder="Message Pi" rows={1} disabled={!m.snapshot.sessionId && !m.draftMode} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void m.send(); } }} />
       {m.busy ? <button type="button" onClick={m.stop}>Stop</button> : <button disabled={!m.snapshot.sessionId && !m.draftMode || m.snapshot.dirty || m.snapshot.phase !== 'idle' || !m.draft.trim()}>Send</button>}
     </form>
-    <footer className="chat-composer-footer"><span>⚙ {m.selectedInference?.model ?? 'Choose a model'}</span><span>{m.selectedStorage ? `S3 · ${m.selectedStorage.bucket}` : 'Choose storage'}</span></footer>
+    <footer className="chat-composer-footer"><span>⚙ {m.selectedInference?.model ?? 'Choose a model'}</span><span>Build {process.env.NEXT_PUBLIC_APP_VERSION ?? 'development'}</span><span>{m.selectedStorage ? `S3 · ${m.selectedStorage.bucket}` : 'Choose storage'}</span></footer>
   </section>;
 }
 function Header({ model: m }: { model: ChatModel }) {

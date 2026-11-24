@@ -10,6 +10,7 @@ export interface ChatHandle {
   stop(): void;
 }
 export interface PiWebRuntime {
+  protocolVersion: 2;
   connections(): Promise<{ inference: PublicInferenceConnection[]; storage: PublicS3Connection[] }>;
   storageId(storage: PublicS3Connection): string;
   list(storage: PublicS3Connection): Promise<{ chats: SavedChat[] }>;

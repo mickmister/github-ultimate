@@ -93,6 +93,31 @@ test('new is only a draft and the upstream-adapted sidebar shows one row per con
     await library.getByRole('searchbox', { name: 'Search conversations' }).fill('first'); await expect(library.locator('li')).toHaveCount(1);
   } finally { fixture.dispose(); }
 });
+test('build-pinned runtime bypasses stale unversioned code and the UI deduplicates repeated session rows', async ({ page }) => {
+  const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  const scripts: string[] = [];
+  await page.route('**/extension-runtime.js*', async route => {
+    const url = new URL(route.request().url()); scripts.push(url.href);
+    if (!url.searchParams.has('build')) { await route.fulfill({ contentType: 'text/javascript', body: 'window.piWebExtension = { protocolVersion: 1 };' }); return; }
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()) + '\nconst originalList = window.piWebExtension.list; window.piWebExtension.list = async (...args) => { const page = await originalList(...args); return { chats: page.chats.flatMap(chat => [chat, chat]) }; };' });
+  });
+  try {
+    await page.goto(`${origin}${base}`); await expect(page.getByRole('button', { name: 'New conversation', exact: true })).toBeEnabled();
+    expect(scripts).toHaveLength(1); expect(new URL(scripts[0]).searchParams.get('build')).toMatch(/^[a-f0-9]{8}$/);
+    expect(await page.evaluate(() => window.piWebExtension.protocolVersion)).toBe(2);
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('One canonical row'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect(page.getByRole('navigation', { name: 'Saved conversations' }).locator('li')).toHaveCount(1);
+  } finally { fixture.dispose(); }
+});
+test('incompatible cached runtime fails explicitly instead of showing checkpoint-level rows', async ({ page }) => {
+  await page.route('**/extension-runtime.js*', route => route.fulfill({ contentType: 'text/javascript', body: 'window.piWebExtension = { protocolVersion: 1 };' }));
+  await page.goto(`${origin}${base}`);
+  await expect(page.getByRole('alert').filter({ hasText: 'Pi Web resources are from different builds.' })).toHaveText('Pi Web resources are from different builds. Reload the page to update.');
+  await expect(page.getByRole('navigation', { name: 'Saved conversations' }).locator('li')).toHaveCount(0);
+});
 test('production assets contain no canned file manifest and retain provenance', async ({ request }) => {
   expect((await request.get(`${origin}${base}demo-files/manifest.json`)).status()).toBe(404);
   expect((await (await request.get(`${origin}${base}build.json`)).json()).demo).toBe(false);

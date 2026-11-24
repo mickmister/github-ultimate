@@ -26,6 +26,10 @@ tab-memory-only adapter have been superseded. The production source is
    opening its most recently saved continuation. **Refresh conversations** discovers
    other device saves; search filters conversation titles. Listing resolves all S3
    pages before grouping, so a conversation never appears once per checkpoint.
+   The footer shows the frontend build. Runtime scripts are requested with that
+   build pin and must expose catalog protocol v2; incompatible cached scripts
+   show a reload message instead of silently returning checkpoint-level entries.
+   The view also deduplicates catalog entries by canonical session ID.
 
 ## Mobile setup
 
@@ -69,6 +73,19 @@ repository, fake provider account or canned conversation. It retains upstream ri
 message rendering. Tools, shell/filesystem, streaming token deltas, model switching
 within a conversation, native background execution and old workspace-agent
 checkpoint migration are outside this text-chat slice.
+
+### Agent tool availability
+
+The standalone `/pi-web/` chat currently configures `tools: []`. Its S3 saves are
+application lifecycle operations, not model-invokable tools. Storybook tool cards
+demonstrate retained rendering only.
+
+The separate `/app/#/agent` workspace agent exposes `github_repositories`,
+`github_probe`, `github_graphql` (read-only), `beads_query`, `codemode`, and
+`git_commit` (scratch commits, not pushes). Codemode contains `list_files`,
+`find_files`, `read_file`, `write_file`, `delete_file`, `apply_patch`, `search`,
+`git_status`, `git_diff`, and `git_log`. These operate on the selected bounded
+scratch workspace; there is no ambient shell or unrestricted network.
 
 ## Checks
 
