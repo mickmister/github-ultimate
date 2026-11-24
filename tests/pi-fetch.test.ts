@@ -59,6 +59,9 @@ describe('Pi provider adapter over host HTTP transport', () => {
     const send: PiBridge = async <T>(request: Parameters<PiBridge>[0]) => request.operation === 'agentProbe' ? { headOid: 'abc' } as T : bridge<T>(request);
     const { agent } = browserPiAgent(send, connection, { id: crypto.randomUUID(), appId: 123, name: 'GitHub', user: { id: 42, login: 'tester' }, installation: { id: 456, account: 'tester' } });
     await agent.prompt('Read owner/repo');
+    expect(agent.state.thinkingLevel).toBe('medium');
+    expect(payloads[0]).toMatchObject({ reasoning_effort: 'medium' });
+    expect(payloads[1]).toMatchObject({ reasoning_effort: 'medium' });
     expect(agent.state.messages.at(-1)).not.toHaveProperty('errorMessage');
     expect(agent.state.messages.map(message => message.role)).toEqual(['system', 'user', 'assistant', 'toolResult', 'assistant']);
     expect(payloads[1].messages).toContainEqual({ role: 'tool', tool_call_id: 'call-1', content: '{"headOid":"abc"}' });

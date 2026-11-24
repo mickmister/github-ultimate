@@ -4,14 +4,15 @@ import { trustedOrigin } from './hosted-protocol';
 import { boundedJSON } from './git-reads';
 import { ConnectionError } from './connections';
 import { utf8Bytes, UTF8Decoder } from './utf8';
+import { ChatGPTAuthService, CHATGPT_INFERENCE_URL, chatgptEventStream, type ChatGPTAuth } from './chatgpt-auth';
 
-export type InferenceRecord = InferenceConfiguration & { id: string; revision: string; hostedGrants: HostedGrant[] };
+export type InferenceRecord = InferenceConfiguration & { id: string; revision: string; hostedGrants: HostedGrant[]; chatgpt?: ChatGPTAuth };
 export interface InferenceStore {
   all(): Promise<InferenceRecord[]>; get(id: string): Promise<InferenceRecord | undefined>;
   put(record: InferenceRecord): Promise<void>; remove(id: string): Promise<void>;
 }
-function publicRecord({ id, revision, name, model, hostedGrants }: InferenceRecord): PublicInferenceConnection {
-  return { id, revision, name, model, hostedGrants, transport: 'http-stream-v1' };
+function publicRecord({ id, revision, name, model, hostedGrants, chatgpt }: InferenceRecord): PublicInferenceConnection {
+  return { id, revision, name, model, hostedGrants, transport: 'http-stream-v1', ...(chatgpt ? { provider: 'chatgpt' as const, protocol: 'openai-codex-responses' as const, authStatus: chatgpt.pending && !chatgpt.pending.exchanging && chatgpt.pending.expires > Date.now() ? 'connecting' as const : chatgpt.access && !chatgpt.refreshing ? 'connected' as const : 'disconnected' as const } : {}) };
 }
 
 /** The endpoint and secret headers are extension settings, never page inputs. */
@@ -21,7 +22,9 @@ export class InferenceConnections {
   private cancelled = new Map<string, number>();
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
-  constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms), private combine = (signals: AbortSignal[]) => AbortSignal.any(signals)) {}
+  private chatgpt: ChatGPTAuthService;
+  constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms), private combine = (signals: AbortSignal[]) => AbortSignal.any(signals)) { this.chatgpt = new ChatGPTAuthService(store, fetcher, hasHostAccess); }
+  private serial<T>(work: () => Promise<T>) { const next = this.tail.catch(() => {}).then(work); this.tail = next; return next; }
   cancelActive() { for (const [id, job] of this.active) { job.controller.abort(); this.closeStream(id); } }
   private closeStream(id: string) {
     const stream = this.streams.get(id);
@@ -31,15 +34,19 @@ export class InferenceConnections {
   }
   handle(input: unknown) {
     const request = inferenceSettingsSchema.parse(input);
-    if (request.operation !== 'list') {
+    if (request.operation !== 'list' && request.operation !== 'chatgptPoll') {
       this.epoch++;
       this.cancelActive();
     }
-    const work = this.tail.catch(() => {}).then(() => this.executeSettings(request));
-    this.tail = work; return work;
+    return this.serial(() => this.executeSettings(request));
   }
   private async executeSettings(request: ReturnType<typeof inferenceSettingsSchema.parse>) {
     if (request.operation === 'list') return (await this.store.all()).map(publicRecord);
+    if (request.operation === 'chatgptAdd') {
+      await this.chatgpt.permission();
+      const record: InferenceRecord = { id: this.newId(), revision: this.newId(), name: request.name, model: request.model, url: CHATGPT_INFERENCE_URL, headers: [], hostedGrants: [], chatgpt: {} };
+      await this.store.put(record); return publicRecord(record);
+    }
     if (request.operation === 'add') {
       if (!await this.hasHostAccess(inferenceURL(request.url).origin)) throw new ConnectionError('Grant browser access to the inference endpoint first.');
       const { operation: _, ...config } = request;
@@ -49,6 +56,20 @@ export class InferenceConnections {
     const record = await this.store.get(request.id);
     if (!record) throw new ConnectionError('Inference connection no longer exists.');
     if (request.operation === 'remove') { await this.store.remove(record.id); return null; }
+    if (request.operation.startsWith('chatgpt')) {
+      if (!record.chatgpt) throw new ConnectionError('This is not a ChatGPT connection.');
+      if (request.operation === 'chatgptStart') return this.chatgpt.start(record);
+      if (request.operation === 'chatgptPoll') {
+        const revision = record.revision, result = await this.chatgpt.poll(record);
+        if (record.revision !== revision) { this.epoch++; this.cancelActive(); }
+        return result;
+      }
+      if (request.operation === 'chatgptCancel') delete record.chatgpt.pending;
+      if (request.operation === 'chatgptDisconnect') record.chatgpt = {};
+      if (request.operation === 'chatgptModel') record.model = request.model;
+      record.revision = this.newId(); await this.store.put(record); return publicRecord(record);
+    }
+    if (request.operation !== 'grantOrigin' && request.operation !== 'revokeOrigin') throw new ConnectionError('Unknown inference settings operation.');
     const grant = { origin: trustedOrigin(request.origin), subpath: trustedSubpath(request.subpath) };
     record.hostedGrants = record.hostedGrants.filter(item => item.origin !== grant.origin || item.subpath !== grant.subpath);
     if (request.operation === 'grantOrigin') record.hostedGrants.push(grant);
@@ -73,7 +94,7 @@ export class InferenceConnections {
       if (job?.document === source.href && job.id === record.id) { job.controller.abort(); this.closeStream(request.requestId); }
       return null;
     }
-    const url = inferenceURL(record.url);
+    const url = inferenceURL(record.chatgpt ? CHATGPT_INFERENCE_URL : record.url);
     if (!await this.hasHostAccess(url.origin) || !await this.hasHostAccess(source.origin) || !current() || epoch !== this.epoch) throw new ConnectionError('Inference endpoint or page access changed.');
     if (this.cancelled.has(key)) throw new ConnectionError('Inference cancelled.');
     if (request.operation === 'inferenceRead') {
@@ -107,22 +128,36 @@ export class InferenceConnections {
     let body: Record<string, unknown>;
     if (utf8Bytes(request.body) > 1024 * 1024) throw new ConnectionError('Inference request exceeds 1 MiB.');
     try { body = JSON.parse(request.body); } catch { throw new ConnectionError('Invalid inference JSON.'); }
-    const allowed = request.operation === 'inferenceOpen'
+    const allowed = record.chatgpt ? ['input', 'instructions', 'tools', 'tool_choice', 'model', 'stream', 'store', 'reasoning', 'text', 'include', 'parallel_tool_calls', 'prompt_cache_key'] : request.operation === 'inferenceOpen'
       ? ['messages', 'tools', 'tool_choice', 'model', 'stream', 'stream_options', 'store', 'max_tokens', 'max_completion_tokens', 'temperature', 'top_p', 'presence_penalty', 'frequency_penalty', 'stop', 'reasoning_effort', 'parallel_tool_calls']
       : ['messages', 'tools'];
-    if (!body || Array.isArray(body) || typeof body !== 'object' || !Array.isArray(body.messages) || !body.messages.length || Object.keys(body).some(key => !allowed.includes(key))) throw new ConnectionError('Expected messages and optional tools or supported sampling options only.');
+    if (!body || Array.isArray(body) || typeof body !== 'object' || !Array.isArray(body[record.chatgpt ? 'input' : 'messages']) || !(body[record.chatgpt ? 'input' : 'messages'] as unknown[]).length || Object.keys(body).some(key => !allowed.includes(key))) throw new ConnectionError('Expected messages and optional tools or supported sampling options only.');
+    if (record.chatgpt && request.operation !== 'inferenceOpen') throw new ConnectionError('ChatGPT requires an updated hosted app with Responses streaming support.');
     const controller = new AbortController();
     let response: Response | undefined;
+    let secrets: string[] = [];
     this.active.set(request.requestId, { controller, document: source.href, id: record.id });
     try {
       const headers = new Headers();
-      for (const header of record.headers) headers.set(header.name, header.value);
+      if (record.chatgpt) {
+        const credentials = await this.serial(async () => {
+          const latest = await this.store.get(record.id);
+          if (!latest?.chatgpt || latest.revision !== request.revision || epoch !== this.epoch || controller.signal.aborted || !current()) throw new ConnectionError('ChatGPT access changed. Reconnect explicitly.');
+          return this.chatgpt.credentials(latest);
+        });
+        if (epoch !== this.epoch || controller.signal.aborted || !current() || !await this.hasHostAccess(source.origin) || !await this.hasHostAccess(url.origin)) throw new ConnectionError('Inference cancelled or access changed.');
+        headers.set('Authorization', `Bearer ${credentials.access}`); headers.set('ChatGPT-Account-Id', credentials.accountId);
+        secrets = [credentials.access, credentials.refresh];
+        headers.set('OpenAI-Beta', 'responses=experimental'); headers.set('originator', 'pi'); headers.set('Accept', 'text/event-stream');
+      } else for (const header of record.headers) headers.set(header.name, header.value);
       headers.set('Content-Type', 'application/json');
       const payload: Record<string, unknown> = { ...body, model: record.model, stream: request.operation === 'inferenceOpen' };
       if (request.operation === 'inferenceOpen') payload.store = false;
-      const tokenField = 'max_completion_tokens' in body ? 'max_completion_tokens' : 'max_tokens';
-      if ('max_completion_tokens' in body) delete payload.max_tokens;
-      payload[tokenField] = typeof body[tokenField] === 'number' ? Math.max(1, Math.min(4096, Math.floor(body[tokenField]))) : 4096;
+      if (!record.chatgpt) {
+        const tokenField = 'max_completion_tokens' in body ? 'max_completion_tokens' : 'max_tokens';
+        if ('max_completion_tokens' in body) delete payload.max_tokens;
+        payload[tokenField] = typeof body[tokenField] === 'number' ? Math.max(1, Math.min(4096, Math.floor(body[tokenField]))) : 4096;
+      }
       const signal = this.combine([controller.signal, this.timeout(90000)]);
       response = await this.fetcher(url.href, { method: 'POST', headers, body: JSON.stringify(payload), credentials: 'omit', redirect: 'error', cache: 'no-store', signal });
       if (request.operation === 'inferenceOpen') {
@@ -135,9 +170,15 @@ export class InferenceConnections {
         if (retryAfter && /^\d{1,5}$/.test(retryAfter)) exposed['retry-after'] = retryAfter;
         if (!response.ok) {
           await response.body?.cancel();
-          return { status, headers: { ...exposed, 'content-type': 'application/json' }, body: JSON.stringify({ error: { message: `Inference returned HTTP ${status}. Check the endpoint and configured headers.` } }) };
+          const message = record.chatgpt
+            ? status === 401 ? 'ChatGPT authorization was rejected. Reconnect in extension settings.'
+              : status === 429 ? 'ChatGPT usage or rate limit reached. Check your ChatGPT plan and limits.'
+                : status === 403 ? 'ChatGPT access is unavailable for this account or workspace. Check its permissions and plan.'
+                  : `ChatGPT returned HTTP ${status}. Retry later or check the connection in extension settings.`
+            : `Inference returned HTTP ${status}. Check the endpoint and configured headers.`;
+          return { status, headers: { ...exposed, 'content-type': 'application/json' }, body: JSON.stringify({ error: { message } }) };
         }
-        const reader = response.body?.getReader();
+        const reader = (record.chatgpt && response.body ? chatgptEventStream(response.body, secrets) : response.body)?.getReader();
         if (!reader) throw new ConnectionError('Inference response has no body.');
         const timer = setTimeout(() => { controller.abort(); this.closeStream(request.requestId); }, 90000);
         this.streams.set(request.requestId, { key, reader, decoder: new UTF8Decoder(), remainder: '', bytes: 0, sequence: 0, reading: false, timer });

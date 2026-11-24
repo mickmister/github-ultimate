@@ -7,8 +7,10 @@ tab-memory-only adapter have been superseded. The production source is
 
 ## Browser setup
 
-1. Install/reload the current browser extension. Configure an OpenAI-compatible
-   inference connection and S3 storage with reads/uploads enabled and overwrites
+1. Install/reload the current browser extension. Configure a **Connect to ChatGPT**
+   device-code connection or an existing OpenAI-compatible endpoint/header
+   inference connection ([setup and limitations](connections.md#connect-to-chatgpt-browser-inference)),
+   and S3 storage with reads/uploads enabled and overwrites
    disabled. Keep the same endpoint, bucket, prefix, region and addressing on each
    device; local connection UUIDs and credentials can differ.
 2. Grant both connections the Pi Web origin and a directory containing `/pi-web/`.
@@ -138,6 +140,18 @@ created by older builds and workspace-agent checkpoints are omitted from the cha
 sidebar. Immutable checkpoint objects remain internal history.
 
 ### Provider transport
+
+Chat uses **medium reasoning**. Modern streaming connections use Pi's
+`streamSimple` adapters, which translate the agent's thinking level into the
+provider's effort field (`reasoning_effort` for Chat Completions and
+`reasoning.effort` for ChatGPT Responses). The configured endpoint/model must
+support that effort setting. The legacy JSON compatibility transport remains
+text/tool-only and does not enable reasoning.
+
+Provider-returned thinking and its signatures are saved with each completed
+assistant message. Reload restores saved thinking from S3, but an unfinished
+stream (text or thinking) can be lost before its message-end checkpoint completes.
+This is not per-token persistence or recovery of hidden provider reasoning.
 
 Updated extension/native hosts advertise `http-stream-v1`. Pi's OpenAI-compatible
 provider adapter then owns request conversion, SSE decoding, thinking/text/tool

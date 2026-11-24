@@ -9,9 +9,9 @@ import { previewFixture } from './preview-fixture';
 import { BrowserChat, ChatStorage } from '../../hosted/pi-chat';
 import type { PiBridge } from '../../hosted/pi-transport';
 
-export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: string) {
+export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: string, thinking?: string) {
   const objects = new Map<string, { text: string; version: string }>();
-  const requests: { messages: { role: string; content: string }[] }[] = [];
+  const requests: { messages: { role: string; content: string }[]; reasoning_effort?: string }[] = [];
   let failSaves = false;
   const fetcher: typeof fetch = async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
@@ -31,6 +31,7 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
           emit({ tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ code: toolCode }) } }] });
           emit({}, 'tool_calls'); controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n')); controller.close(); return;
         }
+        if (thinking) emit({ reasoning_content: thinking });
         emit({ content: `Real Pi reply ${requests.length}: `, reasoning_content: null, tool_calls: null });
         await streamPause?.();
         emit({ content: 'Café 🌴' }); emit({}, 'stop');

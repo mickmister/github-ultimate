@@ -154,7 +154,7 @@ test('named Beads filters restore and delete durably', async ({ page }) => {
 test('SDK-shaped streamed tool calls render, execute, persist and restore', async ({ page }) => {
   let release!: () => void;
   const paused = new Promise<void>(resolve => { release = resolve; });
-  const remote = remoteFixture(() => paused, 'text("Tool result café")'), fixture = await nativeFixture(page, `${origin}${base}`, remote), errors: string[] = [];
+  const remote = remoteFixture(() => paused, 'text("Tool result café")', 'Checked the tool result.'), fixture = await nativeFixture(page, `${origin}${base}`, remote), errors: string[] = [];
   page.on('pageerror', error => errors.push(error.message));
   try {
     await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
@@ -164,10 +164,13 @@ test('SDK-shaped streamed tool calls render, execute, persist and restore', asyn
     const saved = [...remote.objects.values()].map(object => JSON.parse(object.text)).reverse().find(checkpoint => checkpoint.phase === 'idle');
     expect(saved.messages.find((message: { role: string }) => message.role === 'assistant').content[0]).toMatchObject({ type: 'toolCall', id: 'call-render', name: 'codemode', arguments: { code: 'text("Tool result café")' } });
     expect(saved.messages.some((message: { role: string; toolCallId?: string }) => message.role === 'toolResult' && message.toolCallId === 'call-render')).toBe(true);
+    expect(saved.messages.at(-1).content).toContainEqual({ type: 'thinking', thinking: 'Checked the tool result.', thinkingSignature: 'reasoning_content' });
+    expect(remote.requests.map(request => request.reasoning_effort)).toEqual(['medium', 'medium']);
     await page.getByRole('button', { name: /^codemode/ }).click(); await expect(page.getByRole('log')).toContainText('Tool result café');
     await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
     await page.reload(); await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible();
-    await expect(page.getByRole('log')).toContainText('Tool result café'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2'); expect(remote.requests).toHaveLength(2); expect(errors).toEqual([]);
+    await expect(page.getByRole('log')).toContainText('Tool result café'); await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
+    await expect(page.getByRole('log')).toContainText('Checked the tool result.'); expect(remote.requests).toHaveLength(2); expect(errors).toEqual([]);
   } finally { release(); fixture.dispose(); }
 });
 

@@ -7,7 +7,8 @@ import type { PiBridge } from './pi-transport';
 export function inferenceFetch(bridge: PiBridge, connection: PublicInferenceConnection): typeof fetch {
   return async (input, init) => {
     const request = new Request(input, init);
-    if (request.url !== 'https://extension.invalid/chat/completions' || request.method !== 'POST') throw Error('Unsupported inference transport request.');
+    const path = connection.protocol === 'openai-codex-responses' ? '/codex/responses' : '/chat/completions';
+    if (request.url !== `https://extension.invalid${path}` || request.method !== 'POST') throw Error('Unsupported inference transport request.');
     request.signal.throwIfAborted();
     const requestId = crypto.randomUUID();
     const identity = { id: connection.id, revision: connection.revision, requestId };
