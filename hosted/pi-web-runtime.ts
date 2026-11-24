@@ -19,7 +19,7 @@ window.piWebExtension = {
   // Git/nugs reads use the existing GitHub bridge, not the Pi-only native
   // transfer protocol. Credentials remain in the approved host connection.
   previews: (search: string) => loadPreviewSlots(bridgeRequest, search),
-  create: (inference: PublicInferenceConnection, storage: PublicS3Connection, workspace?: ChatWorkspace) => new BrowserChat(new ChatStorage(bridge, storage), inference, bridge, undefined, workspace),
+  create: (inference: PublicInferenceConnection, storage: PublicS3Connection, workspace?: ChatWorkspace) => new BrowserChat(new ChatStorage(bridge, storage), inference, bridge, undefined, workspace, bridgeRequest),
   move: async (storage: PublicS3Connection, sessionId: string, workspace: ChatWorkspace | null) => {
     const objects = new ChatStorage(bridge, storage);
     if (!(await objects.list()).chats.some(chat => chat.sessionId === sessionId)) throw Error('Conversation no longer exists in this storage.');
@@ -27,6 +27,6 @@ window.piWebExtension = {
   },
   restore: async (inference: PublicInferenceConnection, storage: PublicS3Connection, sessionId: string, reference: string) => {
     const objects = new ChatStorage(bridge, storage);
-    return new BrowserChat(objects, inference, bridge, { checkpoint: await objects.read(sessionId, reference), reference });
+    return new BrowserChat(objects, inference, bridge, { checkpoint: await objects.read(sessionId, reference), reference }, undefined, bridgeRequest);
   },
 };

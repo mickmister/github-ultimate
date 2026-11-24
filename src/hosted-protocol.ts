@@ -10,6 +10,7 @@ import { documentCacheSchema } from './document-cache';
 import { actionsReadSchema } from './actions-protocol';
 import { agentSnapshotSchema } from './agent-snapshot';
 import { agentGraphqlSchema, agentScope } from './agent-graphql';
+import { workflowHostedSchemas } from './workflow-interface';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -32,6 +33,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   reviewWriteSchema,
   reviewProgressSchema,
   actionsReadSchema,
+  ...workflowHostedSchemas,
   ...s3HostedSchemas,
   ...inferenceHostedSchemas,
   z.object({ operation: z.literal('kvSnapshot') }).strict(),

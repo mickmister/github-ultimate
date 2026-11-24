@@ -57,6 +57,22 @@ test('chat durably journals the user before inference and restores with new devi
   expect((await otherStore.read(saved.session_id, other.snapshot().reference!)).messages).toHaveLength(4);
 });
 
+test('restored unresolved codemode calls become uncertainty observations without replay', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), chat = new BrowserChat(store, f.inference, f.bridge);
+  await chat.send('Start');
+  const checkpoint = await store.read(chat.snapshot().sessionId!, chat.snapshot().reference!);
+  const assistant = checkpoint.messages.find(message => message.role === 'assistant')!;
+  if (assistant.role !== 'assistant') throw Error('Assistant fixture missing');
+  checkpoint.phase = 'pending'; checkpoint.messages.push({ ...assistant, stopReason: 'toolUse', content: [{ type: 'toolCall', id: 'lost-call', name: 'codemode', arguments: { code: 'await tools.workflow_start({})' } }] });
+  const restored = new BrowserChat(store, f.inference, f.bridge, { checkpoint, reference: chat.snapshot().reference! });
+  expect(restored.snapshot().phase).toBe('interrupted');
+  expect(restored.snapshot().messages.at(-1)).toMatchObject({ role: 'toolResult', toolCallId: 'lost-call', isError: true });
+  expect(JSON.stringify(restored.snapshot().messages.at(-1))).toContain('Do not replay');
+  expect(f.requests).toHaveLength(1);
+  await restored.retrySave();
+  expect((await store.read(checkpoint.session_id, restored.snapshot().reference!)).messages.at(-1)?.role).toBe('toolResult');
+});
+
 test('independent device continuations preserve separate branches and exact ancestry', async () => {
   const f = fixture(), store = new ChatStorage(f.bridge, f.storage), original = new BrowserChat(store, f.inference, f.bridge);
   await original.retrySave(); await original.send('Start');

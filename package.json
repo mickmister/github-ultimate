@@ -43,6 +43,7 @@
     "test": "vitest run",
     "test:browser": "playwright test",
     "test:tsrs": "playwright test --config playwright.tsrs.config.ts",
+    "test:workflows": "playwright test --config playwright.workflows.config.ts",
     "test:runs": "playwright test --config playwright.runs.config.ts",
     "webapp:dev": "pnpm --dir webapp dev",
     "webapp:build": "pnpm --dir webapp build",

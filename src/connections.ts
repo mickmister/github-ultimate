@@ -18,6 +18,9 @@ import { nativeReadConcurrency, nativeReadResponseBytes } from './git-read-limit
 import { documentCache, reviewCachePinsKey } from './document-cache';
 import type { VdConnections } from './vd-connections';
 import { actionPath, actionResult } from './actions-protocol';
+import { developmentHost, workflowRunName, type WorkflowDelivery } from './workflow-interface';
+import { sha256 } from '@noble/hashes/sha2.js';
+import { bytesToHex } from '@noble/hashes/utils.js';
 
 const identifier = z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/);
 const requestSchema = z.discriminatedUnion('operation', [
@@ -41,6 +44,7 @@ export type ConnectionRecord = {
   hostedGrants?: HostedGrant[];
   recentNavigation?: { source: string; updatedAt: number; navigation: WorkspaceNavigation }[];
   reviewDeliveries?: Record<string, ReviewReceipt>;
+  workflowDeliveries?: Record<string, WorkflowDelivery>;
   apiCooldown?: ApiCooldown;
   cacheGeneration?: number;
 };
@@ -114,6 +118,7 @@ export class Connections {
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
       if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'agentGraphql', 'agentSnapshot', 'agentTree', 'agentBlob', 's3Checkpoint', 's3Versions', 's3AllowMissing', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'reviewQueue', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'actionsRead', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
+      if (request.operation === 'workflowCatalog') return { interfaceVersion: 1, workflows: [{ id: 'development', ...developmentHost, requestVersion: 2, method: 'implement-review-test', maxCycles: 4 }], connections: approved.filter(record => record.tokens && record.installation && record.user).map(({ id, name, user, installation, workflowDeliveries }) => ({ id, name, userId: user!.id, installationId: installation!.id, executions: Object.values(workflowDeliveries ?? {}).filter(value => value.workspace === request.workspace && value.userId === user!.id && value.installationId === installation!.id) })) };
       if (request.operation === 'vdConnections') return this.vd?.publicConnections(documentURL) ?? [];
       const navigationSource = source.origin + source.pathname;
       if (request.operation === 'forgetNavigation') {
@@ -142,6 +147,50 @@ export class Connections {
       if (!('id' in request)) throw new ConnectionError('Unsupported hosted operation.');
       const record = approved.find(record => record.id === request.id);
       if (!record) throw new ConnectionError('This connection is not approved for the original document path.');
+      if (request.operation === 'workflowStart' || request.operation === 'workflowStatus') {
+        if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The workflow GitHub user or installation changed.');
+        const installation = (await this.installations(record)).find(item => item.id === request.installationId);
+        const repo = (await this.repositories(record)).find(item => item.full_name.toLowerCase() === developmentHost.repository.toLowerCase());
+        if (!repo || !installation || !['read', 'write'].includes(installation.permissions.actions ?? '')) throw new ConnectionError('Actions access to the configured workflow repository is required.');
+        const deliveries = record.workflowDeliveries ?? {};
+        if (request.operation === 'workflowStart') {
+          if (installation.permissions.actions !== 'write') throw new ConnectionError('Starting a workflow requires Actions write permission.');
+          const identity = JSON.stringify([request.userId, request.installationId, request.workspace, request.request.thread, request.request.process]);
+          const digest = bytesToHex(sha256(new TextEncoder().encode(JSON.stringify([request.workspace, request.request, request.allowSourceEffects]))));
+          const previous = deliveries[identity];
+          if (previous) {
+            if (previous.digest !== digest) throw new ConnectionError('Workflow identity already has different inputs. Inspect its existing execution.');
+            return previous;
+          }
+          if (Object.keys(deliveries).length >= 200) throw new ConnectionError('Workflow receipt capacity reached. Existing uncertain receipts must be retained.');
+          const head = z.object({ sha: z.string().regex(/^[a-f0-9]{40}$/) }).parse(await this.api(record, `/repos/${repo.full_name}/commits/${encodeURIComponent(developmentHost.ref)}`, maxMetadataBytes, 'none'));
+          const delivery: WorkflowDelivery = { executionReference: this.newId(), digest, workspace: request.workspace, thread: request.request.thread, process: request.request.process, engineCommit: head.sha, userId: request.userId, installationId: request.installationId, attemptedAt: new Date(this.now()).toISOString(), state: 'dispatch-unknown' };
+          if (!isCurrent()) throw new ConnectionError('Connection access changed before dispatch.');
+          record.workflowDeliveries = { ...deliveries, [identity]: delivery };
+          await this.store.put(record); // Durable intent BEFORE POST; restart never retries it.
+          try {
+            await this.api(record, `/repos/${repo.full_name}/actions/workflows/${developmentHost.workflow}/dispatches`, maxMetadataBytes, 'none', { method: 'POST', body: { ref: developmentHost.ref, inputs: { workspace: request.workspace, request: JSON.stringify(request.request), 'allow-source-effects': 'true', 'engine-commit': head.sha, operation: 'run' } }, isCurrent });
+            record.workflowDeliveries[identity] = { ...delivery, state: 'dispatched' };
+            await this.store.put(record);
+            return record.workflowDeliveries[identity];
+          } catch { return delivery; } // The POST or receipt write may have succeeded. Never replay.
+        }
+        const entry = Object.entries(deliveries).find(([, value]) => value.executionReference === request.executionReference);
+        if (!entry || entry[1].userId !== request.userId || entry[1].installationId !== request.installationId) throw new ConnectionError('No execution receipt in this authenticated connection. Reconnect the original host; do not start replacement work.');
+        const [key, delivery] = entry;
+        const runs: any[] = [];
+        if (delivery.runId) runs.push(await this.api(record, `/repos/${repo.full_name}/actions/runs/${delivery.runId}`, maxMetadataBytes, 'none'));
+        else for (let page = 1; page <= 5; page++) {
+          const listing = z.object({ workflow_runs: z.array(z.unknown()).max(100) }).parse(await this.api(record, `/repos/${repo.full_name}/actions/workflows/${developmentHost.workflow}/runs?branch=${encodeURIComponent(developmentHost.ref)}&event=workflow_dispatch&per_page=100&page=${page}`, maxMetadataBytes, 'none'));
+          runs.push(...listing.workflow_runs);
+          if (listing.workflow_runs.length < 100) break;
+        }
+        const matches = runs.filter(run => run.display_title === workflowRunName(delivery) && run.event === 'workflow_dispatch' && run.head_branch === developmentHost.ref && run.actor?.id === delivery.userId && run.head_sha === delivery.engineCommit && Date.parse(run.created_at) >= Date.parse(delivery.attemptedAt) - 60000);
+        if (matches.length !== 1) return { ...delivery, executionState: matches.length ? 'ambiguous' : 'unconfirmed', message: 'No unique exact run association. Inspect; do not redispatch or allocate a replacement process.' };
+        const run = z.object({ id: z.number().int().positive(), run_attempt: z.number().int().positive(), status: z.string().max(100), conclusion: z.string().max(100).nullable() }).parse(matches[0]);
+        record.workflowDeliveries = { ...deliveries, [key]: { ...delivery, runId: run.id } }; await this.store.put(record);
+        return { ...record.workflowDeliveries[key], executionState: run.status, conclusion: run.conclusion, attempt: run.run_attempt, runUrl: `https://github.com/${repo.full_name}/actions/runs/${run.id}`, reportName: `threads/${delivery.thread}/development/${delivery.process}.md`, candidateAcceptance: 'unknown-until-bound-report' };
+      }
       if (request.operation === 'agentGraphql') {
         if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed.');
         let body: ReturnType<typeof readOnlyGraphql>;
