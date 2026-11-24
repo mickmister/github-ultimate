@@ -187,7 +187,7 @@ export class BrowserChat {
     if (restored && !this.checkpoint.workflow_intents?.length && !this.checkpoint.workflow_executions?.length && (reconcileCalls(this.checkpoint.messages).length > this.checkpoint.messages.length || this.checkpoint.messages.some(message => message.role === 'toolResult' && message.content.some(block => block.text.includes('This tool call was interrupted; its effects are unknown.'))))) this.checkpoint.legacy_tool_uncertainty = true;
     // Interrupted tool calls are observations of uncertainty, never replayable work.
     this.turnWorkspace = initialWorkspace;
-    this.agent = new Agent({ initialState: { systemPrompt: chatPrompt, model: piModel(inference), messages: reconcileCalls(this.checkpoint.messages), thinkingLevel: 'off', tools: this.tools() }, streamFn: inferenceStream(bridge, inference), toolExecution: 'sequential',
+    this.agent = new Agent({ initialState: { systemPrompt: chatPrompt, model: piModel(inference), messages: reconcileCalls(this.checkpoint.messages), thinkingLevel: 'medium', tools: this.tools() }, streamFn: inferenceStream(bridge, inference), toolExecution: 'sequential',
       prepareRequest: async () => { this.guard(); this.enforce(() => this.budget.request()); return undefined; },
       beforeToolCall: async () => { this.guard(); this.enforce(() => this.budget.tool()); return undefined; },
     });

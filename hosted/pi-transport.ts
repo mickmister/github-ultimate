@@ -1,8 +1,8 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Context, Message, Model, Tool } from '@earendil-works/pi-ai';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream';
-import { stream as providerStream } from '@earendil-works/pi-ai/api/openai-completions';
-import { stream as codexStream } from '@earendil-works/pi-ai/api/openai-codex-responses';
+import { streamSimple as providerStream } from '@earendil-works/pi-ai/api/openai-completions';
+import { streamSimple as codexStream } from '@earendil-works/pi-ai/api/openai-codex-responses';
 import { z } from 'zod';
 import type { HostedRequest } from '../src/hosted-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
@@ -15,7 +15,7 @@ declare const PI_LEGACY_POC: boolean | undefined;
 export type PiBridge = <T>(request: HostedRequest, timeoutMs?: number) => Promise<T>;
 export const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
 export function piModel(connection: PublicInferenceConnection): Model<'openai-completions' | 'openai-codex-responses'> {
-  return { id: connection.model, name: connection.model, api: connection.protocol ?? 'openai-completions', provider: 'extension', baseUrl: 'https://extension.invalid', reasoning: connection.provider === 'chatgpt', input: ['text'], contextWindow: 32768, maxTokens: 4096, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+  return { id: connection.model, name: connection.model, api: connection.protocol ?? 'openai-completions', provider: 'extension', baseUrl: 'https://extension.invalid', reasoning: connection.transport === 'http-stream-v1', input: ['text'], contextWindow: 32768, maxTokens: 4096, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
 }
 function text(content: Message['content']): string {
   if (typeof content === 'string') return content;

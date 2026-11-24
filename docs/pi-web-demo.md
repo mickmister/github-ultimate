@@ -141,6 +141,18 @@ sidebar. Immutable checkpoint objects remain internal history.
 
 ### Provider transport
 
+Chat uses **medium reasoning**. Modern streaming connections use Pi's
+`streamSimple` adapters, which translate the agent's thinking level into the
+provider's effort field (`reasoning_effort` for Chat Completions and
+`reasoning.effort` for ChatGPT Responses). The configured endpoint/model must
+support that effort setting. The legacy JSON compatibility transport remains
+text/tool-only and does not enable reasoning.
+
+Provider-returned thinking and its signatures are saved with each completed
+assistant message. Reload restores saved thinking from S3, but an unfinished
+stream (text or thinking) can be lost before its message-end checkpoint completes.
+This is not per-token persistence or recovery of hidden provider reasoning.
+
 Updated extension/native hosts advertise `http-stream-v1`. Pi's OpenAI-compatible
 provider adapter then owns request conversion, SSE decoding, thinking/text/tool
 deltas and usage accounting through a custom `fetch` (`hosted/pi-fetch.ts`).

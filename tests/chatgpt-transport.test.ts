@@ -48,7 +48,8 @@ describe('ChatGPT Pi transport', () => {
     expect(agent.state.messages.at(-1)).not.toHaveProperty('errorMessage');
     expect(agent.state.messages.at(-1)).toMatchObject({ stopReason: 'stop', api: 'openai-codex-responses', content: [{ type: 'text', text: 'Connected 🌴' }], usage: { input: 12, output: 3 } });
     expect(agent.state.messages.map(m => m.role)).toEqual(['system', 'user', 'assistant', 'toolResult', 'assistant']);
-    expect(payloads[0]).toMatchObject({ store: false, stream: true, model: 'gpt-6.1-sol' });
+    expect(payloads[0]).toMatchObject({ store: false, stream: true, model: 'gpt-6.1-sol', reasoning: { effort: 'medium' } });
+    expect(payloads[1]).toMatchObject({ reasoning: { effort: 'medium' } });
     expect(payloads[0]).not.toHaveProperty('max_tokens'); expect(payloads[0]).not.toHaveProperty('max_output_tokens');
     expect(payloads[1].input).toContainEqual(expect.objectContaining({ type: 'function_call_output', call_id: 'call_1', output: '{"headOid":"head"}' }));
     for (const [url, init] of fetcher.mock.calls) {
