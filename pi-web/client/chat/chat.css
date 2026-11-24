@@ -106,3 +106,8 @@
 .chat-phone .chat-icon-button { width: 44px; height: 44px; min-height: 44px; }
 .chat-phone .chat-compact-tools { flex-wrap: wrap; }
 .chat-phone .chat-compact-tools .chat-scope { font-size: 11px; }
+.chat-render-error { max-width: 720px; margin: 24px auto; padding: 24px; color: var(--text); background: var(--bg-panel); border: 1px solid var(--border); border-radius: 12px; overflow-wrap: anywhere; }
+.chat-render-error h2 { font-size: 18px; margin-bottom: 12px; }
+.chat-render-error p, .chat-render-error details { margin: 12px 0; }
+.chat-render-error pre { white-space: pre-wrap; font-size: 12px; }
+.chat-render-error button, .chat-render-error a { display: inline-block; margin: 8px 12px 0 0; padding: 8px 12px; border: 1px solid var(--border); border-radius: 7px; color: inherit; background: var(--bg-hover); cursor: pointer; }

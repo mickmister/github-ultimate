@@ -24,6 +24,18 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
 
+test('render boundary contains a transcript failure and retries without losing the composer', async ({ page }) => {
+  await page.goto(`${origin}/iframe.html?id=pi-web-error-recovery--transcript&viewMode=story`);
+  const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Keep my unsent draft');
+  await page.getByRole('button', { name: 'Break renderer', exact: true }).click();
+  await expect(page.getByRole('alert', { name: 'conversation display error' })).toBeVisible();
+  await expect(input).toHaveValue('Keep my unsent draft'); await input.fill('Still usable after failure');
+  await page.getByRole('button', { name: 'Repair renderer', exact: true }).click();
+  await page.getByRole('button', { name: 'Retry display', exact: true }).click();
+  await expect(page.getByText('Conversation is visible.', { exact: true })).toBeVisible();
+  await expect(input).toHaveValue('Still usable after failure'); await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
 test('separate Storybook manager opens the production chat story', async ({ page }) => {
   await page.goto(`${origin}/?path=/story/pi-web-chat--conversation`);
   await expect(page.frameLocator('#storybook-preview-iframe').getByRole('textbox', { name: 'Message', exact: true })).toBeVisible();

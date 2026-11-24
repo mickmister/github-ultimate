@@ -30,6 +30,45 @@ test.beforeAll(async () => {
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
 
+test('SDK-shaped streamed tool calls render, execute, persist and restore', async ({ page }) => {
+  let release!: () => void;
+  const paused = new Promise<void>(resolve => { release = resolve; });
+  const remote = remoteFixture(() => paused, 'text("Tool result café")'), fixture = await nativeFixture(page, `${origin}${base}`, remote), errors: string[] = [];
+  page.on('pageerror', error => errors.push(error.message));
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Run a tool'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible(); release();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    const saved = [...remote.objects.values()].map(object => JSON.parse(object.text)).reverse().find(checkpoint => checkpoint.phase === 'idle');
+    expect(saved.messages.find((message: { role: string }) => message.role === 'assistant').content[0]).toMatchObject({ type: 'toolCall', id: 'call-render', name: 'codemode', arguments: { code: 'text("Tool result café")' } });
+    expect(saved.messages.some((message: { role: string; toolCallId?: string }) => message.role === 'toolResult' && message.toolCallId === 'call-render')).toBe(true);
+    await page.getByRole('button', { name: /^codemode/ }).click(); await expect(page.getByRole('log')).toContainText('Tool result café');
+    await page.reload(); await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible();
+    await expect(page.getByRole('log')).toContainText('Tool result café'); expect(remote.requests).toHaveLength(1); expect(errors).toEqual([]);
+  } finally { release(); fixture.dispose(); }
+});
+
+test('published JavaScript links to usable first-party source maps', async ({ page }) => {
+  await page.goto(`${origin}${base}`);
+  const urls = await page.locator('script[src]').evaluateAll(scripts => scripts.map(script => (script as HTMLScriptElement).src));
+  let checked = false;
+  for (const url of urls) {
+    const script = await (await page.request.get(url)).text();
+    if (!script.includes('Retry display')) continue;
+    const link = /sourceMappingURL=([^\s]+)/.exec(script)?.[1]; expect(link).toBeTruthy();
+    const response = await page.request.get(new URL(link!, url).href); expect(response.ok()).toBe(true);
+    const map = await response.json(); expect(map.version).toBe(3); expect(map.mappings.length).toBeGreaterThan(0);
+    expect(map.sources.some((source: string) => source.includes('ErrorBoundary.view.tsx'))).toBe(true);
+    expect(map.sourcesContent.some((source: string | null) => source?.includes('componentDidCatch'))).toBe(true); checked = true;
+  }
+  expect(checked).toBe(true);
+  const runtime = await (await page.request.get(`${origin}${base}extension-runtime.js`)).text();
+  const link = /sourceMappingURL=([^\s]+)/.exec(runtime)?.[1]; expect(link).toBeTruthy();
+  const response = await page.request.get(new URL(link!, `${origin}${base}extension-runtime.js`).href); expect(response.ok()).toBe(true);
+  expect((await response.json()).sources.some((source: string) => source.includes('pi-chat.ts'))).toBe(true);
+});
+
 for (const width of [390, 1440]) {
 test(`${width}px: Alohak workspace tabs, discreet sidebar and modal settings retain the draft`, async ({ page }) => {
   const fixture = await nativeFixture(page, `${origin}${base}`, remoteFixture());

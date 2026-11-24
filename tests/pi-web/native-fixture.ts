@@ -9,7 +9,7 @@ import { previewFixture } from './preview-fixture';
 import { BrowserChat, ChatStorage } from '../../hosted/pi-chat';
 import type { PiBridge } from '../../hosted/pi-transport';
 
-export function remoteFixture(streamPause?: () => Promise<void>) {
+export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: string) {
   const objects = new Map<string, { text: string; version: string }>();
   const requests: { messages: { role: string; content: string }[] }[] = [];
   let failSaves = false;
@@ -23,6 +23,12 @@ export function remoteFixture(streamPause?: () => Promise<void>) {
       const content = `Real Pi reply ${requests.length}: Café 🌴`;
       if (body.stream) return new Response(new ReadableStream({ async start(controller) {
         const emit = (delta: unknown, finish_reason: string | null = null) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason }] })}\n\n`));
+        if (toolCode !== undefined) {
+          emit({ tool_calls: [{ index: 0, id: 'call-render', type: 'function', function: { name: 'codemode', arguments: '' } }] });
+          await streamPause?.();
+          emit({ tool_calls: [{ index: 0, function: { arguments: JSON.stringify({ code: toolCode }) } }] });
+          emit({}, 'tool_calls'); controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n')); controller.close(); return;
+        }
         emit({ content: `Real Pi reply ${requests.length}: `, reasoning_content: null, tool_calls: null });
         await streamPause?.();
         emit({ content: 'Café 🌴' }); emit({}, 'stop');

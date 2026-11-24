@@ -183,6 +183,25 @@ scratch workspace; there is no ambient shell or unrestricted network.
 
 ## Checks
 
+### Render recovery and production debugging
+
+The runtime's Pi SDK tool blocks use `id`, `name`, and `arguments`. A display-only
+adapter maps them to the imported renderer's `toolCallId`, `toolName`, and `input`;
+canonical S3 checkpoints retain the SDK format. Partial streamed calls are safe to
+render before their name/arguments have arrived.
+
+A transcript ErrorBoundary contains renderer failures without unmounting the chat
+hook/composer. **Retry display** retries rendering only, never inference/tools.
+An outer application ErrorBoundary offers explicit reload/home navigation for
+larger failures and shows the build/stack. Reload restores only saved state.
+
+Production UI chunks and the extension runtime have linked source maps. Enable
+JavaScript source maps in browser DevTools to inspect original first-party UI
+source/lines. UI maps embed application source; dependency-only maps are compact
+empty maps, and mixed maps omit dependency source text. Runtime maps retain source
+paths/mappings without embedded source text. Maps count toward the unchanged
+12 MiB Pi Web budget. No conversations or credentials are included in build maps.
+
 ### Pi Web Storybook
 
 Pi Web has its own React/Vite Storybook at `pi-web/client/.storybook/`, sharing
