@@ -7,9 +7,9 @@ import { randomUUID } from 'node:crypto';
 
 const workspaceId = '46e5772c-a538-498f-b3ae-4d7073dddc39', sessionId = '8d4c83eb-bfd9-4321-8bb4-976f1bac24c5';
 const page = 'https://review.test/app/', repository = 'owner/storage';
-const draft = { name: 'My VD', origin: 'https://vd.test', repository, workspace: 'workspace-a', workspaceId, headers: [{ name: 'Authorization', mode: 'secret' as const, value: 'Bearer very-private-token' }] };
+const draft = { name: 'My VD', origin: 'https://vd.test', headers: [{ name: 'Authorization', mode: 'secret' as const, value: 'Bearer very-private-token' }] };
 const record: VdRecord = { ...draft, id: randomUUID(), revision: randomUUID(), hostedGrants: [{ origin: 'https://review.test', subpath: '/app/' }] };
-const review = parseReviewRequest(JSON.stringify({ kind: 'review-request', schema_version: 1, request_id: 'request', revision_id: 'revision', workspace: draft.workspace, bead_id: 'task-1', thread: 'threads/task-1', title: 'Review', purpose: 'Discuss', question: 'What next?', status: 'published', change_kind: 'proposal', response_effect: { kind: 'vk-session', workspace_id: workspaceId, session_id: sessionId }, members: [{ kind: 'document', id: 'doc', label: 'Plan', target: { resource: 'threads/task-1/plan.md', version_kind: 'git-blob', version: 'a'.repeat(40), snapshot: 'b'.repeat(40) } }] }));
+const review = parseReviewRequest(JSON.stringify({ kind: 'review-request', schema_version: 1, request_id: 'request', revision_id: 'revision', workspace: 'workspace-a', bead_id: 'task-1', thread: 'threads/task-1', title: 'Review', purpose: 'Discuss', question: 'What next?', status: 'published', change_kind: 'proposal', response_effect: { kind: 'vk-session', workspace_id: workspaceId, session_id: sessionId }, members: [{ kind: 'document', id: 'doc', label: 'Plan', target: { resource: 'threads/task-1/plan.md', version_kind: 'git-blob', version: 'a'.repeat(40), snapshot: 'b'.repeat(40) } }] }));
 const receipt: ReviewReceipt = { resource: 'review-requests/request/responses/response.json', version: 'c'.repeat(40), snapshot: 'd'.repeat(40), reviewer: 'github:1' };
 class MemoryStore implements VdStore {
   records = new Map([[record.id, structuredClone(record)]]);
@@ -92,6 +92,67 @@ test('process metadata selects Actions rather than a second VK effect', async ()
   const f = fixture();
   await f.broker().deliver(page, repository, receipt, { ...review, process: { kind: 'qrspi', id: 'process', workspace_ref: 'ws', thread_id: review.thread, config: (review.members[0] as any).target } }, () => true);
   expect(f.fetcher).not.toHaveBeenCalled();
+});
+test('one instance connection serves different review workspaces, storage repositories and sessions without reconfiguration', async () => {
+  const destinations = [{ workspace: workspaceId, session: sessionId }, { workspace: randomUUID(), session: randomUUID() }];
+  const store = new MemoryStore(), posts: string[] = [];
+  const vd = new VdConnections(store, async (url, init) => {
+    const path = String(url), json = (data: unknown) => Response.json({ success: true, data });
+    if (path.endsWith('/api/workspaces')) return json(destinations.map(item => ({ id: item.workspace })));
+    const destination = destinations.find(item => path.includes(item.session))!;
+    if (init?.method === 'POST') { posts.push(path); return json({ id: randomUUID(), session_id: destination.session }); }
+    if (path.endsWith('/queue')) return json({ status: 'empty' });
+    if (path.includes('conversation-preview')) return json({ session_id: destination.session, has_running_turn: false });
+    return json({ id: destination.session, workspace_id: destination.workspace, executor: 'OPENCODE' });
+  });
+  const before = await store.all();
+  for (const [index, destination] of destinations.entries()) {
+    const request = { ...review, workspace: `storage-workspace-${index}`, response_effect: { kind: 'vk-session' as const, workspace_id: destination.workspace, session_id: destination.session } };
+    const result = await vd.deliver(page, `owner/storage-${index}`, receipt, request, () => true);
+    expect(result.dispatch?.state).toBe('dispatched');
+  }
+  expect(posts).toEqual(destinations.map(item => `https://vd.test/api/sessions/${item.session}/follow-up`));
+  expect(await store.all()).toEqual(before);
+});
+test('legacy saved bindings do not constrain an instance or leak into public settings; saved headers and grants survive editing', async () => {
+  const f = fixture();
+  f.store.records.set(record.id, { ...record, repository: 'old/storage', workspace: 'old-workspace', workspaceId: randomUUID() } as VdRecord);
+  const vd = f.broker();
+  const listed = await vd.handle({ operation: 'list' }) as any[];
+  expect(listed[0]).not.toHaveProperty('workspaceId'); expect(listed[0]).not.toHaveProperty('workspace'); expect(listed[0]).not.toHaveProperty('repository');
+  expect((await vd.deliver(page, repository, receipt, review, () => true)).dispatch?.state).toBe('dispatched');
+  await vd.handle({ operation: 'save', draft: { ...draft, id: record.id, headers: [{ name: 'Authorization', mode: 'secret' }] } });
+  expect(await f.store.get(record.id)).toMatchObject({ headers: [{ name: 'authorization', mode: 'secret', value: draft.headers[0].value }], hostedGrants: record.hostedGrants });
+  expect(await f.store.get(record.id)).not.toHaveProperty('workspaceId');
+});
+test('test accepts an instance with no workspaces yet', async () => {
+  const vd = new VdConnections(new MemoryStore(), async () => Response.json({ success: true, data: [] }));
+  expect(await vd.handle({ operation: 'test', draft })).toMatchObject({ message: expect.stringContaining('0 workspace(s) visible') });
+});
+test('an accessible workspace does not authorize a session belonging to another workspace', async () => {
+  const f = fixture();
+  const vd = new VdConnections(f.store, async (url, init) => String(url).endsWith(`/api/sessions/${sessionId}`)
+    ? Response.json({ success: true, data: { id: sessionId, workspace_id: randomUUID(), executor: 'OPENCODE' } })
+    : f.fetcher(url, init));
+  const result = await vd.deliver(page, repository, receipt, review, () => true);
+  expect(result.dispatch).toMatchObject({ state: 'failed', message: expect.stringContaining('review request workspace') });
+  expect(f.posts).toHaveLength(0);
+});
+test('discovery selects the instance containing the requested workspace, and never guesses when another instance is unavailable', async () => {
+  const f = fixture(), second = { ...record, id: randomUUID(), origin: 'https://other.test' };
+  f.store.records.set(second.id, second);
+  let fail = false;
+  const vd = new VdConnections(f.store, async (url, init) => {
+    if (String(url).startsWith(second.origin)) {
+      if (fail) throw new Error('offline');
+      return Response.json({ success: true, data: [{ id: randomUUID() }] });
+    }
+    return f.fetcher(url, init);
+  });
+  expect((await vd.deliver(page, repository, receipt, review, () => true)).dispatch?.state).toBe('dispatched');
+  fail = true;
+  expect((await vd.deliver(page, repository, { ...receipt, version: 'e'.repeat(40) }, review, () => true)).dispatch?.state).toBe('pending');
+  expect(f.posts).toHaveLength(1);
 });
 test('test resolves unchanged secrets and unsaved edits without persistence; origin changes require new headers', async () => {
   const f = fixture(), vd = f.broker();

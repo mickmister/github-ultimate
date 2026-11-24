@@ -24,9 +24,7 @@ test('packaged VD settings test unsaved headers, save securely, preserve edits a
     let page = await launch();
     await page.getByLabel('VD connection name').fill('Home VD');
     await page.getByLabel('VD origin', { exact: true }).fill('https://vd.example.test');
-    await page.getByLabel('Storage repository', { exact: true }).fill('owner/storage');
-    await page.getByLabel('Nugs workspace handle').fill('workspace-a');
-    await page.getByLabel('VK workspace UUID').fill('46e5772c-a538-498f-b3ae-4d7073dddc39');
+    await expect(page.locator('#vd-add input[name="repository"], #vd-add input[name="workspace"], #vd-add input[name="workspaceId"]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Add VD header', exact: true }).click();
     await page.getByLabel('Header name', { exact: true }).fill('Authorization');
     await page.getByLabel('Replacement value', { exact: false }).fill('Bearer vd-private-test-token');
@@ -35,6 +33,7 @@ test('packaged VD settings test unsaved headers, save securely, preserve edits a
     await expect(page.getByRole('article', { name: 'Home VD' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Save VD connection', exact: true }).click();
     const card = page.getByRole('article', { name: 'Home VD' }); await expect(card).toContainText('Secret configured');
+    await expect(card).toContainText('All accessible workspaces');
     await expect(page.getByLabel('Replacement value', { exact: false })).toHaveCount(0);
     expect(await page.evaluate(async () => JSON.stringify(await chrome.storage.local.get(null)))).not.toContain('vd-private');
     await card.getByRole('button', { name: 'Edit VD connection' }).click();
