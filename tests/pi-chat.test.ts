@@ -112,3 +112,41 @@ test('same-millisecond checkpoint keys do not select a pending parent over its s
   await chat.send('Same timestamp');
   expect((await store.list()).chats).toMatchObject([{ reference: chat.snapshot().reference, messageCount: 2 }]);
 });
+
+test('workspace association is durable across devices without rewriting transcripts or pinned branches', async () => {
+  const f = fixture(1), store = new ChatStorage(f.bridge, f.storage), workspace = { repository: 'owner/storage', workspace: 'existing-nugs-workspace' };
+  const chat = new BrowserChat(store, f.inference, f.bridge, undefined, workspace);
+  expect(f.objects.size).toBe(0);
+  await chat.send('Workspace conversation');
+  const reference = chat.snapshot().reference!, sessionId = chat.snapshot().sessionId!, checkpoint = await store.read(sessionId, reference);
+  const otherStore = new ChatStorage(f.bridge, { ...f.storage, id: crypto.randomUUID(), revision: crypto.randomUUID() });
+  expect((await otherStore.list()).chats).toMatchObject([{ sessionId, reference, workspace }]);
+  const transcriptObjects = [...f.objects.entries()].filter(([, bytes]) => JSON.parse(atob(bytes)).profile === 'pi-web-chat-1');
+  await otherStore.assign(sessionId, { ...workspace, workspace: 'another-workspace' });
+  const stale = new BrowserChat(store, f.inference, f.bridge, { checkpoint, reference }); await stale.send('Old device continues');
+  expect((await store.list()).chats).toMatchObject([{ sessionId, workspace: { ...workspace, workspace: 'another-workspace' }, messageCount: 4 }]);
+  expect(await store.read(sessionId, reference)).toEqual(checkpoint);
+  for (const [key, bytes] of transcriptObjects) expect(f.objects.get(key)).toBe(bytes);
+  await store.assign(sessionId, null);
+  const rows = (await otherStore.list()).chats; expect(rows).toHaveLength(1); expect(rows[0].workspace).toBeUndefined();
+});
+
+test('workspace moves sharing one broker timestamp consistently select the latest descendant across pages', async () => {
+  const f = fixture(1, true), store = new ChatStorage(f.bridge, f.storage), chat = new BrowserChat(store, f.inference, f.bridge);
+  await chat.send('Existing unassigned conversation');
+  const id = chat.snapshot().sessionId!;
+  expect((await store.list()).chats[0].workspace).toBeUndefined();
+  for (const workspace of ['first', 'second', 'third', 'fourth']) await store.assign(id, { repository: 'owner/storage', workspace });
+  expect((await store.list()).chats).toMatchObject([{ sessionId: id, workspace: { repository: 'owner/storage', workspace: 'fourth' } }]);
+  await store.assign(id, null); expect((await store.list()).chats[0].workspace).toBeUndefined();
+});
+
+test('failed initial workspace persistence blocks inference and a retry preserves the association', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), workspace = { repository: 'owner/storage', workspace: 'workspace' };
+  const chat = new BrowserChat(store, f.inference, f.bridge, undefined, workspace);
+  f.setFailSave(true); await chat.send('Keep membership and message');
+  expect(f.requests).toHaveLength(0); expect(chat.snapshot().dirty).toBe(true); expect(f.objects.size).toBe(0);
+  f.setFailSave(false); await chat.retrySave();
+  expect((await store.list()).chats).toMatchObject([{ workspace, messageCount: 1 }]);
+  await chat.send(); expect(f.requests).toHaveLength(1);
+});

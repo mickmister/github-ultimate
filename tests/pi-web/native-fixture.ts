@@ -4,6 +4,7 @@ import { MobilePi } from '../../src/mobile-pi';
 import { S3Connections, type S3ConnectionRecord } from '../../src/s3-connections';
 import { InferenceConnections, type InferenceRecord } from '../../src/inference-connections';
 import { mobileS3Sign } from '../../src/mobile-s3-sign';
+import type { MobileGitHub } from '../../src/mobile-github';
 
 export function remoteFixture(streamPause?: () => Promise<void>) {
   const objects = new Map<string, { text: string; version: string }>();
@@ -15,7 +16,7 @@ export function remoteFixture(streamPause?: () => Promise<void>) {
       if (request.headers.get('Authorization') !== 'Bearer private-fixture-secret') throw Error('Missing private inference header');
       const body = await request.json(); requests.push(body);
       const saved = [...objects.values()].map(object => JSON.parse(object.text));
-      if (!saved.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages.at(-1)?.content === body.messages.at(-1).content)) throw Error('Inference started before the user message was durable');
+      if (!saved.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages?.at(-1)?.content === body.messages.at(-1).content)) throw Error('Inference started before the user message was durable');
       const content = `Real Pi reply ${requests.length}: Café 🌴`;
       if (body.stream) return new Response(new ReadableStream({ async start(controller) {
         const emit = (delta: unknown, finish_reason: string | null = null) => controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({ choices: [{ index: 0, delta, finish_reason }] })}\n\n`));
@@ -44,13 +45,13 @@ export function remoteFixture(streamPause?: () => Promise<void>) {
   };
   return { objects, requests, fetcher, setFailSaves(value: boolean) { failSaves = value; } };
 }
-export async function nativeFixture(page: Page, source: string, remote: ReturnType<typeof remoteFixture>) {
+export async function nativeFixture(page: Page, source: string, remote: ReturnType<typeof remoteFixture>, github?: MobileGitHub) {
   const origin = new URL(source).origin, subpath = new URL(source).pathname;
   const storage: S3ConnectionRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Shared chats', endpoint: 'https://s3.us-west-004.backblazeb2.com/', bucket: 'chats', prefix: 'workspace/', region: 'us-west-004', addressing: 'path', accessKeyId: 'private-key', secretAccessKey: 'private-s3-secret', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [{ origin, subpath }] };
   const inference: InferenceRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Pi model', model: 'fixture-model', url: 'https://inference.example/chat', headers: [{ name: 'Authorization', value: 'Bearer private-fixture-secret' }], hostedGrants: [{ origin, subpath }] };
   const store = <T extends { id: string }>(record: T) => ({ async all() { return [record]; }, async get(id: string) { return id === record.id ? record : undefined; }, async put() {}, async remove() {} });
   const pi = new MobilePi(new S3Connections(store(storage), remote.fetcher, undefined, undefined, undefined, mobileS3Sign), new InferenceConnections(store(inference), remote.fetcher));
-  const broker = new MobileFixtureBroker(undefined, undefined, undefined, pi);
+  const broker = new MobileFixtureBroker(undefined, github, undefined, pi);
   const document = { documentId: crypto.randomUUID(), documentURL: source, isMainFrame: true };
   broker.activate(document);
   await page.exposeFunction('fixtureNativeRequest', async (raw: string) => JSON.stringify(await broker.handleAsync(document, raw)));

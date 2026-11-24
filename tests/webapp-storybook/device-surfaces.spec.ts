@@ -17,6 +17,10 @@ for (const [surface, orientation, width, height] of configurations) {
     await page.getByRole('button', { name: 'Discover workspaces', exact: true }).click();
     await page.getByLabel('Stored workspace').selectOption('product-research');
     await page.getByRole('button', { name: 'Browse documents', exact: true }).click();
+    const piWeb = page.getByRole('link', { name: 'Pi Web', exact: true });
+    const chatURL = new URL((await piWeb.getAttribute('href'))!, page.url());
+    expect(chatURL.pathname).toContain('/pi-web/'); expect(chatURL.searchParams.get('repository')).toBe('octo-example/workspace-storage'); expect(chatURL.searchParams.get('workspace')).toBe('product-research');
+    await expect(piWeb).toHaveAttribute('target', '_blank');
     await page.getByText('Tree appearance', { exact: true }).click();
     await page.getByLabel('Tree density').selectOption('compact');
     await page.getByRole('treeitem', { name: 'planning', exact: true }).click();

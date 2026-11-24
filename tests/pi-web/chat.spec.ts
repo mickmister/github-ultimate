@@ -3,6 +3,8 @@ import { createServer, type Server } from 'node:http';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve, sep } from 'node:path';
 import { nativeFixture, remoteFixture } from './native-fixture';
+import { previewFixture } from './preview-fixture';
+import { previewDirectory } from '../../src/preview-directory';
 const root = resolve('hosted-dist/pi-web');
 let server: Server, origin: string, base: string;
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain' };
@@ -47,6 +49,41 @@ for (const [name, width, height] of [['phone portrait',390,844],['phone landscap
     await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴');
     await expect(page.getByRole('status')).toHaveText('Saved to S3'); expect(remote.requests).toHaveLength(1);
     expect(await page.content()).not.toContain('private-fixture-secret'); expect(errors).toEqual([]); expect(api).toEqual([]); fixture.dispose();
+  });
+}
+for (const width of [390, 1440]) {
+  test(`${width}px: workspace browsing, durable creation and moves preserve pinned history and drafts`, async ({ page }) => {
+    const remote = remoteFixture(), source = `${origin}${base}`, previews = previewFixture(source), fixture = await nativeFixture(page, source, remote, previews.host);
+    try {
+      await page.setViewportSize({ width, height: 900 });
+      const url = new URL(source); url.searchParams.set('connection', previews.navigation.connectionId); url.searchParams.set('repository', previews.navigation.repository); url.searchParams.set('workspace', previews.workspace);
+      await page.goto(url.href); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+      expect(remote.objects.size).toBe(0);
+      const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Scoped conversation'); await input.press('Enter');
+      await expect(page.getByRole('status')).toHaveText('Saved to S3'); await expect(page.getByRole('log')).toContainText('Real Pi reply 1');
+      const pinned = new URL(page.url()); pinned.searchParams.set('view', 'checkpoint');
+      await page.reload(); await expect(page.getByRole('log')).toContainText('Scoped conversation'); expect(remote.requests).toHaveLength(1);
+      if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
+      const picker = page.getByRole('combobox', { name: 'Conversation workspace', exact: true }), key = JSON.stringify([previews.navigation.repository, previews.workspace]);
+      await expect(picker).toHaveValue(key);
+      await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(1);
+      await picker.selectOption(''); await expect(page.getByRole('button', { name: /Scoped conversation.*messages/ })).toHaveCount(0);
+      await page.getByRole('button', { name: 'New conversation', exact: true }).click(); await input.fill('Unassigned conversation'); await input.press('Enter');
+      await expect(page.getByRole('status')).toHaveText('Saved to S3');
+      const settings = page.locator('.chat-connections'); await settings.locator('summary').click();
+      await page.getByRole('combobox', { name: 'Move conversation to workspace', exact: true }).selectOption(key);
+      await expect(page.getByRole('status')).toHaveText('Saved to S3');
+      if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
+      await expect(picker).toHaveValue(key); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(2);
+      if (width < 600) await page.getByRole('button', { name: 'Hide conversations', exact: true }).click();
+      await input.fill('Keep this unsent draft when changing workspace');
+      if (width < 600) await page.getByRole('button', { name: 'Conversations', exact: true }).click();
+      await picker.selectOption(''); await expect(page.getByRole('button', { name: /conversation.*messages/ })).toHaveCount(0);
+      if (width < 600) await page.getByRole('button', { name: 'Hide conversations', exact: true }).click();
+      await expect(input).toHaveValue('Keep this unsent draft when changing workspace');
+      await page.goto(pinned.href); await expect(page.getByRole('log')).toContainText('Scoped conversation'); await expect(page.getByRole('log')).not.toContainText('Unassigned conversation');
+      expect(remote.requests).toHaveLength(2);
+    } finally { fixture.dispose(); }
   });
 }
 test('independent device connections restore the same S3 conversation and preserve divergent continuations', async ({ browser }) => {
@@ -174,3 +211,30 @@ test('production assets contain no canned file manifest and retain provenance', 
   expect(await (await request.get(`${origin}${base}PI_WEB_LICENSE.txt`)).text()).toContain('Copyright (c) 2026 agegr');
   expect(await (await request.get(`${origin}${base}THIRD_PARTY_LICENSES.txt`)).text()).toContain('@earendil-works/pi-agent-core@1.5.2');
 });
+for (const [name, width, height] of [['phone portrait',390,844],['phone landscape',844,390],['tablet portrait',820,1180],['tablet landscape',1180,820],['desktop portrait',1080,1440],['desktop landscape',1440,900]] as const) {
+  test(`${name}: workspace preview slots read nugs config and open a canonical URL without losing the composer`, async ({ page }) => {
+    const remote = remoteFixture(), source = `${origin}${base}`, previews = previewFixture(source), fixture = await nativeFixture(page, source, remote, previews.host);
+    try {
+      await page.setViewportSize({ width, height });
+      const url = new URL(source); url.searchParams.set('connection', previews.navigation.connectionId); url.searchParams.set('repository', previews.navigation.repository); url.searchParams.set('workspace', previews.workspace);
+      await page.goto(url.href); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+      const draft = page.getByRole('textbox', { name: 'Message', exact: true }); await draft.fill('Keep this draft while opening Storybook');
+      expect(new URL(page.url()).searchParams.get('workspace')).toBe(previews.workspace);
+      await page.getByLabel('Preview slots', { exact: true }).click();
+      const link = page.getByRole('link', { name: /Storybook/ });
+      const expected = `https://preview.example/owner-repo/storybook/${previewDirectory(previews.branch)}/?workspace=${previews.workspace}`;
+      await expect(link).toHaveAttribute('href', expected); await expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      await page.context().route('https://preview.example/**', route => route.fulfill({ contentType: 'text/html', body: '<h1>Preview fixture</h1>' }));
+      const opened = page.waitForEvent('popup'); await link.click(); const popup = await opened;
+      await expect(popup).toHaveURL(expected); expect(await popup.evaluate(() => window.opener === null)).toBe(true); await popup.close();
+      await expect(draft).toHaveValue('Keep this draft while opening Storybook');
+      await page.setViewportSize({ width: height, height: width });
+      await expect(page.getByRole('link', { name: /Storybook/ })).toBeVisible(); await expect(draft).toHaveValue('Keep this draft while opening Storybook');
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+      previews.update(); await page.getByRole('button', { name: 'Refresh previews', exact: true }).click();
+      await expect(page.getByRole('link', { name: /Updated Storybook/ })).toHaveAttribute('href', expected);
+      expect(previews.calls.some(path => path.includes('/git/blobs/'))).toBe(true);
+      expect(await page.content()).not.toContain('private-github-secret'); expect(remote.requests).toHaveLength(0); expect(remote.objects.size).toBe(0);
+    } finally { fixture.dispose(); }
+  });
+}

@@ -1,5 +1,6 @@
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { previewDirectory } from '../src/preview-directory.ts';
+export { previewDirectory };
 import { mkdtemp, readdir, readFile, writeFile, mkdir, rm, cp, lstat, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
@@ -10,9 +11,6 @@ export const previewLimit = 36 * 1024 * 1024;
 export const siteLimit = 50 * 1024 * 1024;
 // Independently built component workbench; not part of a production app preview.
 export const piWebStorybookLimit = 14 * 1024 * 1024;
-export function previewDirectory(branch) {
-  return `b-${branch.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${createHash('sha256').update(branch).digest('hex').slice(0, 16)}`;
-}
 const escape = text => text.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export async function payloadSize(directory) {
   let size = 0;

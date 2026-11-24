@@ -4,12 +4,15 @@ import type { AgentMessage, ToolResultMessage } from '@/lib/types';
 import { MessageView } from '@/components/MessageView';
 import { ThemeIcon } from '@/components/ThemeIcon';
 import { SessionSidebar as Library } from './SessionSidebar.view';
+import { PreviewSlots } from './PreviewSlots.view';
+import { workspaceKey } from './Chat.hooks';
 
 function Connections({ model: m }: { model: ChatModel }) {
   return <details className="chat-connections" open={!m.snapshot.sessionId}><summary>Connections</summary><div className="chat-controls">
     <button disabled={m.busy} onClick={() => void m.connect()}>Connect</button>
     <label>Inference<select aria-label="Inference connection" disabled={m.busy || Boolean(m.snapshot.sessionId)} value={m.inferenceId} onChange={e => m.setInferenceId(e.target.value)}><option value="">Choose inference</option>{m.inference.map(item => <option key={item.id} value={item.id}>{item.name} · {item.model}</option>)}</select></label>
     <label>S3 storage<select aria-label="S3 storage" disabled={m.busy || m.snapshot.dirty} value={m.storageId} onChange={e => m.chooseStorage(e.target.value)}><option value="">Choose storage</option>{m.storage.map(item => <option key={item.id} value={item.id}>{item.name} · {item.bucket}</option>)}</select></label>
+    {m.snapshot.reference && <label>Move conversation<select aria-label="Move conversation to workspace" value="" disabled={m.busy || m.snapshot.dirty || m.previews.busy} onChange={event => void m.moveWorkspace(event.target.value)}><option value="" disabled>Choose destination</option><option value="unassigned">Unassigned</option>{m.previews.catalog?.workspaces?.map(workspace => <option key={workspaceKey(workspace)} value={workspaceKey(workspace)}>{workspace.workspace} · {workspace.repository}</option>)}</select></label>}
   </div></details>;
 }
 export function Transcript({ messages, sessionId, streaming = false }: { messages: AgentMessage[]; sessionId?: string; streaming?: boolean }) {
@@ -25,13 +28,14 @@ function Conversation({ model: m }: { model: ChatModel }) {
       {!m.snapshot.messages.length && <div className="chat-empty"><h2>What can I help you with?</h2><p>Start a conversation. Messages are saved to your selected S3 storage.</p></div>}</div>
     <form className="chat-composer" onSubmit={event => { event.preventDefault(); void m.send(); }}>
       <textarea aria-label="Message" value={m.draft} onChange={e => m.setDraft(e.target.value)} placeholder="Message Pi" rows={1} disabled={!m.snapshot.sessionId && !m.draftMode} onKeyDown={event => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void m.send(); } }} />
+      <PreviewSlots model={m.previews} />
       {m.busy ? <button type="button" onClick={m.stop}>Stop</button> : <button disabled={!m.snapshot.sessionId && !m.draftMode || m.snapshot.dirty || m.snapshot.phase !== 'idle' || !m.draft.trim()}>Send</button>}
     </form>
     <footer className="chat-composer-footer"><span>⚙ {m.selectedInference?.model ?? 'Choose a model'}</span><span>Build {process.env.NEXT_PUBLIC_APP_VERSION ?? 'development'}</span><span>{m.selectedStorage ? `S3 · ${m.selectedStorage.bucket}` : 'Choose storage'}</span></footer>
   </section>;
 }
 function Header({ model: m }: { model: ChatModel }) {
-  return <div className="chat-toolbar">{!m.showList && <><button disabled={m.busy} onClick={() => m.setShowList(true)}>Conversations</button><button disabled={m.busy || m.snapshot.dirty || !m.selectedInference || !m.selectedStorage} onClick={() => void m.create()}>New conversation</button></>}
+  return <div className="chat-toolbar">{!m.showList && <><button disabled={m.busy} onClick={() => m.setShowList(true)}>Conversations</button><button disabled={!m.canCreate || m.busy || m.snapshot.dirty || !m.selectedInference || !m.selectedStorage} onClick={() => void m.create()}>New conversation</button></>}
     <button className="chat-theme-button" aria-label="Toggle light and dark theme" onClick={() => m.theme.setThemePreference(m.theme.isDark ? 'light' : 'dark')}><ThemeIcon preference={m.theme.preference} /></button>
     {(m.snapshot.sessionId || m.draftMode) && <><button disabled={m.busy || m.snapshot.dirty && Boolean(m.snapshot.messages.length)} onClick={m.close}>Close conversation</button><button disabled={!m.snapshot.reference || m.snapshot.dirty} onClick={() => void m.copyLink()}>Copy conversation link</button></>}{!m.showList && <Connections model={m} />}</div>;
 }
