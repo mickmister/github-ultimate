@@ -1,5 +1,12 @@
 import { expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import { execFileSync } from 'node:child_process';
+import { copyFile, mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+// @ts-expect-error The publisher is deliberately dependency-free JavaScript for CI.
+import { previewDirectory as publishedDirectory } from '../scripts/publish-hosted.mjs';
 import { loadPreviewSlots, previewURL, resolvePreviewSlots, workspaceConfigSchema } from '../hosted/preview-slots';
 import { previewDirectory } from '../src/preview-directory';
 import type { WorkspaceManifest } from '../hosted/manifest';
@@ -34,9 +41,20 @@ function fixture() {
   return { navigation, send, calls, file, entries, blobs };
 }
 it('uses exactly the publisher branch identity, including collisions and Unicode', () => {
-  for (const value of [branch, 'main', 'a/b', 'a-b', 'É/🌴', 'a'.repeat(150), 'Case']) expect(previewDirectory(value)).toBe(`b-${value.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${createHash('sha256').update(value).digest('hex').slice(0, 16)}`);
+  for (const value of [branch, 'main', 'a/b', 'a-b', 'É/🌴', 'a'.repeat(150), 'Case']) {
+    expect(previewDirectory(value)).toBe(`b-${value.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${createHash('sha256').update(value).digest('hex').slice(0, 16)}`);
+    expect(previewDirectory(value)).toBe(publishedDirectory(value));
+  }
   expect(previewDirectory(branch)).toBe('b-vk-46e5-vd-multi-instanc-0940c2d95906d253');
   expect(previewDirectory('a/b')).not.toBe(previewDirectory('a-b'));
+});
+it('loads the Pages publisher in an isolated checkout without node_modules', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pages-no-dependencies-'));
+  try {
+    const file = join(directory, 'publish-hosted.mjs'); await copyFile(resolve('scripts/publish-hosted.mjs'), file);
+    const output = execFileSync(process.execPath, ['--input-type=module', '-e', `const {previewDirectory}=await import(${JSON.stringify(pathToFileURL(file).href)});console.log(previewDirectory(${JSON.stringify(branch)}))`], { cwd: directory, encoding: 'utf8' });
+    expect(output.trim()).toBe(previewDirectory(branch));
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });
 it('creates canonical Pages URLs and provider-neutral templates without guessing a Cloudflare alias', () => {
   const context = { repository: 'mickmister/github-ultimate', workspace, branch };

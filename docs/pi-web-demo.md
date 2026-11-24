@@ -63,7 +63,8 @@ nugs document snapshot. Each repository defines named services with either a
 provider (`url`) for Cloudflare/custom hosts. Templates support `{workspace}`,
 `{branch}`, `{owner}`, `{repository}` and `{previewDirectory}`. Branch context comes
 from the matching manifest repository, and `previewDirectory` uses exactly the
-publisher's sanitized branch prefix plus SHA-256 suffix. Example document:
+publisher's sanitized branch prefix plus SHA-256 suffix, with cross-runtime parity
+tests (the Pages publisher intentionally requires no npm installation). Example document:
 
 ```json
 {"schema_version":1,"repositories":[{"repository":"owner/repo","previewSlots":[{"id":"storybook","title":"Storybook","service":"storybook","provider":{"kind":"github-pages","baseUrl":"https://owner.github.io/repo/","path":"previews/{previewDirectory}/storybook/"}}]}]}
