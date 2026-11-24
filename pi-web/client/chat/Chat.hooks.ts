@@ -4,6 +4,7 @@ import type { ChatHandle, ChatSnapshot, SavedChat } from '../../../hosted/pi-cha
 import type { PublicInferenceConnection } from '../../../src/inference-protocol';
 import type { PublicS3Connection } from '../../../src/s3-protocol';
 import { copyText } from '@/lib/clipboard';
+import { useTheme } from '@/hooks/useTheme';
 
 type Runtime = Window['piWebExtension'];
 let loading: Promise<Runtime> | undefined;
@@ -23,6 +24,7 @@ const deviceSnapshot = () => innerWidth < 600 ? 'phone' : innerWidth < 1100 ? 't
 function subscribeDevice(listener: () => void) { window.addEventListener('resize', listener); return () => window.removeEventListener('resize', listener); }
 
 export function useChat() {
+  const theme = useTheme();
   const [chat, setChat] = useState<ChatHandle>();
   const active = useRef<ChatHandle | undefined>(undefined); active.current = chat;
   const snapshot = useSyncExternalStore(chat?.subscribe ?? emptySubscribe, chat?.snapshot ?? emptySnapshot, emptySnapshot);
@@ -32,7 +34,9 @@ export function useChat() {
   const [chats, setChats] = useState<SavedChat[]>([]), [search, setSearch] = useState('');
   const [draftMode, setDraftMode] = useState(false);
   const [busy, setBusy] = useState(false), [error, setError] = useState(''), [draft, setDraft] = useState('');
-  const [showList, setShowList] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(true), [phoneLibrary, setPhoneLibrary] = useState(false);
+  const showList = presentation === 'phone' ? phoneLibrary : sidebarOpen;
+  function setShowList(open: boolean) { if (presentation === 'phone') setPhoneLibrary(open); else setSidebarOpen(open); }
   const generation = useRef(0);
   const working = useRef(false);
   const selectedStorage = storage.find(item => item.id === storageId), selectedInference = inference.find(item => item.id === inferenceId);
@@ -57,7 +61,7 @@ export function useChat() {
       if (!target) return;
       const page = await api.list(target); setChats(page.chats);
       const session = params.get('session'), checkpoint = params.get('checkpoint');
-      if (session && checkpoint && model) { const restored = await api.restore(model, target, session, checkpoint); setChat(restored); setShowList(false); }
+      if (session && checkpoint && model) { const restored = await api.restore(model, target, session, checkpoint); setChat(restored); setShowList(presentation !== 'phone'); }
     });
   }
   const bootstrap = useEffectEvent(() => { void connect(); });
@@ -79,14 +83,14 @@ export function useChat() {
     await action(async () => {
       if (!selectedStorage || !selectedInference) throw Error('Choose storage and inference connections.');
       if (active.current?.snapshot().dirty) throw Error('Retry saving this conversation before opening another.');
-      setChat(await (await runtime()).restore(selectedInference, selectedStorage, saved.sessionId, saved.reference)); setDraftMode(false); setDraft(''); setShowList(false);
+      setChat(await (await runtime()).restore(selectedInference, selectedStorage, saved.sessionId, saved.reference)); setDraftMode(false); setDraft(''); setShowList(presentation !== 'phone');
     });
   }
   async function create() {
     await action(async () => {
       if (!selectedStorage || !selectedInference) throw Error('Choose storage and inference connections.');
       if (active.current?.snapshot().dirty) throw Error('Retry saving this conversation before creating another.');
-      setChat(undefined); active.current = undefined; setDraftMode(true); setDraft(''); setShowList(false);
+      setChat(undefined); active.current = undefined; setDraftMode(true); setDraft(''); setShowList(presentation !== 'phone');
       const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
     });
   }
@@ -116,7 +120,7 @@ export function useChat() {
     setChat(undefined); setDraftMode(false); setDraft(''); const url = new URL(location.href); url.search = ''; history.replaceState(null, '', url);
   }
   async function copyLink() { try { await copyText(location.href); } catch { setError('Could not copy the link. Copy the page URL from your browser.'); } }
-  return { snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: chats.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
+  return { theme, snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: chats.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
     setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) setChats((await (await runtime()).list(selectedStorage)).chats); }) };
 }
 export type ChatModel = ReturnType<typeof useChat>;

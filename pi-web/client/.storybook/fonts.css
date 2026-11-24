@@ -1,0 +1,2 @@
+/* Match next/font's production family without a Next server or network fonts. */
+:root { --font-noto-mono: 'Noto Sans Mono Variable'; }

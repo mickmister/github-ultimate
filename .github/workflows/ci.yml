@@ -45,7 +45,7 @@ jobs:
           key: pnpm-${{ runner.os }}-${{ runner.arch }}-12-${{ hashFiles('pnpm-lock.yaml') }}
           restore-keys: pnpm-${{ runner.os }}-${{ runner.arch }}-12-
       - run: pnpm install --frozen-lockfile --prefer-offline
-      - name: Install pinned Pi Web static demo dependencies
+      - name: Install pinned Pi Web client dependencies
         run: pnpm run pi-web:install
       - run: pnpm run check
       - run: pnpm run webapp:check
@@ -59,10 +59,11 @@ jobs:
       - run: pnpm run pages:build
       - run: pnpm run playground:build
       - run: pnpm run storybook:build
+      - run: pnpm run pi-web:storybook:build
       - name: Package the existing Chrome build
         run: node scripts/package.mjs
       - name: Archive browser test inputs
-        run: tar -cf "$RUNNER_TEMP/browser-assets.tar" dist dist-safari hosted-dist playground-dist storybook-static
+        run: tar -cf "$RUNNER_TEMP/browser-assets.tar" dist dist-safari hosted-dist playground-dist storybook-static pi-web/client/storybook-static
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browser-assets
@@ -78,6 +79,12 @@ jobs:
         with:
           name: hosted-page
           path: hosted-dist/
+          retention-days: 1
+          if-no-files-found: error
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pi-web-storybook
+          path: pi-web/client/storybook-static/
           retention-days: 1
           if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -123,6 +130,8 @@ jobs:
           - suite: webapp-storybook
             browsers: chromium webkit
           - suite: pi-web
+            browsers: chromium webkit
+          - suite: pi-web-storybook
             browsers: chromium webkit
     steps:
       # Disabled: this shared setup starts both CargoWall and Thoth/OTel.
@@ -294,6 +303,11 @@ jobs:
         with:
           name: hosted-page
           path: hosted-dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: github.event_name != 'delete'
+        with:
+          name: pi-web-storybook
+          path: pi-web/client/storybook-static
       - name: Replace branch preview and prune deleted branches
         id: publish
         env:

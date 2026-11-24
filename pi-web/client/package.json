@@ -7,7 +7,9 @@
     "dev": "next dev -H 127.0.0.1 -p 30142",
     "build": "next build",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "storybook": "storybook dev --host 127.0.0.1 --port 6012 --ci --no-open --disable-telemetry",
+    "storybook:build": "storybook build --disable-telemetry"
   },
   "dependencies": {
     "ansi_up": "^6.0.6",
@@ -28,6 +30,8 @@
     "remark-math": "^6.0.0"
   },
   "devDependencies": {
+    "@fontsource-variable/noto-sans-mono": "5.3.0",
+    "@storybook/react-vite": "10.6.6",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/js-yaml": "^4.0.9",
     "@types/node": "^25",
@@ -37,6 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
     "postcss": "^8.5.26",
+    "storybook": "10.6.6",
     "tailwindcss": "^4.2.2",
     "typescript": "^5"
   },

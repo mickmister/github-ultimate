@@ -72,6 +72,33 @@ checkpoint migration are outside this text-chat slice.
 
 ## Checks
 
+### Pi Web Storybook
+
+Pi Web has its own React/Vite Storybook at `pi-web/client/.storybook/`, sharing
+the production view components, upstream styles, Noto Sans Mono family and renderers.
+The workspace app's Storybook stays independent. From the repository root:
+
+```sh
+pnpm run pi-web:storybook          # http://127.0.0.1:6012
+pnpm run pi-web:storybook:build
+pnpm run test:pi-web-storybook
+```
+
+Stories cover the conversation shell, draft, phone/tablet, interruption/save error,
+Markdown/code, thinking/tool calls/results, streaming presentation, provider errors
+and injected deferred-content loaders. Story fixtures never enter the production
+entrypoint and do not enable live tool execution. `MessageView` no longer assumes
+Node `/api/sessions` or `/api/agent` endpoints: optional display-only content loaders
+come from the owning runtime through `MessageContentProvider`.
+
+CI builds and browser-tests this Storybook separately and publishes one current
+instance per branch at `/github-ultimate/pi-web-storybooks/<preview-directory>/`.
+Its 14 MiB workbench budget is separate from the unchanged 36 MiB application
+preview budget; both remain subject to the unchanged 50 MiB aggregate site cap.
+Storybook metadata pins the source SHA, and branch cleanup prunes its workbench.
+
+### Production checks
+
 - Root, mobile and client typechecks; client lint and production static export.
 - Chat tests: pre-inference durability, save failure/retry, portable connection IDs,
   restored history, divergent branches, model mismatch and tampered bytes.

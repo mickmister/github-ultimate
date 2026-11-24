@@ -16,17 +16,26 @@ test('publisher replaces one preview per branch, preserves peers, prunes deletio
   const git = (args: string[], cwd = repo) => execFileSync('git', args, { cwd, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
   try {
     await mkdir(repo); await mkdir(source);
+    const piWebStorybook = join(root, 'pi-web-storybook'); await mkdir(piWebStorybook);
     git(['init', '--bare', remote], root); git(['init', '--initial-branch=main']);
     await writeFile(join(repo, 'source.txt'), 'source'); git(['add', '.']); git(['commit', '-m', 'Initial']);
     git(['remote', 'add', 'origin', remote]); git(['push', 'origin', 'main']); git(['push', 'origin', 'HEAD:refs/heads/feature/a']);
     const sha = git(['rev-parse', 'HEAD']);
+    await writeFile(join(piWebStorybook, 'index.html'), '<h1>Pi Web components</h1>');
+    await writeFile(join(piWebStorybook, 'build.json'), JSON.stringify({ kind: 'pi-web-storybook', sha, storiesOnly: true }));
     await writeFile(join(source, 'index.html'), '<h1>Hosted</h1>'); await writeFile(join(source, 'build.json'), JSON.stringify({ sha }));
     await mkdir(join(source, 'storybook')); await writeFile(join(source, 'storybook/index.html'), '<h1>Storybook</h1>');
     await writeFile(join(source, 'obsolete.js'), 'old bundle');
-    const publish = (branch: string, revision = sha) => publishHosted({ remote, source, output, branch, sha: revision });
+    const publish = (branch: string, revision = sha) => publishHosted({ remote, source, output, branch, sha: revision, piWebStorybook });
+    await writeFile(join(piWebStorybook, 'build.json'), JSON.stringify({ kind: 'pi-web-storybook', sha: '0'.repeat(40), storiesOnly: true }));
+    await expect(publish('main')).rejects.toThrow('Storybook does not match');
+    await writeFile(join(piWebStorybook, 'build.json'), JSON.stringify({ kind: 'pi-web-storybook', sha, storiesOnly: true }));
     await publish('main'); await publish('feature/a');
     expect(await readdir(join(output, 'previews'))).toHaveLength(2);
     expect(await readFile(join(output, 'index.html'), 'utf8')).toContain(`./previews/${previewDirectory('feature/a')}/storybook/`);
+    expect(await readFile(join(output, 'index.html'), 'utf8')).toContain(`./pi-web-storybooks/${previewDirectory('feature/a')}/`);
+    expect(await readFile(join(output, 'pi-web-storybooks', previewDirectory('main'), 'index.html'), 'utf8')).toContain('Pi Web components');
+    expect(await readdir(join(output, 'previews', previewDirectory('main')))).not.toContain('pi-web-storybook');
     await rm(join(source, 'obsolete.js')); await writeFile(join(source, 'new.js'), 'new bundle');
     await publish('main');
     expect(await readdir(join(output, 'previews', previewDirectory('main')))).not.toContain('obsolete.js');
@@ -40,10 +49,12 @@ test('publisher replaces one preview per branch, preserves peers, prunes deletio
     git(['push', 'origin', '--delete', 'main']);
     await publish('feature/a');
     expect(Object.keys(JSON.parse(await readFile(join(output, 'previews.json'), 'utf8')))).toEqual(['feature/a']);
+    expect(await readdir(join(output, 'pi-web-storybooks'))).toEqual([previewDirectory('feature/a')]);
     git(['push', 'origin', '--delete', 'feature/a']);
     await publishHosted({ remote, source, output, branch: 'feature/a', sha, deleted: true });
     expect(JSON.parse(await readFile(join(output, 'previews.json'), 'utf8'))).toEqual({});
     expect(await readdir(join(output, 'previews'))).toEqual([]);
+    expect(await readdir(join(output, 'pi-web-storybooks'))).toEqual([]);
   } finally { await rm(root, { recursive: true, force: true }); }
 }, 30000);
 test('preview paths avoid branch slash/slug collisions and block oversized or linked payloads', async () => {

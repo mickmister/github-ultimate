@@ -8,6 +8,7 @@ import { ThinkingIcon } from "./ThinkingIcon";
 import { copyText } from "@/lib/clipboard";
 import { useI18n } from "@/hooks/useI18n";
 import { useIsMobile } from "@/hooks/useIsMobile";
+import { useMessageContent } from "@/hooks/useMessageContent";
 import { parseCompactionSummary } from "@/lib/compaction-summary";
 import { getAssistantErrorMessage, getThinkingPreview, hasAssistantAnswer, isAssistantTruncated, isEmptyThinkingBlock, splitThinkingPieces } from "@/lib/message-display";
 import { stripAnsi } from "@/lib/ansi";
@@ -87,9 +88,6 @@ function estimateUpdatedTokens(previous: TokenEstimateCacheEntry | undefined, te
   return baseTokens + estimateTokens(text.slice(suffixStart));
 }
 
-const MAX_THINKING_CACHE_ENTRIES = 100;
-const thinkingContentCache = new Map<string, Promise<string>>();
-
 // Messages larger than this skip markdown rendering entirely. react-markdown +
 // KaTeX + syntax highlighting on multi-hundred-KB payloads (e.g. pasted HAR or
 // log dumps) freezes the browser main thread.
@@ -155,35 +153,6 @@ function SafeMarkdownBody({ children, className, ...props }: React.ComponentProp
 // Cap the user "sent" bubble's height so an abnormally long message does not
 // push the conversation off screen; overflow scrolls inside the bubble.
 const USER_BUBBLE_MAX_HEIGHT = 300;
-
-function loadThinkingContent(sessionId: string, entryId: string, blockIndex: number): Promise<string> {
-  const key = `${sessionId}:${entryId}:${blockIndex}`;
-  const cached = thinkingContentCache.get(key);
-  if (cached) {
-    thinkingContentCache.delete(key);
-    thinkingContentCache.set(key, cached);
-    return cached;
-  }
-
-  const request = fetch(
-    `/api/sessions/${encodeURIComponent(sessionId)}/entries/${encodeURIComponent(entryId)}/thinking?blockIndex=${blockIndex}`,
-  ).then(async (response) => {
-    if (!response.ok) throw new Error(`HTTP ${response.status}`);
-    const data = await response.json() as { thinking?: unknown };
-    if (typeof data.thinking !== "string") throw new Error("Invalid thinking response");
-    return data.thinking;
-  }).catch((error) => {
-    thinkingContentCache.delete(key);
-    throw error;
-  });
-
-  thinkingContentCache.set(key, request);
-  if (thinkingContentCache.size > MAX_THINKING_CACHE_ENTRIES) {
-    const oldestKey = thinkingContentCache.keys().next().value;
-    if (oldestKey) thinkingContentCache.delete(oldestKey);
-  }
-  return request;
-}
 
 interface Props {
   message: AgentMessage;
@@ -987,6 +956,7 @@ export function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex 
   blockIndex: number;
 }) {
   const { t } = useI18n();
+  const { thinking: loadThinking } = useMessageContent();
   const [expanded, setExpanded] = useState(isThinkingExpandedByDefault);
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -1002,20 +972,17 @@ export function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex 
     return () => window.removeEventListener(THINKING_EXPANDED_EVENT, onChange);
   }, []);
 
-  // Load deferred history content whenever the block is expanded.
-  // loadThinkingContent() memoizes in-flight promises and drops failed ones
-  // from its cache, so re-running this effect is cheap and a failed load can
-  // be retried by collapsing and expanding the block again.
+  // Deferred content is an optional host capability, not a Node API request.
   useEffect(() => {
     if (!expanded || !block.deferred || content !== null) return;
-    if (!sessionId || !entryId) {
+    if (!sessionId || !entryId || !loadThinking) {
       setError(tRef.current("i18n.thinkingUnavailable"));
       return;
     }
     let cancelled = false;
     setLoading(true);
     setError(null);
-    loadThinkingContent(sessionId, entryId, blockIndex)
+    loadThinking(sessionId, entryId, blockIndex)
       .then((value) => {
         if (!cancelled) {
           setContent(value);
@@ -1031,7 +998,7 @@ export function ThinkingBlock({ block, duration, sessionId, entryId, blockIndex 
     return () => {
       cancelled = true;
     };
-  }, [expanded, block.deferred, content, sessionId, entryId, blockIndex]);
+  }, [expanded, block.deferred, content, sessionId, entryId, blockIndex, loadThinking]);
 
   return (
     <div style={{
@@ -2115,30 +2082,23 @@ function formatTokens(count: number): string {
 }
 
 function BashExecutionView({ message, sessionId }: { message: BashExecutionMessage; sessionId?: string }) {
+  const { output: outputLoader } = useMessageContent();
   const [fullOutput, setFullOutput] = useState<string | null>(null);
   const [loadingFull, setLoadingFull] = useState(false);
   const [fullError, setFullError] = useState<string | null>(null);
 
   const isPending = !message.output && message.exitCode === undefined && !message.cancelled;
   const isError = message.cancelled || (message.exitCode !== undefined && message.exitCode !== 0);
-  const fullOutputUrl = sessionId && message.fullOutputPath
-    ? `/api/agent/${encodeURIComponent(sessionId)}/bash-output?path=${encodeURIComponent(message.fullOutputPath)}`
-    : null;
-  const showFullButton = message.truncated && fullOutputUrl && fullOutput === null;
+  const canLoadOutput = Boolean(sessionId && message.fullOutputPath && outputLoader);
+  const showFullButton = message.truncated && canLoadOutput && fullOutput === null;
   const displayOutput = fullOutput ?? message.output;
 
   async function loadFullOutput() {
-    if (!fullOutputUrl) return;
+    if (!sessionId || !message.fullOutputPath || !outputLoader) return;
     setLoadingFull(true);
     setFullError(null);
     try {
-      const res = await fetch(fullOutputUrl);
-      const d = await res.json() as { success?: boolean; data?: { output?: string }; error?: string };
-      if (d.success) {
-        setFullOutput(d.data?.output ?? "");
-      } else {
-        setFullError(d.error ?? "failed");
-      }
+      setFullOutput(await outputLoader(sessionId, message.fullOutputPath));
     } catch (e) {
       setFullError(String(e));
     } finally {
@@ -2170,7 +2130,7 @@ function BashExecutionView({ message, sessionId }: { message: BashExecutionMessa
   return (
     <div style={{ margin: "6px 0" }}>
       <ToolCallBlock block={block} result={result} />
-      {message.truncated && fullOutputUrl && (
+      {message.truncated && canLoadOutput && (
         <div style={{ padding: "4px 10px", fontSize: 11, marginTop: -1 }}>
           {showFullButton && (
             <button
@@ -2181,12 +2141,6 @@ function BashExecutionView({ message, sessionId }: { message: BashExecutionMessa
               {loadingFull ? "loading…" : "view full output"}
             </button>
           )}
-          <a
-            href={`${fullOutputUrl}&download=1`}
-            style={{ marginLeft: showFullButton ? 10 : 0, color: "var(--accent)", fontSize: 11, textDecoration: "underline" }}
-          >
-            download full output
-          </a>
           {fullError && <span style={{ marginLeft: 6, color: "var(--text-dim)", fontSize: 11 }}>({fullError})</span>}
         </div>
       )}

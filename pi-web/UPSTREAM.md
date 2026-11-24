@@ -26,6 +26,14 @@ time/message-count and selected-row presentation to canonical S3 conversations,
 with search and actions owned by the shared feature hook. Original source remains
 recoverable at the import pin for further selective reuse.
 
+The visual shell now adapts upstream sidebar width, branding, selected rows,
+toolbar, centered transcript and rounded composer; original theme behavior and
+ThemeIcon are reused. MessageView and its thinking/tool/diff/code/Markdown
+renderers remain upstream-derived. Its former deferred-thinking and full-output
+HTTP calls have been replaced by optional host-supplied display loaders. Storybook
+uses the same views/styles/renderers with isolated fixture data, independently of
+the production runtime and the workspace app's Storybook.
+
 The parent builds Pi 1.5.2 separately and keeps provider/S3 credentials in the
 extension or Alohak native host. UI sessions use the versioned `pi-web-chat-1`
 profile, independently of the older workspace-agent checkpoint schema. Existing
