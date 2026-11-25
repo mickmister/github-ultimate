@@ -6,6 +6,7 @@ import { nativeFixture, remoteFixture } from './native-fixture';
 import { previewFixture } from './preview-fixture';
 import { previewDirectory } from '../../src/preview-directory';
 import { beadsRuntime } from './beads-runtime';
+import { workflowFixture } from './workflow-fixture';
 const root = resolve('hosted-dist/pi-web');
 let server: Server, origin: string, base: string;
 const types: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.svg': 'image/svg+xml', '.png': 'image/png', '.woff2': 'font/woff2', '.txt': 'text/plain' };
@@ -30,6 +31,37 @@ test.beforeAll(async () => {
   await new Promise<void>(done => server.listen(0, '127.0.0.1', done)); origin = `http://127.0.0.1:${(server.address() as { port: number }).port}`;
 });
 test.afterAll(async () => { if (server) await new Promise<void>(done => server.close(() => done())); });
+
+test('restored conversation shows live workflow steps and elapsed time, polls without inference and stops at completion', async ({ page }) => {
+  const remote = remoteFixture(), workflow = workflowFixture(`${origin}${base}`), fixture = await nativeFixture(page, `${origin}${base}`, remote, workflow.host);
+  const sessionId = await fixture.seedWorkflow(workflow.execution);
+  try {
+    await page.clock.install();
+    await page.goto(fixture.url); await page.getByRole('button', { name: /New conversation/ }).waitFor();
+    await page.getByRole('button', { name: /New conversation/, exact: false }).first().waitFor();
+    const url = new URL(fixture.url); url.searchParams.set('session', sessionId);
+    await page.goto(url.href);
+    const card = page.getByRole('article', { name: 'Workflow feature-work' });
+    await expect(card).toContainText('2/8 steps finished'); await expect(card).toContainText('tester: running'); await expect(card).toContainText('Elapsed');
+    expect(remote.requests).toHaveLength(1);
+    const beforeHidden = workflow.polls();
+    await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'hidden' }); document.dispatchEvent(new Event('visibilitychange')); });
+    await page.clock.fastForward(31000); expect(workflow.polls()).toBe(beforeHidden); await expect(card).toContainText('Status may be stale');
+    await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
+    await expect.poll(workflow.polls).toBeGreaterThan(beforeHidden);
+    const beforeOffline = await card.locator('time').getAttribute('dateTime');
+    await page.context().setOffline(true); await expect(card).toContainText('Offline.');
+    await page.context().setOffline(false); await expect(card).not.toContainText('Offline.');
+    await expect(card.locator('time')).not.toHaveAttribute('dateTime', beforeOffline!);
+    workflow.complete(); await page.clock.fastForward(11000);
+    await expect(card).toContainText('Delivery: delivered'); await expect(card).toContainText('Analysis: complete');
+    await expect(card).toContainText('8/8 steps finished');
+    const polls = workflow.polls(); await page.clock.fastForward(30000); expect(workflow.polls()).toBe(polls);
+    await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Workflows for this conversation' })).toHaveCount(0);
+    expect(remote.requests).toHaveLength(1);
+  } finally { fixture.dispose(); }
+});
 
 test('workspace Beads initializes in the background without delaying ordinary Pi messages', async ({ page }) => {
   const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote);

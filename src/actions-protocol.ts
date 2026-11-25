@@ -13,7 +13,9 @@ export const actionRunSchema = z.object({
   status: z.string().nullable(), conclusion: z.string().nullable(), head_sha: z.string(), head_branch: z.string().nullable(), html_url: z.string().url(),
 });
 export type ActionRun = z.infer<typeof actionRunSchema>;
-export const actionJobSchema = z.object({ id: positive, name: z.string(), status: z.string(), conclusion: z.string().nullable(), started_at: z.string().datetime().nullable(), completed_at: z.string().datetime().nullable() });
+export const actionJobSchema = z.object({ id: positive, name: z.string(), status: z.string(), conclusion: z.string().nullable(), started_at: z.string().datetime().nullable(), completed_at: z.string().datetime().nullable(),
+  steps: z.array(z.object({ number: positive, name: z.string().max(1000), status: z.string().max(100), conclusion: z.string().max(100).nullable(),
+    started_at: z.string().datetime().nullable().optional(), completed_at: z.string().datetime().nullable().optional() })).max(1000).optional() });
 export type ActionJob = z.infer<typeof actionJobSchema>;
 export const actionArtifactSchema = z.object({ id: positive, name: z.string(), size_in_bytes: z.number().int().nonnegative(), expired: z.boolean(), expires_at: z.string().nullable(), created_at: z.string() });
 export type ActionArtifact = z.infer<typeof actionArtifactSchema>;

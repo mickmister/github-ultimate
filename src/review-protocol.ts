@@ -14,8 +14,9 @@ export const reviewMemberSchema = z.discriminatedUnion('kind', [
   z.object({ ...member, kind: z.literal('form'), bead_id: bead, form_id: key, dsl: reviewPinSchema }).strict(),
 ]);
 export const reviewRequestSchema = z.object({
-  kind: z.literal('review-request'), schema_version: z.literal(1), request_id: key, revision_id: key,
-  workspace: key, bead_id: bead, related_beads: z.array(bead).max(100).default([]),
+  kind: z.literal('review-request'), schema_version: z.union([z.literal(1), z.literal(2)]), request_id: key, revision_id: key,
+  workspace: key, bead_id: bead.optional(), related_beads: z.array(bead).max(100).default([]),
+  execution: z.object({ kind: z.literal('development'), id: z.string().regex(/^[1-9]\d*-[1-9]\d*$/), process: key, thread_id: bead }).strict().optional(),
   thread: resource, title: z.string().min(1).max(1000), purpose: z.string().min(1).max(16000),
   question: z.string().min(1).max(16000), status: z.enum(['draft', 'published', 'withdrawn']),
   change_kind: z.enum(['proposal', 'implemented', 'mixed']), previous_request: key.optional(),
@@ -25,7 +26,12 @@ export const reviewRequestSchema = z.object({
   members: z.array(reviewMemberSchema).min(1).max(64),
 }).strict().superRefine((value, ctx) => {
   if (value.process && value.process.thread_id !== value.thread) ctx.addIssue({ code: 'custom', message: 'Process thread must match the authoritative request thread' });
-  if (value.thread !== `threads/${value.bead_id}` && !value.thread.startsWith(`threads/${value.bead_id}/`)) ctx.addIssue({ code: 'custom', message: 'Thread must belong to the owning Bead' });
+  if (value.schema_version === 1) {
+    if (!value.bead_id || value.execution) ctx.addIssue({ code: 'custom', message: 'Legacy review requires an owning Bead and no execution owner' });
+    if (value.thread !== `threads/${value.bead_id}` && !value.thread.startsWith(`threads/${value.bead_id}/`)) ctx.addIssue({ code: 'custom', message: 'Thread must belong to the owning Bead' });
+  } else if (!value.execution || value.thread !== `threads/${value.execution.thread_id}` || value.bead_id || value.process || value.members.some(member => member.kind === 'form')) {
+    ctx.addIssue({ code: 'custom', message: 'Development review requires its exact execution thread and document members, without Bead or QRSPI phase ownership' });
+  }
   if (new Set(value.members.map(member => member.id)).size !== value.members.length) ctx.addIssue({ code: 'custom', message: 'Duplicate member ID' });
 });
 const answers = z.record(z.string().max(250), z.union([z.string().max(16000), z.boolean(), z.record(z.string().max(100), z.boolean())])).refine(value => Object.keys(value).length <= 400);

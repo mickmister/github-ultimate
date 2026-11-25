@@ -8,6 +8,7 @@ import type { MobileGitHub } from '../../src/mobile-github';
 import { previewFixture } from './preview-fixture';
 import { BrowserChat, ChatStorage } from '../../hosted/pi-chat';
 import type { PiBridge } from '../../hosted/pi-transport';
+import type { WorkflowDelivery } from '../../src/workflow-interface';
 
 export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: string, thinking?: string) {
   const objects = new Map<string, { text: string; version: string }>();
@@ -82,7 +83,15 @@ export async function nativeFixture(page: Page, source: string, remote: ReturnTy
     } } });
   }, { documentId: document.documentId });
   const bridge: PiBridge = (request) => pi.hosted(source, request, () => true) as never;
-  return { storage, inference, url: url.href, previews, async seedLegacy(text: string) { const chat = new BrowserChat(new ChatStorage(bridge, storage), inference, bridge); await chat.send(text); return chat; },
+  return { storage, inference, url: url.href, previews,
+    async seedWorkflow(execution: WorkflowDelivery & { storageRepository?: string }) {
+      const store = new ChatStorage(bridge, storage), chat = new BrowserChat(store, inference, bridge, undefined, { repository: previews.navigation.repository, workspace: previews.workspace });
+      await chat.send('Launch the requested feature workflow');
+      const checkpoint = await store.read(chat.snapshot().sessionId!, chat.snapshot().reference!);
+      await store.save({ ...checkpoint, parent: chat.snapshot().reference!, created_at: new Date().toISOString(), workflow_executions: [execution] });
+      return chat.snapshot().sessionId!;
+    },
+    async seedLegacy(text: string) { const chat = new BrowserChat(new ChatStorage(bridge, storage), inference, bridge); await chat.send(text); return chat; },
     async seedCopied(text: string, pending = false) {
       const old = { ...storage, endpoint: 'https://s3.us-west-004.backblazeb2.com/', region: 'us-west-004' };
       const oldPi = new MobilePi(new S3Connections(store(old), remote.fetcher, undefined, undefined, undefined, mobileS3Sign), new InferenceConnections(store(inference), remote.fetcher));

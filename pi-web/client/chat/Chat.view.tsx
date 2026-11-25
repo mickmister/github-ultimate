@@ -12,6 +12,7 @@ import type { ChatMessage } from '../../../hosted/pi-chat-contract';
 import { ErrorBoundary } from './ErrorBoundary.view';
 import { BeadsView, BeadDialogs } from './Beads.view';
 import { beadContext } from '../../../src/bead-context';
+import { WorkflowStatus } from './WorkflowStatus.view';
 
 function Connections({ model: m }: { model: ChatModel }) {
   return <section className="chat-connections" aria-label="Connections"><h3>Connections</h3><div className="chat-controls">
@@ -52,7 +53,7 @@ function Conversation({ model: m }: { model: ChatModel }) {
     {m.route.kind === 'inbox' && <p>Unassigned migration inbox. Select a saved conversation and move it into a workspace in Settings → Connections to continue.</p>}
     {m.snapshot.dirty && !m.busy && <button onClick={() => void m.retrySave()}>Retry session save</button>}
     {m.snapshot.phase === 'interrupted' && <aside><p>The previous turn was interrupted. It has not been resent.</p><button disabled={m.busy || m.snapshot.dirty} onClick={() => void m.send(true)}>Continue interrupted turn</button></aside>}
-    <div className="chat-transcript" role="log" aria-label="Messages"><ErrorBoundary scope="conversation" retry key={m.snapshot.sessionId ?? 'draft'}><CanonicalTranscript messages={m.snapshot.messages} sessionId={m.snapshot.sessionId} streaming={m.snapshot.streaming} /></ErrorBoundary>
+    <div className="chat-transcript" role="log" aria-label="Messages"><WorkflowStatus model={m.workflows} /><ErrorBoundary scope="conversation" retry key={m.snapshot.sessionId ?? 'draft'}><CanonicalTranscript messages={m.snapshot.messages} sessionId={m.snapshot.sessionId} streaming={m.snapshot.streaming} /></ErrorBoundary>
       {!m.snapshot.messages.length && <div className="chat-empty"><h2>What can I help you with?</h2><p>Start a conversation. Messages are saved to your selected S3 storage.</p></div>}</div>
     {m.draftBeads.length > 0 && <div className="pi-bead-chips" aria-label="Beads in draft">{m.draftBeads.map(bead => <span className="pi-bead-chip" key={bead.id}>{bead.id} · {bead.title}<button aria-label={`Remove ${bead.id} from message`} onClick={() => m.removeDraftBead(bead.id)}>×</button></span>)}</div>}
     <form className="chat-composer" onSubmit={event => { event.preventDefault(); void m.send(); }}>

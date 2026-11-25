@@ -12,6 +12,7 @@ import { chatRoute, inChatScope, routeURL, workspaceKey, type ChatRoute } from '
 import { runtime } from './runtime';
 import { useBeads } from './Beads.hooks';
 import { withBeadContext, type BeadReference } from '../../../src/bead-context';
+import { useWorkflowStatus } from './WorkflowStatus.hooks';
 export { workspaceKey } from './chat-route';
 
 const empty: ChatSnapshot = { title: 'Alohak', messages: [], busy: false, dirty: false, phase: 'idle' };
@@ -32,6 +33,7 @@ export function useChat() {
   const [chat, setChat] = useState<ChatHandle>();
   const active = useRef<ChatHandle | undefined>(undefined); active.current = chat;
   const snapshot = useSyncExternalStore(chat?.subscribe ?? emptySubscribe, chat?.snapshot ?? emptySnapshot, emptySnapshot);
+  const workflows = useWorkflowStatus(chat, snapshot.workflows ?? []);
   const presentation = useSyncExternalStore(subscribeDevice, deviceSnapshot, () => 'desktop');
   const { settingsDialog, openSettings, closeSettings } = useSettings(presentation);
   const [inference, setInference] = useState<PublicInferenceConnection[]>([]), [storage, setStorage] = useState<PublicS3Connection[]>([]);
@@ -300,7 +302,7 @@ export function useChat() {
     });
   }
   const workspaceChats = [...canonical.values()].filter(item => inChatScope(route, item.workspace));
-  return { beads, panel, choosePanel, attachment, attach, sendAttachment, destinationSearch, setDestinationSearch, closeAttachment: () => setAttachment(undefined), changeAttachment: (patch: Partial<NonNullable<typeof attachment>>) => setAttachment(value => value ? { ...value, ...patch } : value),
+  return { workflows, beads, panel, choosePanel, attachment, attach, sendAttachment, destinationSearch, setDestinationSearch, closeAttachment: () => setAttachment(undefined), changeAttachment: (patch: Partial<NonNullable<typeof attachment>>) => setAttachment(value => value ? { ...value, ...patch } : value),
     draftBeads, removeDraftBead: (id: string) => setDraftBeads(value => value.filter(bead => bead.id !== id)), pickerOpen, pickerSearch, setPickerSearch, openPicker: () => setPickerOpen(true), closePicker: () => setPickerOpen(false), addPickedBeads: () => { setDraftBeads(value => [...new Map([...value, ...beads.selected].map(bead => [bead.id, bead])).values()]); setPickerOpen(false); }, workspaceChats,
     theme, previews: scopedPreviews, route, movedConversation, followConversation, workspace, workspaces, canCreate, chooseWorkspace, moveWorkspace, snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: workspaceChats.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
     copiedCount: copied.reduce((count, item) => count + item.conversations, 0), importCopied,

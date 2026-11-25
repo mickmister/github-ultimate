@@ -60,6 +60,37 @@ test('chat durably journals the user before inference and restores with new devi
   expect((await otherStore.read(saved.session_id, other.snapshot().reference!)).messages).toHaveLength(4);
 });
 
+test('restored conversation polls only its retained workflow without inference or dispatch, recovers on another device and retains stale status after revocation', async () => {
+  const f = fixture(), store = new ChatStorage(f.bridge, f.storage), original = new BrowserChat(store, f.inference, f.bridge);
+  await original.retrySave();
+  const saved = await store.read(original.snapshot().sessionId!, original.snapshot().reference!);
+  const execution = { executionReference: crypto.randomUUID(), digest: 'd'.repeat(64), workspace: 'workspace', thread: 'thread', process: 'process', engineCommit: 'a'.repeat(40),
+    userId: 7, installationId: 8, attemptedAt: '2026-11-25T00:00:00Z', state: 'dispatched' as const, runId: 123, connectionId: crypto.randomUUID(), storageRepository: 'owner/storage' };
+  const checkpoint = { ...saved, workflow_executions: [execution] }, reference = await store.save(checkpoint);
+  const connectionId = crypto.randomUUID(), operations: any[] = [];
+  let revoked = false;
+  const workflowBridge: PiBridge = async request => {
+    operations.push(request);
+    if (request.operation === 'connections') return (revoked ? [] : [{ id: connectionId, user: { id: 7 }, installation: { id: 8 } }]) as never;
+    if (request.operation === 'workflowStatus') {
+      expect(request.id).toBe(connectionId);
+      if (!request.recoveryReceipt) throw Error('No device-local receipt');
+      return { ...execution, executionState: 'in_progress', attempt: 1 } as never;
+    }
+    throw Error('Unexpected operation');
+  };
+  const chat = new BrowserChat(store, f.inference, f.bridge, { checkpoint, reference }, undefined, workflowBridge);
+  await chat.refreshWorkflows();
+  expect(chat.snapshot().workflows?.[0].observation?.executionState).toBe('in_progress');
+  expect(f.requests).toHaveLength(0); expect(operations.some(op => op.operation === 'workflowStart')).toBe(false);
+  const observedAt = chat.snapshot().workflows?.[0].observedAt;
+  revoked = true; await expect(chat.refreshWorkflows()).rejects.toThrow('refresh incomplete');
+  expect(chat.snapshot().workflows?.[0]).toMatchObject({ observedAt, error: expect.stringContaining('unavailable'), observation: { executionState: 'in_progress' } });
+  expect(f.requests).toHaveLength(0);
+  const other = new BrowserChat(store, f.inference, f.bridge, { checkpoint: saved, reference: original.snapshot().reference! }, undefined, workflowBridge);
+  const count = operations.length; await other.refreshWorkflows(); expect(operations).toHaveLength(count);
+});
+
 test('post-turn S3 telemetry neither blocks chat completion nor fails saved history, and each invocation gets a trace', async () => {
   const f = fixture(), exports: any[] = [];
   let reject!: (reason: Error) => void;

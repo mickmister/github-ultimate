@@ -24,7 +24,7 @@ type Document = Resource & { text: string };
 function nugs(action: string, args: string[] = [], input?: string): any {
   return JSON.parse(execFileSync(bin, ['documents', action, '--workspace', workspace!, ...args], { cwd: root, encoding: 'utf8', input, maxBuffer: 32 * 1024 * 1024 }));
 }
-function listing(): Resource[] { return nugs('list').resources ?? []; }
+function listing(prefix = 'review-requests/'): Resource[] { return nugs('list', ['--prefix', prefix, '--all']).resources ?? []; }
 function read(name: string, snapshot?: string): Document {
   return nugs('read', ['--name', name, ...(snapshot ? ['--snapshot', snapshot] : [])]).document;
 }
@@ -69,7 +69,7 @@ async function main() {
     input.created_at = prior ? prior.created_at : input.created_at ?? new Date().toISOString();
     const request = parseReviewRequest(JSON.stringify(reviewOrigin(input, prior, process.env, values['vk-origin'] as 'handoff' | 'none' | undefined)));
     if (request.workspace !== workspace) throw new Error('Request workspace does not match --workspace.');
-    const resources = listing();
+    const resources = listing(`review-requests/${request.request_id}/`);
     const current = resources.find(resource => resource.name === requestResource(request.request_id));
     if ((current?.version ?? undefined) !== values.expected) throw new Error('Publish requires the observed --expected version; omit it only for a new request.');
     if (current) {
@@ -114,6 +114,8 @@ async function main() {
         if (request.workspace !== workspace) throw new Error('Response request workspace mismatch.');
         await validateReviewArtifact(request, value, readPin);
         const marker = `[review-response:${value.id}:${resource.version}]`;
+        // Execution-owned reviews have no implicit task intake or hidden Bead.
+        if (!request.bead_id) continue;
         const beadIds = [...new Set([request.bead_id, ...value.forms.map(form => form.bead_id)])];
         const beadState = (id: string) => JSON.parse(execFileSync('bd', ['show', id, '--json'], { cwd: root, encoding: 'utf8' }))[0];
         if (acknowledged && beadIds.every(id => {

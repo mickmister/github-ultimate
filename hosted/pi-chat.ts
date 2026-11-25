@@ -5,7 +5,7 @@ import { bytesToHex } from '@noble/hashes/utils.js';
 import { checkpointSchema, validateTranscript } from './pi-session';
 import { piWorkflowTools, workflowIntentSchema } from './pi-workflow-tools';
 import { ChatBudget, type ChatLimits } from './pi-chat-budget';
-import { workflowDeliverySchema } from '../src/workflow-interface';
+import { workflowDeliverySchema, workflowObservationSchema } from '../src/workflow-interface';
 import { inferenceStream, piModel, type PiBridge } from './pi-transport';
 import { backblaze, cloudflareR2, checkpointReference, type PublicS3Connection, type S3Listing, type S3Object } from '../src/s3-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
@@ -232,6 +232,8 @@ export class BrowserChat {
   private budget = new ChatBudget();
   private turnWorkspace?: ChatWorkspace;
   private telemetry?: PiTelemetry;
+  private workflowStatusReader?: (input: any, signal?: AbortSignal) => Promise<Record<string, any>>;
+  private workflowObservations = new Map<string, Pick<import('./pi-chat-contract').ChatWorkflow, 'observation' | 'observedAt' | 'error'>>();
   constructor(private storage: ChatStorage, private inference: PublicInferenceConnection, private bridge: PiBridge, restored?: { checkpoint: ChatCheckpoint; reference: string }, private initialWorkspace?: ChatWorkspace, private workflowBridge: PiBridge = bridge, private options: { limits?: Partial<ChatLimits>; workspace?: () => ChatWorkspace | undefined; beadsQuery?: import('./pi-workflow-tools').WorkflowToolContext['beadsQuery'] } = {}) {
     if (restored && restored.checkpoint.model !== inference.model) throw Error('Select an inference connection with the saved conversation’s model.');
     this.checkpoint = restored ? { ...restored.checkpoint, storage: chatStorageId(storage.connection), branch_id: crypto.randomUUID(), phase: restored.checkpoint.phase === 'pending' ? 'interrupted' : restored.checkpoint.phase } : {
@@ -282,6 +284,7 @@ export class BrowserChat {
       storageBridge: this.bridge,
       beadsQuery: this.options.beadsQuery,
       telemetry: this.telemetry,
+      statusReader: read => { this.workflowStatusReader = read; },
     });
   }
   private pause(reason: string) { this.pauseReason ??= reason; this.agent.abort(); }
@@ -318,12 +321,43 @@ export class BrowserChat {
     // Pi mutates its in-flight message. Publish an immutable render snapshot so
     // upstream memoized renderers observe each delta and the final transition.
     if (this.agent.state.streamingMessage && this.agent.state.streamingMessage.role !== 'system') messages.push(structuredClone(this.agent.state.streamingMessage));
-    this.state = { ...this.state, streaming: this.agent.state.isStreaming, sessionId: this.checkpoint.session_id, reference: this.reference, title: this.checkpoint.title, phase: this.checkpoint.phase, messages };
+    this.state = { ...this.state, streaming: this.agent.state.isStreaming, sessionId: this.checkpoint.session_id, reference: this.reference, title: this.checkpoint.title, phase: this.checkpoint.phase, messages,
+      workflows: (this.checkpoint.workflow_executions ?? []).map(execution => ({ execution, ...this.workflowObservations.get(execution.executionReference) })) };
     for (const listener of this.listeners) listener();
   }
   private save() {
     const pending = this.saveQueue.then(() => this.writeCheckpoint());
     this.saveQueue = pending.catch(() => {}); return pending;
+  }
+  /** Read-only view refresh. It does not invoke inference, spend the agent tool
+   * budget, retry a dispatch, or resume an interrupted conversational turn. */
+  async refreshWorkflows(signal?: AbortSignal) {
+    const records = [...(this.checkpoint.workflow_executions ?? [])].reverse().filter(execution => this.workflowObservations.get(execution.executionReference)?.observation?.executionState !== 'completed');
+    if (!records.length || !this.workflowStatusReader) return;
+    const connections = await this.workflowBridge<import('../src/hosted-protocol').HostedConnection[]>({ operation: 'connections' });
+    signal?.throwIfAborted();
+    let failed = false;
+    for (const execution of records) {
+      try {
+        const authorized = connections.filter(c => c.user?.id === execution.userId && c.installation?.id === execution.installationId);
+        const original = authorized.filter(c => c.id === execution.connectionId);
+        const matches = original.length ? original : authorized;
+        if (matches.length !== 1) throw Error('Original workflow connection unavailable.');
+        const scope = { id: matches[0].id, userId: execution.userId, installationId: execution.installationId };
+        const value = await this.workflowStatusReader({ connectionRef: JSON.stringify(scope), executionReference: execution.executionReference,
+          ...(execution.storageRepository ? { reportWorkspace: { repository: execution.storageRepository, workspace: execution.workspace } } : {}) }, signal);
+        signal?.throwIfAborted();
+        const observation = workflowObservationSchema.parse(value);
+        if (observation.executionReference !== execution.executionReference || observation.digest !== execution.digest || observation.workspace !== execution.workspace || observation.thread !== execution.thread || observation.process !== execution.process || observation.engineCommit !== execution.engineCommit || observation.userId !== execution.userId || observation.installationId !== execution.installationId) throw Error('Workflow observation identity changed.');
+        this.workflowObservations.set(execution.executionReference, { observation, observedAt: new Date().toISOString() });
+      } catch {
+        signal?.throwIfAborted();
+        failed = true;
+        this.workflowObservations.set(execution.executionReference, { ...this.workflowObservations.get(execution.executionReference), error: 'Workflow status unavailable. Last observation retained; check the original connection and refresh.' });
+      }
+      this.publish();
+    }
+    if (failed) throw Error('Workflow status refresh incomplete.');
   }
   private async writeCheckpoint() {
     this.state = { ...this.state, dirty: true }; this.publish();

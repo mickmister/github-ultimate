@@ -20,6 +20,7 @@ import { documentCache, reviewCachePinsKey } from './document-cache';
 import type { VdConnections } from './vd-connections';
 import { actionPath, actionResult } from './actions-protocol';
 import { developmentHost, workflowRunName, type WorkflowDelivery } from './workflow-interface';
+import { readWorkflowProgress } from './workflow-progress';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
@@ -198,7 +199,9 @@ export class Connections {
         // Only update a host-owned launch record. Caller-supplied observations
         // must not poison the host's effect/idempotency ledger.
         if (owned) { record.workflowDeliveries = { ...deliveries, [key]: associated }; await this.store.put(record); }
-        return { ...associated, executionState: run.status, conclusion: run.conclusion, attempt: run.run_attempt, runUrl: `https://github.com/${repo.full_name}/actions/runs/${run.id}`, reportName: `threads/${delivery.thread}/development/${delivery.process}.md`, candidateAcceptance: 'unknown-until-bound-report' };
+        const observed = await readWorkflowProgress(delivery, run, path => this.api(record, `/repos/${repo.full_name}${path}`, maxMetadataBytes, 'none'));
+        const timestamps = z.object({ created_at: z.string().datetime().optional(), run_started_at: z.string().datetime().nullable().optional() }).parse(matches[0]);
+        return { ...associated, ...observed, createdAt: timestamps.created_at, startedAt: timestamps.run_started_at, executionState: run.status, conclusion: run.conclusion, attempt: run.run_attempt, runUrl: `https://github.com/${repo.full_name}/actions/runs/${run.id}`, reportName: `threads/${delivery.thread}/development/${delivery.process}.md`, candidateAcceptance: 'unknown-until-bound-report' };
       }
       if (request.operation === 'agentGraphql') {
         if (!record.tokens || record.user?.id !== request.userId || record.installation?.id !== request.installationId) throw new ConnectionError('The agent GitHub user or installation changed.');

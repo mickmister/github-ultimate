@@ -37,7 +37,7 @@ export function ReviewInboxList({ scope, listing, queueFilter, busy, categorizin
     {busy && <LoadingIndicator compact label={copy.loading.text} />}
     {categoryError && <p role="alert">{categoryError}</p>}
     {!requests.length && <p>{copy.empty.text}</p>}
-    <ul className="review-inbox">{requests.map(review => <li key={review.request.request_id}><h3><a href={reviewHref(scope, review)}>{review.request.title}</a></h3><p>{review.request.purpose}</p><p>{reviewQueueCategory(review, listing) === 'dismissed' ? copy.queueDismissed.text : reviewQueueCategory(review, listing) === 'completed' ? copy.queueCompleted.text : reviewStatus(review, listing.artifacts, listing.reviewer)}{copy.separator.text}{review.request.bead_id}</p>
+    <ul className="review-inbox">{requests.map(review => <li key={review.request.request_id}><h3><a href={reviewHref(scope, review)}>{review.request.title}</a></h3><p>{review.request.purpose}</p><p>{reviewQueueCategory(review, listing) === 'dismissed' ? copy.queueDismissed.text : reviewQueueCategory(review, listing) === 'completed' ? copy.queueCompleted.text : reviewStatus(review, listing.artifacts, listing.reviewer)}{copy.separator.text}{review.request.bead_id ?? review.request.execution?.process}</p>
       <button disabled={categorizing !== null} onClick={() => void actions.categorize(review.request.request_id, reviewQueueCategory(review, listing) === 'dismissed' ? 'active' : 'dismissed')}>{categorizing === review.request.request_id ? copy.savingCategory.text : reviewQueueCategory(review, listing) === 'dismissed' ? copy.restore.text : copy.dismiss.text}</button>
     </li>)}</ul>
   </section>;

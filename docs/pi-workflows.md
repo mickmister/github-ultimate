@@ -36,7 +36,12 @@ no mandatory tracker and no caller setup/test arrays. The workflow repository mu
 already have a trusted identity for the selected workspace. An unsupported
 workspace fails; dispatch is not implicit onboarding. The first supported workflow
 is Spec Kit's bounded implementer → parallel two reviewers/tester method, max four
-cycles. Acceptance does not integrate source or create a PR.
+cycles. New runs deliver the exact approved candidate through a non-force configured
+branch update or a PR, plus a bounded CI-agent-authored initial review. Deeper native
+and OTel analysis follows in another job of the same Actions run and enriches the
+review. Optional `request.delivery:"pull-request"` selects PR delivery explicitly.
+The old `publishCandidate` argument is optional compatibility data, not required
+ordinary caller boilerplate.
 
 The caller does not supply a source commit. At startup CI resolves the latest
 remote commit of every configured repository branch and retains the captured
@@ -102,8 +107,27 @@ validate. Pass reportWorkspace when the conversation is no longer in that scope.
 
 Runtime payloads and native/OTLP evidence remain private S3; compact reports use
 existing nugs documents. No Actions artifact handoff or extra scheduler is added.
-Detailed in-flight methodology progress and human Continue/New-thread controls
-remain separate UI work; Actions status is not invented methodology progress.
+Pi chat renders automatically polled workflow cards from the calling conversation's
+durable receipts. Visible active cards refresh approximately every10 seconds; local
+elapsed-time ticking needs no model turn. Visibility changes pause/resume polling,
+errors back off, and completed runs stop. Multiple runs remain distinct, and restore
+uses the original actor/installation receipt, including read-only recovery on another
+authorized device. A conversation switch cancels its pending view requests.
+
+Actions job steps retain their individual states and actual finished/total counts.
+In-flight Spec Kit cycle/role/current-next detail comes from a compact GitHub check
+created by the runtime's GitHub Actions identity, bound to the exact engine SHA,
+workspace/thread/process and run attempt. The check is a neutral observation, never
+approval. Its absence or denied checks-read access leaves details unavailable;
+it does not invent methodology progress or hide independent Actions status.
+Private native sessions and OTel are not downloaded on each poll.
+
+Delivery, initial review readiness, analysis and whole-run conclusion are separate.
+Source/review links appear before long after-analysis finishes. Stale/offline or
+revoked-access views retain the last observation with an explicit notice. Standalone
+development has no full QRSPI phase binding, so the UI does not infer phase approvals
+from job completion. Broader QRSPI process projection and human Continue/New-thread
+controls remain separate supported-adapter work under task-clh.
 
 ## Deployment and verification
 

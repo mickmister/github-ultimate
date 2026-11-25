@@ -20,10 +20,11 @@ const envelope = z.object({
   request: z.object({ id: key, version: oid, snapshot: oid }),
 });
 const route = z.object({
-  request_id: key, workspace: key, bead_id: bead,
+  request_id: key, workspace: key, bead_id: bead.optional(),
+  execution: z.object({ kind: z.literal('development'), id: z.string().regex(/^[1-9]\d*-[1-9]\d*$/), process: key, thread_id: bead }).optional(),
   process: z.object({ kind: z.literal('qrspi'), id: key }).optional(),
   response_effect: z.object({ kind: z.literal('vk-session'), workspace_id: z.string().uuid(), session_id: z.string().uuid() }).optional(),
-});
+}).refine(value => Boolean(value.bead_id) !== Boolean(value.execution) && (!value.process || Boolean(value.bead_id)), 'Review route requires one owning Bead or development execution');
 function json(text: string) {
   if (utf8Bytes(text) > 256000) throw new Error('Review IO payload exceeds 256 KB.');
   return JSON.parse(text);

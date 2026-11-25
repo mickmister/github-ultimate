@@ -33,7 +33,7 @@ export function ReviewSessionView({ scope, review, listing, latest, service, sel
   const downloading = downloaded + failed < contents.size;
   const contentProgress = downloading ? copy.downloading.text(downloaded + failed, contents.size) : failed ? copy.unavailableContents.text(failed) : '';
   return <section aria-label={copy.session.text}><header className="review-summary"><p>{review.request.purpose}</p><p><strong>{copy.requested.text}</strong> {review.request.question}</p>
-    <p>{review.request.change_kind === 'implemented' ? copy.implemented.text : review.request.change_kind === 'proposal' ? copy.proposed.text : copy.mixed.text}{copy.separator.text}{review.request.bead_id}</p>
+    <p>{review.request.change_kind === 'implemented' ? copy.implemented.text : review.request.change_kind === 'proposal' ? copy.proposed.text : copy.mixed.text}{copy.separator.text}{review.request.bead_id ?? review.request.execution?.process}</p>
     <button onClick={actions.refresh} disabled={busy}>{copy.checkUpdates.text}</button>
     {latest && latest.pin.version !== review.pin.version && <p role="status"><strong>{copy.updated.text}</strong> {copy.answersPinned.text} <a href={reviewHref(scope, latest)}>{copy.openUpdated.text}</a></p>}
     {review.request.status !== 'published' && <p>{copy.unavailable.text}</p>}
