@@ -1,0 +1,37 @@
+.chat-panel[hidden] { display: none; }
+.pi-beads { display: flex; flex-direction: column; height: 100%; min-height: 0; padding: 12px; gap: 10px; color: var(--text); background: var(--bg); }
+.pi-beads button, .pi-beads input, .pi-beads select, .pi-beads-dialog button, .pi-beads-dialog input, .pi-beads-dialog select, .pi-beads-dialog textarea { font: inherit; color: var(--text); background: var(--bg-panel); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+.pi-beads button:disabled, .pi-beads-dialog button:disabled { opacity: .5; }
+.pi-beads button, .pi-beads-dialog button { cursor: pointer; }
+.pi-beads-toolbar, .pi-beads-controls, .pi-beads-selection, .pi-bead-meta, .pi-beads-dialog header { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.pi-beads-toolbar h1 { margin: 0; font-size: 16px; margin-right: auto; }
+.pi-beads-controls { border: 0; padding: 0; margin: 0; min-width: 0; }
+.pi-beads-controls > input { flex: 1; min-width: 140px; }
+.pi-beads-settings { display: flex; flex-wrap: wrap; gap: 10px; width: 100%; }
+.pi-beads-settings label { display: flex; gap: 4px; align-items: center; }
+.pi-beads-board { flex: 1; min-height: 240px; min-width: 0; overflow: auto; }
+.pi-beads-board > div { height: 100%; --wx-color-primary: var(--accent); --wx-color-font: var(--text); --wx-color-secondary-font: var(--text-muted); --wx-color-primary-font: var(--text); --wx-color-secondary: var(--bg-panel); --wx-color-component: var(--bg); --wx-color-border: var(--border); --wx-font-family: var(--font-mono); }
+.pi-bead-card { min-width: 0; padding: 10px; border: 1px solid var(--border); border-radius: 7px; background: var(--bg); color: var(--text); user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; touch-action: pan-x pan-y; }
+.pi-bead-card[data-selected] { outline: 2px solid var(--accent); background: var(--bg-selected); }
+.pi-bead-meta { gap: 7px; font-size: 11px; color: var(--text-muted); }
+.pi-bead-meta code { overflow-wrap: anywhere; flex: 1; }
+.pi-bead-meta input { width: 20px; height: 20px; accent-color: var(--accent); }
+.pi-bead-card .pi-bead-title { display: block; width: 100%; text-align: left; white-space: normal; overflow-wrap: anywhere; border: 0; background: transparent; padding: 9px 0; font-weight: 600; }
+.pi-beads-dialog { max-width: min(620px, calc(100vw - 24px)); width: 100%; max-height: calc(100dvh - 32px); overflow: auto; margin: auto; border: 1px solid var(--border); border-radius: 12px; padding: 20px; background: var(--bg); color: var(--text); }
+.pi-beads-dialog::backdrop { background: #0008; }
+.pi-beads-dialog header { justify-content: space-between; margin-bottom: 14px; }
+.pi-beads-dialog h2 { font-size: 17px; margin: 0; }
+.pi-beads-dialog form, .pi-beads-dialog form > label { display: flex; flex-direction: column; gap: 10px; }
+.pi-beads-dialog form { gap: 15px; }
+.pi-beads-dialog textarea { resize: vertical; }
+.pi-beads-references, .pi-beads-picker { list-style: none; padding: 0; margin: 10px 0; max-height: 35dvh; overflow: auto; }
+.pi-beads-references li { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 6px 0; }
+.pi-beads-references code, .pi-beads-picker small { display: block; font-size: 11px; color: var(--text-muted); }
+.pi-beads-picker label { display: flex; align-items: center; gap: 10px; padding: 10px 0; }
+.pi-beads-menu { display: none; }
+.pi-beads-menu[open] { display: flex; flex-direction: column; gap: 12px; }
+.pi-bead-description { white-space: pre-wrap; overflow-wrap: anywhere; margin: 16px 0; }
+.pi-bead-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 6px 12px; }
+.pi-bead-chip { display: inline-flex; align-items: center; gap: 6px; background: var(--bg-selected); border: 1px solid var(--border); border-radius: 6px; padding: 4px 7px; font-size: 12px; }
+.chat-phone .pi-beads { padding: 8px; }
+@media (max-width: 599px) { .pi-beads-menu[open] { margin: auto 0 0; max-width: 100%; border-radius: 16px 16px 0 0; padding-bottom: max(20px, env(safe-area-inset-bottom)); } .pi-beads-dialog button { min-height: 44px; } }

@@ -1,0 +1,20 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Alohak isolation checks</title></head><body><main>
+<h1>Alohak isolation checks</h1>
+<p>Credential-free checks for the installed native bridge. Set this exact page as the deployment and approve only the fixture bridge; these checks do not need a GitHub deployment grant. An ordinary browser cannot establish native isolation.</p>
+<label>Device model and OS <input id="device" placeholder="e.g. iPhone / iOS version"></label>
+<label>Installed build / source <input id="installed" placeholder="From your installation receipt"></label>
+<p id="native-status" role="status">Waiting for native bootstrap…</p>
+<button id="run" disabled>Run automatic checks</button>
+<p id="check-status" role="status">Loading test script… If the buttons stay disabled, use native Reload to retry.</p>
+<label>Optional HTTPS cross-origin frame fixture URL <input id="cross-origin" type="url" placeholder="An independently hosted copy of frame.html"></label>
+<p>Silence is reported as inconclusive, never as a pass. Sandboxed opaque-origin frames are tested separately from a different HTTPS origin. See the runbook for the remaining manual observations.</p>
+<h2>Native revocation</h2><p>Start this check, then turn off Approve fixture bridge within eight seconds, without reloading. Wait for its outcome, re-enable the fixture grant and run the automatic checks again.</p>
+<button id="revoke" disabled>Start delayed revocation check</button>
+<h2>Lifecycle and navigation</h2><p>Start a delayed request, then use native Reload, Back/Forward, switch deployment, or background and return. Old replies must not appear in the new document. Each load has a new document identity. A new page cannot establish whether an old reply was lost correctly without your observation.</p>
+<button id="pending" disabled>Start delayed lifecycle marker</button>
+<p>Outside-scope probes (run after preparing a report; these may leave this page): <a href="../mobile-isolation-outside.html">Unapproved page with earliest History rewrite</a> · <a href="frame.html" target="_blank" rel="noopener">Popup attempt</a>. The outside page must be blocked or unable to echo; changing its History URL must never grant access. A popup must not open a privileged second WebView.</p>
+<p id="marker" role="status">No lifecycle request started.</p>
+<label>Manual observations <textarea id="observations" rows="5" placeholder="Record action, old/new native document IDs, expected and actual result; include popup/redirect/process-loss observations."></textarea></label>
+<h2>Report</h2><button id="report" disabled>Prepare copyable report</button><textarea id="output" aria-label="Isolation report" rows="18" readonly></textarea>
+<pre id="results" aria-live="polite"></pre><div id="frames"></div>
+<script type="module" src="../mobile-isolation.ts"></script></main></body></html>

@@ -1,0 +1,518 @@
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/AlohakBridge.java b/android/src/main/java/com/reactnativecommunity/webview/AlohakBridge.java
+new file mode 100644
+index 0000000000000000000000000000000000000000..f9a59a6368fc1379df286e448790f6d9fb582259
+--- /dev/null
++++ b/android/src/main/java/com/reactnativecommunity/webview/AlohakBridge.java
+@@ -0,0 +1,82 @@
++package com.reactnativecommunity.webview;
++
++import android.net.Uri;
++import androidx.webkit.JavaScriptReplyProxy;
++import androidx.webkit.WebViewCompat;
++import androidx.webkit.WebViewFeature;
++import org.json.JSONObject;
++import java.util.HashMap;
++import java.util.Map;
++import java.util.UUID;
++
++/** App-private opt-in contract. RNWV continues to own the view and browser UI. */
++final class AlohakBridge {
++  private final RNCWebView web;
++  private final String scope;
++  private String documentId = "", documentURL = "";
++  private boolean ready = false;
++  private boolean installed = false;
++  private final Map<String, JavaScriptReplyProxy> pending = new HashMap<>();
++  AlohakBridge(RNCWebView web, String scope) { this.web = web; this.scope = scope; }
++  boolean allowed(String raw) {
++    try {
++      Uri url = Uri.parse(raw), base = Uri.parse(scope);
++      String path = url.getEncodedPath() == null ? "/" : url.getEncodedPath();
++      String prefix = base.getEncodedPath();
++      return raw.length() <= 4096 && !raw.contains("\\") &&
++        !java.util.regex.Pattern.compile("%2f|%5c|%2e|%25", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(path).find() &&
++        "https".equals(url.getScheme()) && url.getUserInfo() == null && url.getHost() != null &&
++        url.getHost().equals(base.getHost()) && url.getPort() == base.getPort() &&
++        "https".equals(base.getScheme()) && prefix != null && prefix.endsWith("/") &&
++        (path.equals(prefix.substring(0, prefix.length() - 1)) || path.startsWith(prefix));
++    } catch (Exception ignored) { return false; }
++  }
++  private void emit(JSONObject event) { web.onMessage(event.toString(), documentURL); }
++  private JSONObject object() { return new JSONObject(); }
++  void invalidate(String state) {
++    pending.clear(); ready = false; documentId = UUID.randomUUID().toString(); documentURL = "";
++    try { emit(object().put("type", "document").put("state", state).put("documentId", documentId).put("documentURL", "")); }
++    catch (Exception ignored) { }
++  }
++  void start(String url) {
++    invalidate("loading");
++    if (!allowed(url)) { web.stopLoading(); invalidate("error"); return; }
++    documentURL = url;
++  }
++  void commit(String url) {
++    if (!installed || !url.equals(documentURL) || !allowed(documentURL)) return;
++    ready = true;
++    try { emit(object().put("type", "document").put("state", "ready").put("documentId", documentId).put("documentURL", documentURL)); }
++    catch (Exception ignored) { }
++  }
++  void install() {
++    if (!WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)) { invalidate("error"); return; }
++    Uri base = Uri.parse(scope);
++    String origin = "https://" + base.getHost() + (base.getPort() < 0 ? "" : ":" + base.getPort());
++    WebViewCompat.addWebMessageListener(web, "alohak", java.util.Collections.singleton(origin), (view, message, source, main, proxy) -> {
++      if (!ready || !main || message.getType() != androidx.webkit.WebMessageCompat.TYPE_STRING) return;
++      String data = message.getData(); Uri expected = Uri.parse(documentURL);
++      if (!ready || !main || !allowed(documentURL) || !"https".equals(source.getScheme()) ||
++          !java.util.Objects.equals(source.getHost(), expected.getHost()) || source.getPort() != expected.getPort() ||
++          data == null || data.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 16384 || pending.size() >= 8) return;
++      String replyId = UUID.randomUUID().toString(); pending.put(replyId, proxy);
++      try { emit(object().put("type", "message").put("documentId", documentId).put("documentURL", documentURL)
++        .put("isMainFrame", true).put("replyId", replyId).put("data", data)); }
++      catch (Exception ignored) { pending.remove(replyId); }
++    });
++    installed = true;
++  }
++  void respond(String input) {
++    try {
++      JSONObject value = new JSONObject(input);
++      JavaScriptReplyProxy proxy = pending.remove(value.getString("replyId"));
++      if (proxy != null && ready && documentId.equals(value.getString("documentId"))) proxy.postMessage(value.getString("data"));
++    } catch (Exception ignored) { }
++  }
++  void bootstrap(String input) {
++    try {
++      JSONObject value = new JSONObject(input);
++      if (ready && documentId.equals(value.getString("documentId"))) web.evaluateJavascriptWithFallback(value.getString("script"));
++    } catch (Exception ignored) { }
++  }
++}
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+index 07f73fd00a083ebf5a03bffaa7bbadbd1f648505..ba71980ba3525e00790137d75b9600b1ba4c2cae 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebChromeClient.java
+@@ -87,6 +87,7 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+ 
+     @Override
+     public boolean onCreateWindow(WebView view, boolean isDialog, boolean isUserGesture, Message resultMsg) {
++        if (mWebView.alohak != null) return false;
+ 
+         final WebView newWebView = new WebView(view.getContext());
+ 
+@@ -144,6 +145,7 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+ 
+     @Override
+     public void onPermissionRequest(final PermissionRequest request) {
++        if (mWebView.alohak != null) { request.deny(); return; }
+ 
+         grantedPermissions = new ArrayList<>();
+ 
+@@ -330,6 +332,7 @@ public class RNCWebChromeClient extends WebChromeClient implements LifecycleEven
+ 
+     @Override
+     public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> filePathCallback, FileChooserParams fileChooserParams) {
++        if (mWebView.alohak != null) return false;
+         String[] acceptTypes = fileChooserParams.getAcceptTypes();
+         boolean allowMultiple = fileChooserParams.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN_MULTIPLE;
+ 
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+index 5932fc189d192cfd1209509170c816ddcaed0a10..70b32bd3f2d3cde36e1fe499f45001f72563a43c 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebView.java
+@@ -252,6 +252,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+     }
+ 
+     protected void createRNCWebViewBridge(RNCWebView webView) {
++        if (alohak != null) return; // The opt-in bridge has no stock/fallback entry point.
+         if (WebViewFeature.isFeatureSupported(WebViewFeature.WEB_MESSAGE_LISTENER)){
+           if (this.bridgeListener == null) {
+             this.bridgeListener = new WebViewCompat.WebMessageListener() {
+@@ -322,8 +323,25 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+     }
+ 
+     protected String injectedJavaScriptObject = null;
++    AlohakBridge alohak;
+ 
+     public void setInjectedJavaScriptObject(String obj) {
++      try {
++        String scope = new org.json.JSONObject(obj).optString("alohakScope");
++        if (!scope.isEmpty()) {
++          if (alohak != null) { alohak.invalidate("loading"); WebViewCompat.removeWebMessageListener(this, "alohak"); }
++          if (bridgeListener != null) { WebViewCompat.removeWebMessageListener(this, JAVASCRIPT_INTERFACE); bridgeListener = null; }
++          removeJavascriptInterface(JAVASCRIPT_INTERFACE);
++          fallbackBridge = null;
++          alohak = new AlohakBridge(this, scope);
++          alohak.install();
++          return;
++        }
++      } catch (Exception ignored) { }
++      if (alohak != null) {
++        alohak.invalidate("loading"); WebViewCompat.removeWebMessageListener(this, "alohak"); alohak = null;
++        if (messagingEnabled) createRNCWebViewBridge(this);
++      }
+       this.injectedJavaScriptObject = obj;
+       injectJavascriptObject();
+     }
+@@ -420,6 +438,7 @@ public class RNCWebView extends WebView implements LifecycleEventListener {
+ 
+     @Override
+     public void destroy() {
++        if (alohak != null) alohak.invalidate("loading");
+         if (mWebChromeClient != null) {
+             mWebChromeClient.onHideCustomView();
+         }
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+index 251939e56ac24832e6272f77b324eb2d51442ad7..4b765f385d973af9e06144b8a5f22b41987fe08f 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewClient.java
+@@ -74,6 +74,12 @@ public class RNCWebViewClient extends WebViewClient {
+         }
+     }
+ 
++    @Override
++    public void onPageCommitVisible(WebView webView, String url) {
++        super.onPageCommitVisible(webView, url);
++        if (((RNCWebView) webView).alohak != null) ((RNCWebView) webView).alohak.commit(url);
++    }
++
+     @Override
+     public void doUpdateVisitedHistory (WebView webView, String url, boolean isReload) {
+       super.doUpdateVisitedHistory(webView, url, isReload);
+@@ -91,12 +97,14 @@ public class RNCWebViewClient extends WebViewClient {
+       mLastLoadFailed = false;
+ 
+       RNCWebView reactWebView = (RNCWebView) webView;
++      if (reactWebView.alohak != null) reactWebView.alohak.start(url);
+       reactWebView.callInjectedJavaScriptBeforeContentLoaded();
+     }
+ 
+     @Override
+     public boolean shouldOverrideUrlLoading(WebView view, String url) {
+         final RNCWebView rncWebView = (RNCWebView) view;
++        if (rncWebView.alohak != null) return !rncWebView.alohak.allowed(url);
+         final boolean isJsDebugging = rncWebView.getReactApplicationContext().getJavaScriptContextHolder().get() == 0;
+ 
+         if (!isJsDebugging && rncWebView.mMessagingJSModule != null) {
+@@ -146,6 +154,7 @@ public class RNCWebViewClient extends WebViewClient {
+     @TargetApi(Build.VERSION_CODES.N)
+     @Override
+     public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
++        if (((RNCWebView) view).alohak != null && !request.isForMainFrame()) return true;
+         final String url = request.getUrl().toString();
+         return this.shouldOverrideUrlLoading(view, url);
+     }
+@@ -161,6 +170,7 @@ public class RNCWebViewClient extends WebViewClient {
+ 
+     @Override
+     public void onReceivedSslError(final WebView webView, final SslErrorHandler handler, final SslError error) {
++        if (((RNCWebView) webView).alohak != null) ((RNCWebView) webView).alohak.invalidate("error");
+         // onReceivedSslError is called for most requests, per Android docs: https://developer.android.com/reference/android/webkit/WebViewClient#onReceivedSslError(android.webkit.WebView,%2520android.webkit.SslErrorHandler,%2520android.net.http.SslError)
+         // WebView.getUrl() will return the top-level window URL.
+         // If a top-level navigation triggers this error handler, the top-level URL will be the failing URL (not the URL of the currently-rendered page).
+@@ -240,6 +250,7 @@ public class RNCWebViewClient extends WebViewClient {
+         }
+ 
+         super.onReceivedError(webView, errorCode, description, failingUrl);
++        if (((RNCWebView) webView).alohak != null) ((RNCWebView) webView).alohak.invalidate("error");
+         mLastLoadFailed = true;
+ 
+         // In case of an error JS side expect to get a finish event first, and then get an error event
+@@ -263,6 +274,7 @@ public class RNCWebViewClient extends WebViewClient {
+         super.onReceivedHttpError(webView, request, errorResponse);
+ 
+         if (request.isForMainFrame()) {
++            if (((RNCWebView) webView).alohak != null) ((RNCWebView) webView).alohak.invalidate("error");
+             WritableMap eventData = createWebViewEvent(webView, request.getUrl().toString());
+             eventData.putInt("statusCode", errorResponse.getStatusCode());
+             eventData.putString("description", errorResponse.getReasonPhrase());
+@@ -275,6 +287,7 @@ public class RNCWebViewClient extends WebViewClient {
+     @TargetApi(Build.VERSION_CODES.O)
+     @Override
+     public boolean onRenderProcessGone(WebView webView, RenderProcessGoneDetail detail) {
++        if (webView != null && ((RNCWebView) webView).alohak != null) ((RNCWebView) webView).alohak.invalidate("error");
+         // WebViewClient.onRenderProcessGone was added in O.
+         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
+             return false;
+diff --git a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+index 438ab6a659930de2fe0171dcea204d7c43b9f1cb..6e328a5e2cca465d4a835c09663c9a5a784c8d98 100644
+--- a/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
++++ b/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt
+@@ -92,6 +92,7 @@ class RNCWebViewManagerImpl(private val newArch: Boolean = false) {
+             WebView.setWebContentsDebuggingEnabled(true)
+         }
+         webView.setDownloadListener(DownloadListener { url, userAgent, contentDisposition, mimetype, contentLength ->
++            if (webView.alohak != null) return@DownloadListener
+             webView.setIgnoreErrFailedForThisURL(url)
+             val module = webView.reactApplicationContext.getNativeModule(RNCWebViewModule::class.java) ?: return@DownloadListener
+             val request: DownloadManager.Request = try {
+@@ -315,6 +316,10 @@ class RNCWebViewManagerImpl(private val newArch: Boolean = false) {
+ 
+     fun receiveCommand(viewWrapper: RNCWebViewWrapper, commandId: String, args: ReadableArray) {
+       val webView = viewWrapper.webView
++      if (webView.alohak != null) {
++        if (commandId == "postMessage") { webView.alohak.respond(args.getString(0)); return }
++        if (commandId == "injectJavaScript") { webView.alohak.bootstrap(args.getString(0)); return }
++      }
+       when (commandId) {
+         "goBack" -> webView.goBack()
+         "goForward" -> webView.goForward()
+diff --git a/apple/RNCAlohakBridge.h b/apple/RNCAlohakBridge.h
+new file mode 100644
+index 0000000000000000000000000000000000000000..22b9b7b71384b0744d5f3443e606c767b307eba5
+--- /dev/null
++++ b/apple/RNCAlohakBridge.h
+@@ -0,0 +1,17 @@
++#import <WebKit/WebKit.h>
++
++// App-private opt-in contract; RNWV retains ownership of the platform view.
++@interface RNCAlohakBridge : NSObject <WKScriptMessageHandlerWithReply>
++@property(nonatomic, weak) WKWebView *web;
++@property(nonatomic, copy) void (^emit)(NSString *);
++- (instancetype)initWithScope:(NSString *)scope;
++- (BOOL)allowed:(NSString *)url;
++- (void)invalidate:(NSString *)state;
++- (void)start:(WKNavigation *)navigation;
++- (BOOL)response:(WKNavigationResponse *)response;
++- (void)commit:(WKNavigation *)navigation;
++- (void)finish:(WKNavigation *)navigation;
++- (void)fail:(WKNavigation *)navigation;
++- (void)respond:(NSString *)input;
++- (void)bootstrap:(NSString *)input;
++@end
+diff --git a/apple/RNCAlohakBridge.m b/apple/RNCAlohakBridge.m
+new file mode 100644
+index 0000000000000000000000000000000000000000..34ce36344009b80ef431049398092b0abbbf07fc
+--- /dev/null
++++ b/apple/RNCAlohakBridge.m
+@@ -0,0 +1,83 @@
++#import "RNCAlohakBridge.h"
++
++@implementation RNCAlohakBridge {
++  NSString *_scope, *_documentId, *_documentURL, *_responseURL;
++  WKNavigation *_navigation;
++  BOOL _ready;
++  NSMutableDictionary<NSString *, id> *_pending;
++}
++- (instancetype)initWithScope:(NSString *)scope {
++  if ((self = [super init])) { _scope = [scope copy]; _pending = [NSMutableDictionary new]; _documentURL = @""; }
++  return self;
++}
++- (BOOL)allowed:(NSString *)raw {
++  if (!raw || raw.length > 4096 || [raw containsString:@"\\"]) return NO;
++  NSURLComponents *url = [NSURLComponents componentsWithString:raw], *base = [NSURLComponents componentsWithString:_scope];
++  NSString *path = url.percentEncodedPath;
++  if (!path || ![base.percentEncodedPath hasSuffix:@"/"]) return NO;
++  NSRegularExpression *encoded = [NSRegularExpression regularExpressionWithPattern:@"%2f|%5c|%2e|%25" options:NSRegularExpressionCaseInsensitive error:nil];
++  return ![encoded firstMatchInString:path options:0 range:NSMakeRange(0, path.length)] &&
++    [url.scheme isEqual:@"https"] && [base.scheme isEqual:@"https"] && !url.user && !url.password &&
++    [url.host isEqual:base.host] && ((!url.port && !base.port) || [url.port isEqual:base.port]) &&
++    ([path isEqual:[base.percentEncodedPath substringToIndex:base.percentEncodedPath.length - 1]] || [path hasPrefix:base.percentEncodedPath]);
++}
++- (void)send:(NSDictionary *)value {
++  NSData *bytes = [NSJSONSerialization dataWithJSONObject:value options:0 error:nil];
++  if (bytes && self.emit) self.emit([[NSString alloc] initWithData:bytes encoding:NSUTF8StringEncoding]);
++}
++- (void)invalidate:(NSString *)state {
++  NSArray *replies = _pending.allValues; [_pending removeAllObjects];
++  _ready = NO; _documentId = NSUUID.UUID.UUIDString; _documentURL = @""; _responseURL = @"";
++  for (id value in replies) { void (^reply)(id, NSString *) = value; reply(nil, @"Document changed."); }
++  [self send:@{@"type": @"document", @"state": state, @"documentId": _documentId, @"documentURL": @""}];
++}
++- (void)start:(WKNavigation *)navigation { [self invalidate:@"loading"]; _navigation = navigation; }
++- (BOOL)response:(WKNavigationResponse *)response {
++  if (!response.forMainFrame) return NO;
++  NSHTTPURLResponse *http = [response.response isKindOfClass:NSHTTPURLResponse.class] ? (NSHTTPURLResponse *)response.response : nil;
++  if (!http || http.statusCode < 200 || http.statusCode >= 300 || !response.canShowMIMEType || ![self allowed:http.URL.absoluteString]) {
++    [self invalidate:@"error"]; return NO;
++  }
++  _responseURL = http.URL.absoluteString; return YES;
++}
++- (void)commit:(WKNavigation *)navigation { if (navigation == _navigation) _documentURL = _responseURL; }
++- (void)finish:(WKNavigation *)navigation {
++  if (navigation != _navigation) return;
++  if (![self allowed:_documentURL]) { [self invalidate:@"error"]; return; }
++  _ready = YES;
++  [self send:@{@"type": @"document", @"state": @"ready", @"documentId": _documentId, @"documentURL": _documentURL}];
++}
++- (void)fail:(WKNavigation *)navigation { if (navigation == _navigation) [self invalidate:@"error"]; }
++- (void)userContentController:(WKUserContentController *)controller didReceiveScriptMessage:(WKScriptMessage *)message replyHandler:(void (^)(id, NSString *))reply {
++  WKSecurityOrigin *origin = message.frameInfo.securityOrigin;
++  NSURL *url = [NSURL URLWithString:_documentURL];
++  if (!_ready || !message.frameInfo.isMainFrame || message.webView != self.web || ![self allowed:_documentURL] ||
++      ![origin.protocol isEqual:@"https"] || ![origin.host isEqual:url.host] || (origin.port ? origin.port : 443) != (url.port ? url.port.integerValue : 443) ||
++      ![message.body isKindOfClass:NSString.class] || [message.body lengthOfBytesUsingEncoding:NSUTF8StringEncoding] > 16384 || _pending.count >= 8) {
++    reply(nil, @"Native document or request unavailable."); return;
++  }
++  NSString *replyId = NSUUID.UUID.UUIDString; _pending[replyId] = [reply copy];
++  [self send:@{@"type": @"message", @"documentId": _documentId, @"documentURL": _documentURL,
++    @"isMainFrame": @YES, @"replyId": replyId, @"data": message.body}];
++}
++- (NSDictionary *)parse:(NSString *)input {
++  id value = [NSJSONSerialization JSONObjectWithData:[input dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil];
++  return [value isKindOfClass:NSDictionary.class] ? value : nil;
++}
++- (void)respond:(NSString *)input {
++  NSDictionary *value = [self parse:input]; NSString *key = value[@"replyId"];
++  if (![key isKindOfClass:NSString.class]) return;
++  void (^reply)(id, NSString *) = _pending[key]; [_pending removeObjectForKey:key];
++  if (!reply) return;
++  if (_ready && [_documentId isEqual:value[@"documentId"]] && [value[@"data"] isKindOfClass:NSString.class]) reply(value[@"data"], nil);
++  else reply(nil, @"Document changed.");
++}
++- (void)bootstrap:(NSString *)input {
++  NSDictionary *value = [self parse:input];
++  if (_ready && [_documentId isEqual:value[@"documentId"]] && [value[@"script"] isKindOfClass:NSString.class])
++    [self.web evaluateJavaScript:value[@"script"] completionHandler:nil];
++}
++- (void)dealloc {
++  for (id value in _pending.allValues) { void (^reply)(id, NSString *) = value; reply(nil, @"WebView disposed."); }
++}
++@end
+diff --git a/apple/RNCWebViewImpl.m b/apple/RNCWebViewImpl.m
+index 7f5c24d6e2cfb26eddbc513bf17a81c24a7273e2..ed3af3d50b4880faef37f509f96d4d0be6f4e2a8 100644
+--- a/apple/RNCWebViewImpl.m
++++ b/apple/RNCWebViewImpl.m
+@@ -114,6 +114,8 @@ NSString *const CUSTOM_SELECTOR = @"_CUSTOM_SELECTOR_";
+ #endif // TARGET_OS_OSX
+ @end
+ 
++#import "RNCAlohakBridge.h"
++
+ @interface RNCWebViewImpl () <WKUIDelegate, WKNavigationDelegate, WKScriptMessageHandler, WKHTTPCookieStoreObserver,
+ #if !TARGET_OS_OSX
+ UIScrollViewDelegate,
+@@ -126,6 +128,7 @@ RCTAutoInsetsProtocol>
+ @property (nonatomic, strong) WKUserScript *injectedObjectJsonScript;
+ @property (nonatomic, strong) WKUserScript *atStartScript;
+ @property (nonatomic, strong) WKUserScript *atEndScript;
++@property (nonatomic, strong) RNCAlohakBridge *alohak;
+ @end
+ 
+ @implementation RNCWebViewImpl
+@@ -613,6 +616,8 @@ RCTAutoInsetsProtocol>
+ - (void)removeFromSuperview
+ #endif
+ {
++  [self.alohak invalidate:@"loading"];
++  [_webView.configuration.userContentController removeScriptMessageHandlerForName:@"alohak"];
+   if (_webView) {
+     [_webView.configuration.userContentController removeScriptMessageHandlerForName:HistoryShimName];
+     [_webView.configuration.userContentController removeScriptMessageHandlerForName:MessageHandlerName];
+@@ -775,6 +780,7 @@ RCTAutoInsetsProtocol>
+ - (void)userContentController:(WKUserContentController *)userContentController
+       didReceiveScriptMessage:(WKScriptMessage *)message
+ {
++  if (self.alohak && [message.name isEqualToString:MessageHandlerName]) return;
+   if ([message.name isEqualToString:HistoryShimName]) {
+     if (_onLoadingFinish) {
+       NSMutableDictionary<NSString *, id> *event = [self baseEvent];
+@@ -1110,6 +1116,7 @@ RCTAutoInsetsProtocol>
+ 
+ - (void)postMessage:(NSString *)message
+ {
++  if (self.alohak) { [self.alohak respond:message]; return; }
+   NSDictionary *eventInitDict = @{@"data": message};
+   NSString *source = [NSString
+                       stringWithFormat:@"window.dispatchEvent(new MessageEvent('message', %@));",
+@@ -1329,6 +1336,10 @@ RCTAutoInsetsProtocol>
+   decidePolicyForNavigationAction:(WKNavigationAction *)navigationAction
+                   decisionHandler:(void (^)(WKNavigationActionPolicy))decisionHandler
+ {
++    if (self.alohak) {
++      decisionHandler(navigationAction.targetFrame.isMainFrame && [self.alohak allowed:navigationAction.request.URL.absoluteString] ? WKNavigationActionPolicyAllow : WKNavigationActionPolicyCancel);
++      return;
++    }
+     static NSDictionary<NSNumber *, NSString *> *navigationTypes;
+     static dispatch_once_t onceToken;
+ 
+@@ -1426,6 +1437,7 @@ RCTAutoInsetsProtocol>
+  */
+ - (void)webViewWebContentProcessDidTerminate:(WKWebView *)webView
+ {
++  [self.alohak invalidate:@"error"];
+   RCTLogWarn(@"Webview Process Terminated");
+   if (_onContentProcessDidTerminate) {
+     NSMutableDictionary<NSString *, id> *event = [self baseEvent];
+@@ -1441,6 +1453,7 @@ RCTAutoInsetsProtocol>
+   decidePolicyForNavigationResponse:(WKNavigationResponse *)navigationResponse
+                     decisionHandler:(void (^)(WKNavigationResponsePolicy))decisionHandler
+ {
++  if (self.alohak) { decisionHandler([self.alohak response:navigationResponse] ? WKNavigationResponsePolicyAllow : WKNavigationResponsePolicyCancel); return; }
+   WKNavigationResponsePolicy policy = WKNavigationResponsePolicyAllow;
+   if ([navigationResponse.response isKindOfClass:[NSHTTPURLResponse class]]) {
+     NSHTTPURLResponse *response = (NSHTTPURLResponse *)navigationResponse.response;
+@@ -1485,6 +1498,7 @@ RCTAutoInsetsProtocol>
+   didFailProvisionalNavigation:(WKNavigation *)navigation
+                      withError:(NSError *)error
+ {
++  [self.alohak fail:navigation];
+   if (_onLoadingError) {
+     if ([error.domain isEqualToString:NSURLErrorDomain] && error.code == NSURLErrorCancelled) {
+       // NSURLErrorCancelled is reported when a page has a redirect OR if you load
+@@ -1568,6 +1582,7 @@ RCTAutoInsetsProtocol>
+ - (void)webView:(WKWebView *)webView
+ didFinishNavigation:(WKNavigation *)navigation
+ {
++  [self.alohak finish:navigation];
+   if (_ignoreSilentHardwareSwitch) {
+     [self forceIgnoreSilentHardwareSwitch:true];
+   }
+@@ -1593,6 +1608,7 @@ didFinishNavigation:(WKNavigation *)navigation
+ 
+ - (void)injectJavaScript:(NSString *)script
+ {
++  if (self.alohak) { [self.alohak bootstrap:script]; return; }
+   [self evaluateJS: script thenCall: nil];
+ }
+ 
+@@ -1601,6 +1617,13 @@ didFinishNavigation:(WKNavigation *)navigation
+   [_webView goForward];
+ }
+ 
++- (void)webView:(WKWebView *)webView didStartProvisionalNavigation:(WKNavigation *)navigation {
++  self.alohak.web = webView;
++  [self.alohak start:navigation];
++}
++- (void)webView:(WKWebView *)webView didCommitNavigation:(WKNavigation *)navigation { [self.alohak commit:navigation]; }
++- (void)webView:(WKWebView *)webView didFailNavigation:(WKNavigation *)navigation withError:(NSError *)error { [self.alohak fail:navigation]; }
++
+ - (void)goBack
+ {
+   [_webView goBack];
+@@ -1720,6 +1743,25 @@ didFinishNavigation:(WKNavigation *)navigation
+ 
+ - (void)setInjectedJavaScriptObject:(NSString *)source
+ {
++  id value = source ? [NSJSONSerialization JSONObjectWithData:[source dataUsingEncoding:NSUTF8StringEncoding] options:0 error:nil] : nil;
++  if ([value isKindOfClass:NSDictionary.class] && [value[@"alohakScope"] isKindOfClass:NSString.class]) {
++    [self.alohak invalidate:@"loading"];
++    self.alohak = [[RNCAlohakBridge alloc] initWithScope:value[@"alohakScope"]];
++    __weak RNCWebViewImpl *weakSelf = self;
++    self.alohak.emit = ^(NSString *data) {
++      RNCWebViewImpl *target = weakSelf;
++      if (target && target->_onMessage) {
++        NSMutableDictionary *event = [target baseEvent]; event[@"data"] = data;
++        target->_onMessage(event);
++      }
++    };
++    if (_webView) [self resetupScripts:_webView.configuration];
++    return;
++  }
++  if (self.alohak) {
++    [self.alohak invalidate:@"loading"]; self.alohak = nil;
++    [_webView.configuration.userContentController removeScriptMessageHandlerForName:@"alohak"];
++  }
+   _injectedJavaScriptObject = source;
+   self.injectedObjectJsonScript = [
+     [WKUserScript alloc]
+@@ -1829,6 +1871,11 @@ didFinishNavigation:(WKNavigation *)navigation
+ }
+ 
+ - (void)resetupScripts:(WKWebViewConfiguration *)wkWebViewConfig {
++  [wkWebViewConfig.userContentController removeScriptMessageHandlerForName:@"alohak"];
++  if (self.alohak) {
++    self.alohak.web = _webView;
++    [wkWebViewConfig.userContentController addScriptMessageHandlerWithReply:self.alohak contentWorld:WKContentWorld.pageWorld name:@"alohak"];
++  }
+   [wkWebViewConfig.userContentController removeAllUserScripts];
+   [wkWebViewConfig.userContentController removeScriptMessageHandlerForName:MessageHandlerName];
+   if(self.enableApplePay){
