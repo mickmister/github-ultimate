@@ -12,8 +12,8 @@ export function previewFixture(source: string, contextFiles = false) {
   const blobs = new Map<string, { sha: string; size: number; encoding: string; content: string }>(), files = new Map<string, { path: string; type: string; mode: string; sha: string; size: number }>();
   let generation = 1;
   const calls: string[] = [];
-  function file(path: string, value: unknown) {
-    const bytes = Buffer.from(JSON.stringify(value)), sha = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+  function file(path: string, value: unknown, raw = false) {
+    const bytes = Buffer.from(raw ? String(value) : JSON.stringify(value)), sha = createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
     blobs.set(sha, { sha, size: bytes.length, encoding: 'base64', content: bytes.toString('base64') });
     files.set(path, { path, type: 'blob', mode: '100644', sha, size: bytes.length });
   }
@@ -47,5 +47,5 @@ export function previewFixture(source: string, contextFiles = false) {
     throw Error(`Unexpected fixture route ${url.pathname}`);
    };
    const connections = new Connections(store, fetcher);
-   return { host: new MobileGitHub(connections), record, fetcher, navigation, branch, workspace, calls, update() { generation++; file('documents/workspace-config.json', config('Updated Storybook')); }, remove() { generation++; files.delete('documents/workspace-config.json'); } };
+    return { host: new MobileGitHub(connections), record, fetcher, navigation, branch, workspace, calls, document(path: string, text: string) { generation++; file(`documents/${path}`, text, true); }, update() { generation++; file('documents/workspace-config.json', config('Updated Storybook')); }, remove() { generation++; files.delete('documents/workspace-config.json'); } };
 }

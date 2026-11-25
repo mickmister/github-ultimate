@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { actionJobSchema } from './actions-protocol';
+import { commitCiSchema } from './commit-ci';
 
 /** Shared MCP interface. Hosts own transport, credentials and implementation. */
 export const workflowScope = { id: z.string().uuid(), installationId: z.number().int().positive(), userId: z.number().int().positive() };
@@ -41,12 +42,13 @@ export const workflowReportSchema = z.object({
   candidate: z.string().regex(/^[a-f0-9]{40}$/).optional(), testsPassed: z.boolean(), evaluations: z.array(z.object({ role: z.enum(['reviewer-1', 'reviewer-2', 'tester']), candidate: z.string().regex(/^[a-f0-9]{40}$/), approval: z.enum(['approve', 'reject']) }).strict()).max(3),
   environmentCache: z.object({ status: z.string() }).passthrough().optional(),
   delivery: z.discriminatedUnion('status', [
-    z.object({ status: z.literal('delivered'), kind: z.enum(['branch', 'pull-request']), repository: z.string(), branch: z.string(), candidate: z.string().regex(/^[a-f0-9]{40}$/), url: z.string().url(), receipts: z.array(z.string()).max(3) }).strict(),
+    z.object({ status: z.literal('delivered'), kind: z.enum(['branch', 'pull-request']), repository: z.string(), branch: z.string(), candidate: z.string().regex(/^[a-f0-9]{40}$/), baseCommit: z.string().regex(/^[a-f0-9]{40}$/).optional(), commits: z.array(z.string().regex(/^[a-f0-9]{40}$/)).max(1000).optional(), commitsPartial: z.boolean().optional(), url: z.string().url(), receipts: z.array(z.string()).max(3) }).strict(),
     z.object({ status: z.literal('blocked'), reason: z.string(), candidate: z.string().optional(), receipts: z.array(z.string()).max(3) }).strict(),
   ]).optional(), analysis: z.enum(['pending', 'running', 'complete', 'failed']).optional(), reviewRequestId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/).optional(),
 }).strict().superRefine((report, ctx) => {
   if ((report.schemaVersion === 1 || report.status === 'accepted') && (!report.candidate || report.cycle < 1 || new Set(report.evaluations.map(e => e.role)).size !== 3) || report.evaluations.some(e => e.candidate !== report.candidate) || report.status === 'accepted' && (!report.testsPassed || report.evaluations.some(e => e.approval !== 'approve'))) ctx.addIssue({ code: 'custom', message: 'Candidate acceptance lacks bound checks and three explicit approvals.' });
   if (report.schemaVersion === 2 && (!report.delivery || !report.analysis || !report.reviewRequestId || report.delivery.status === 'delivered' && (report.status !== 'accepted' || report.delivery.candidate !== report.candidate))) ctx.addIssue({ code: 'custom', message: 'Delivery requires a bound accepted candidate and review/analysis state.' });
+  if (report.delivery?.status === 'delivered' && (report.delivery.baseCommit === report.delivery.candidate || report.delivery.commits && (!report.delivery.commits.includes(report.delivery.candidate) || new Set(report.delivery.commits).size !== report.delivery.commits.length))) ctx.addIssue({ code: 'custom', message: 'Delivered source range must include its unique candidate commits.' });
 });
 export const workflowProgressSchema = z.object({ schemaVersion: z.literal(1), workspace: z.string(), thread: z.string(), process: z.string(), executionId: z.string().regex(/^\d+-\d+$/),
   updatedAt: z.string().datetime(), currentStep: z.string().max(200), nextStep: z.string().max(200), cycle: z.number().int().min(0).max(4), maxCycles: z.literal(4),
@@ -56,6 +58,7 @@ export const workflowProgressSchema = z.object({ schemaVersion: z.literal(1), wo
 export const workflowObservationSchema = workflowDeliverySchema.extend({ executionState: z.string().optional(), conclusion: z.string().nullable().optional(), attempt: z.number().int().positive().optional(),
   runUrl: z.string().url().optional(), createdAt: z.string().datetime().optional(), startedAt: z.string().datetime().nullable().optional(), jobs: z.array(actionJobSchema).max(100).optional(), jobsPartial: z.boolean().optional(),
   progress: workflowProgressSchema.optional(), progressState: z.string().optional(), candidateAcceptance: z.string().optional(), result: workflowReportSchema.optional(),
+  sourceCi: commitCiSchema.optional(), sourceCiError: z.string().optional(),
   review: z.object({ url: z.string().url(), version: z.string(), snapshot: z.string() }).optional(), report: z.object({ name: z.string(), version: z.string(), snapshot: z.string(), url: z.string().url() }).optional(),
 }).strip();
 export type WorkflowObservation = z.infer<typeof workflowObservationSchema>;

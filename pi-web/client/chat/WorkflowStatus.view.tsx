@@ -1,5 +1,6 @@
 import type { WorkflowStatusModel } from './WorkflowStatus.hooks';
 import { workflowElapsed, workflowTerminal } from './WorkflowStatus.hooks';
+import { CommitCiDetails } from './WorkspaceCi.view';
 
 function safeLink(value: string | undefined) {
   if (!value) return undefined;
@@ -10,6 +11,7 @@ export function WorkflowStatus({ model }: { model: WorkflowStatusModel }) {
   return <section className="chat-workflows" aria-label="Workflows for this conversation"><h2>Workflows for this conversation</h2>
     {model.workflows.map(workflow => {
       const observed = workflow.observation, progress = observed?.progress, result = observed?.result;
+      const delivered = result?.delivery?.status === 'delivered' ? result.delivery : undefined;
       const delivery = result?.delivery?.status ?? progress?.delivery ?? 'pending';
       const analysis = progress?.analysis ?? result?.analysis;
       const runUrl = safeLink(observed?.runUrl), sourceUrl = safeLink(result?.delivery?.status === 'delivered' ? result.delivery.url : undefined);
@@ -21,6 +23,10 @@ export function WorkflowStatus({ model }: { model: WorkflowStatusModel }) {
         <p>{observed?.executionState ?? workflow.execution.state} {observed?.conclusion ? `· ${observed.conclusion}` : ''} · Elapsed {workflowElapsed(workflow, model.now)}</p>
         {workflow.observedAt && <p>Updated <time dateTime={workflow.observedAt}>{workflow.observedAt}</time></p>}
         <p>Delivery: {delivery} · Review: {reviewUrl ? 'available' : 'pending'} · Analysis: {workflowTerminal(workflow) && analysis === 'pending' ? 'not completed' : analysis ?? 'not started'}</p>
+        {result?.delivery?.status === 'delivered' && <div><p>Delivered commit: {result.delivery.repository} · {result.delivery.candidate.slice(0, 12)} · CI: {observed?.sourceCi?.state ?? 'unavailable'}</p>
+          {result.delivery.baseCommit && <a href={`https://github.com/${result.delivery.repository}/compare/${result.delivery.baseCommit}...${result.delivery.candidate}`} target="_blank" rel="noopener noreferrer">Source range from this run</a>}
+          {delivered?.commits && <details><summary>{delivered.commits.length}{delivered.commitsPartial ? '+' : ''} commits delivered by this run</summary><ul>{delivered.commits.map(commit => <li key={commit}><a href={`https://github.com/${delivered.repository}/commit/${commit}`} target="_blank" rel="noopener noreferrer">{commit}</a></li>)}</ul>{delivered.commitsPartial && <p>Commit list is incomplete. The exact base/head range is linked above.</p>}</details>}
+          {observed?.sourceCi && <CommitCiDetails ci={observed.sourceCi} />}{observed?.sourceCiError && <p>{observed.sourceCiError}</p>}</div>}
         {observed?.jobs?.map(job => <div key={job.id}><p>GitHub · {job.name}: {job.status}{job.conclusion ? ` (${job.conclusion})` : ''}{job.steps ? ` · ${job.steps.filter(step => step.status === 'completed').length}/${job.steps.length} steps finished` : ' · Step counts unavailable'}</p>
           {job.steps?.filter(step => step.status === 'in_progress').map(step => <p key={step.number}>{step.name}</p>)}</div>)}
         {observed?.jobsPartial && <p>GitHub job details are unavailable or incomplete.</p>}

@@ -49,16 +49,44 @@ test('restored conversation shows live workflow steps and elapsed time, polls wi
     await page.clock.fastForward(31000); expect(workflow.polls()).toBe(beforeHidden); await expect(card).toContainText('Status may be stale');
     await page.evaluate(() => { Object.defineProperty(document, 'visibilityState', { configurable: true, value: 'visible' }); document.dispatchEvent(new Event('visibilitychange')); });
     await expect.poll(workflow.polls).toBeGreaterThan(beforeHidden);
-    const beforeOffline = await card.locator('time').getAttribute('dateTime');
+    const beforeOffline = await card.locator('time').first().getAttribute('dateTime');
     await page.context().setOffline(true); await expect(card).toContainText('Offline.');
     await page.context().setOffline(false); await expect(card).not.toContainText('Offline.');
-    await expect(card.locator('time')).not.toHaveAttribute('dateTime', beforeOffline!);
+    await expect(card.locator('time').first()).not.toHaveAttribute('dateTime', beforeOffline!);
     workflow.complete(); await page.clock.fastForward(11000);
     await expect(card).toContainText('Delivery: delivered'); await expect(card).toContainText('Analysis: complete');
     await expect(card).toContainText('8/8 steps finished');
     const polls = workflow.polls(); await page.clock.fastForward(30000); expect(workflow.polls()).toBe(polls);
     await page.getByRole('button', { name: 'New conversation', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Workflows for this conversation' })).toHaveCount(0);
+    expect(remote.requests).toHaveLength(1);
+  } finally { fixture.dispose(); }
+});
+
+test('delivered commit CI stays bound to its run while latest workspace CI follows new branch heads', async ({ page }) => {
+  const remote = remoteFixture(), workflow = workflowFixture(`${origin}${base}`, 'pending'), fixture = await nativeFixture(page, `${origin}${base}`, remote, workflow.host);
+  const sessionId = await fixture.seedWorkflow(workflow.execution);
+  try {
+    await page.clock.install();
+    // Let the native transport finish between clock ticks; jumping over its
+    // deadline while Node handles a request would manufacture transport failures.
+    const advance = async (milliseconds: number) => { for (let elapsed = 0; elapsed < milliseconds; elapsed += 1000) { await page.clock.fastForward(Math.min(1000, milliseconds - elapsed)); await new Promise(done => setTimeout(done, 30)); } };
+    const url = new URL(fixture.url); url.searchParams.set('session', sessionId); await page.goto(url.href);
+    const workspace = page.getByRole('region', { name: 'Latest workspace CI' });
+    await expect(workspace).toContainText('Latest workspace CI: failure');
+    await workspace.locator('summary').first().click();
+    await expect(workspace).toContainText('dddddddddddd');
+    workflow.complete(); await advance(11000);
+    const card = page.getByRole('article', { name: 'Workflow feature-work' });
+    await expect(card).toContainText('Delivered commit: owner/repo · bbbbbbbbbbbb · CI: pending');
+    await expect(card).toContainText('1 commits delivered by this run');
+    workflow.failCi(); await advance(61000);
+    await expect(card).toContainText('Delivered commit: owner/repo · bbbbbbbbbbbb · CI: failure');
+    workflow.advance(); await advance(31000);
+    await expect(workspace).toContainText('Latest workspace CI: success'); await expect(workspace).toContainText('eeeeeeeeeeee');
+    await expect(card).toContainText('bbbbbbbbbbbb · CI: failure');
+    workflow.passCi(); await advance(61000);
+    await expect(card).toContainText('bbbbbbbbbbbb · CI: success');
     expect(remote.requests).toHaveLength(1);
   } finally { fixture.dispose(); }
 });

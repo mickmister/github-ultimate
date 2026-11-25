@@ -9,6 +9,13 @@ export type ChatWorkspace = { repository: string; workspace: string };
 export type SavedChat = { sessionId: string; reference: string; label: string; updatedAt: string; messageCount: number; workspace?: ChatWorkspace };
 export type ChatCatalog = { chats: SavedChat[]; copied?: { storage: string; conversations: number }[] };
 export type ChatWorkflow = { execution: WorkflowDelivery & { storageRepository?: string }; observation?: WorkflowObservation; observedAt?: string; error?: string };
+export function workflowNeedsRefresh(workflow: ChatWorkflow) {
+  const observed = workflow.observation;
+  if (observed?.executionState !== 'completed') return true;
+  if (observed.result?.delivery?.status !== 'delivered') return false;
+  // Failed CI can be rerun independently of the completed development execution.
+  return !observed.sourceCi || observed.sourceCi.partial || observed.sourceCi.state !== 'success';
+}
 export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: ChatMessage[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean; telemetry?: import('./pi-telemetry').PiTelemetryStatus; workflows?: ChatWorkflow[] };
 export interface ChatHandle {
   snapshot(): ChatSnapshot;
@@ -27,6 +34,7 @@ export interface PiWebRuntime {
   list(storage: PublicS3Connection): Promise<ChatCatalog>;
   importCopied(storage: PublicS3Connection): Promise<void>;
   previews(search: string): Promise<PreviewCatalog>;
+  workspaceCi?(workspace: ChatWorkspace): Promise<import('./ci-status').WorkspaceCi>;
   create(inference: PublicInferenceConnection, storage: PublicS3Connection, workspace?: ChatWorkspace): ChatHandle;
   move(storage: PublicS3Connection, sessionId: string, workspace: ChatWorkspace | null): Promise<void>;
   restore(inference: PublicInferenceConnection, storage: PublicS3Connection, sessionId: string, reference: string): Promise<ChatHandle>;

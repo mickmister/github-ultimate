@@ -21,6 +21,7 @@ function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode;
   const storage = { id: 'storage', revision: '1', name: 'Private conversations', endpoint: 'https://storage.example/', bucket: 'conversations', prefix: 'private/', region: 'us-east-1', addressing: 'path' as const, allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [] };
   const chats = [{ sessionId: 'conversation', reference: 'checkpoint', label: 'Browser conversation architecture', updatedAt: '2026-11-24T10:00:00Z', messageCount: 2 }];
   const model: ChatModel = {
+    workspaceCi: { enabled: false, value: undefined, error: undefined },
     workflows: { workflows: [], now: Date.parse('2026-11-24T10:00:00Z'), offline: false, error: false },
     beads, panel, choosePanel, attachment: undefined, attach: () => {}, sendAttachment: async () => {}, destinationSearch: '', setDestinationSearch: () => {}, closeAttachment: () => {}, changeAttachment: () => {},
     draftBeads: [], removeDraftBead: () => {}, pickerOpen: false, pickerSearch: '', setPickerSearch: () => {}, openPicker: () => {}, closePicker: () => {}, addPickedBeads: () => {}, workspaceChats: [],

@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import type { ChatHandle, ChatWorkflow } from '../../../hosted/pi-chat-contract';
+import { workflowNeedsRefresh } from '../../../hosted/pi-chat-contract';
 
 export function workflowTerminal(workflow: ChatWorkflow) { return workflow.observation?.executionState === 'completed'; }
 export function workflowElapsed(workflow: ChatWorkflow, now: number) {
@@ -14,11 +15,12 @@ export function workflowElapsed(workflow: ChatWorkflow, now: number) {
 }
 export function useWorkflowStatus(chat: ChatHandle | undefined, workflows: ChatWorkflow[]) {
   const [now, setNow] = useState(() => Date.now()), [offline, setOffline] = useState(false), [error, setError] = useState(false);
-  const keys = workflows.filter(workflow => !workflowTerminal(workflow)).map(workflow => workflow.execution.executionReference).sort().join(',');
+  const keys = workflows.filter(workflowNeedsRefresh).map(workflow => workflow.execution.executionReference).sort().join(',');
+  const pollingDelay = workflows.some(workflow => !workflowTerminal(workflow)) ? 10000 : 60000;
   useEffect(() => {
     if (!chat?.refreshWorkflows || !keys) return;
     let disposed = false, timer: ReturnType<typeof setTimeout> | undefined, controller: AbortController | undefined, failures = 0;
-    const schedule = () => { if (!disposed && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), Math.min(60000, 10000 * 2 ** Math.min(failures, 3))); };
+    const schedule = () => { if (!disposed && document.visibilityState !== 'hidden') timer = setTimeout(() => void poll(), Math.min(120000, pollingDelay * 2 ** Math.min(failures, 3))); };
     const poll = async () => {
       clearTimeout(timer);
       if (disposed || document.visibilityState === 'hidden') return;
@@ -35,7 +37,7 @@ export function useWorkflowStatus(chat: ChatHandle | undefined, workflows: ChatW
     document.addEventListener('visibilitychange', resume); window.addEventListener('online', resume); window.addEventListener('offline', resume);
     void poll();
     return () => { disposed = true; clearTimeout(timer); controller?.abort(); document.removeEventListener('visibilitychange', resume); window.removeEventListener('online', resume); window.removeEventListener('offline', resume); };
-  }, [chat, keys]);
+  }, [chat, keys, pollingDelay]);
   useEffect(() => {
     if (!keys) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);

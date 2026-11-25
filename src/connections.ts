@@ -21,6 +21,7 @@ import type { VdConnections } from './vd-connections';
 import { actionPath, actionResult } from './actions-protocol';
 import { developmentHost, workflowRunName, type WorkflowDelivery } from './workflow-interface';
 import { readWorkflowProgress } from './workflow-progress';
+import { readCommitCi } from './commit-ci';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 
@@ -118,7 +119,7 @@ export class Connections {
       if (!isCurrent()) throw new ConnectionError('Document or connection access changed. Reconnect explicitly.');
       const approved = records.filter(record => hostedGrants(record).some(grant => matchesGrant(grant, source)));
       if (!approved.length) throw new ConnectionError('This document has no approved connections. Grant its origin and subpath access in connection settings and reload the page.');
-      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'agentGraphql', 'agentSnapshot', 'agentTree', 'agentBlob', 's3Checkpoint', 's3Versions', 's3AllowMissing', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'reviewQueue', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'actionsRead', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
+      if (request.operation === 'discover') return { protocolVersion: 1, capabilities: ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'agentGraphql', 'agentSnapshot', 'agentTree', 'agentBlob', 'commitCi', 's3Checkpoint', 's3Versions', 's3AllowMissing', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'reviewQueue', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'actionsRead', ...(this.persistentCache ? ['persistedWorkspaceCache', 'documentSnapshots'] : [])] };
       if (request.operation === 'connections') return approved.filter(record => record.tokens && record.installation).map(({ id, name, appId, user, installation }): HostedConnection => ({ id, name, appId, user, installation }));
       if (request.operation === 'workflowCatalog') return { interfaceVersion: 1, workflows: [{ id: 'development', ...developmentHost, requestVersion: 2, method: 'implement-review-test', maxCycles: 4 }], connections: approved.filter(record => record.tokens && record.installation && record.user).map(({ id, name, user, installation, workflowDeliveries }) => ({ id, name, userId: user!.id, installationId: installation!.id, executions: Object.values(workflowDeliveries ?? {}).filter(value => value.workspace === request.workspace && value.userId === user!.id && value.installationId === installation!.id) })) };
       if (request.operation === 'vdConnections') return this.vd?.publicConnections(documentURL) ?? [];
@@ -242,6 +243,15 @@ export class Connections {
           if (!repo) { await this.retireCache(record); throw new ConnectionError('Access denied: repository is not available through the selected installation and user.'); }
         }
         return documentCache(this.persistentCache, scope, request, <T>(input: GitRead) => readGit(input, request.repository, (path, limit) => this.api(record, path, limit, input.operation === 'gitRefs' ? 'conditional' : 'immutable')) as Promise<T>, isCurrent);
+      }
+      if (request.operation === 'commitCi') {
+        if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('Reconnect the selected CI connection and installation.');
+        const repo = (await this.repositories(record)).find(item => item.full_name.toLowerCase() === request.repository.toLowerCase());
+        if (!repo) throw new ConnectionError('CI repository is not available through the selected installation and user.');
+        return readCommitCi(repo.full_name, request.ref, path => {
+          if (!isCurrent()) throw new ConnectionError('GitHub access changed.');
+          return this.api(record, `/repos/${repo.full_name}${path}`, maxMetadataBytes, 'none');
+        });
       }
       if (request.operation === 'actionsRead') {
         if (!record.user || !record.tokens || record.installation?.id !== request.installationId) throw new ConnectionError('Reconnect the selected Actions connection and installation.');

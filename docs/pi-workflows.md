@@ -51,6 +51,29 @@ workspace manifests do not select new work; current manifests omit them. Every
 workspace source member selects a repository branch. CI checks out those branches
 and records their resolved commits as execution evidence, not as manifest fields.
 
+## Commit attribution and current CI
+
+The immutable execution report is the run-to-source mapping. New delivery results
+include the repository, captured `baseCommit`, delivered `candidate`, and up to
+1,000 individual commits in that base/head range. `commitsPartial` marks a bounded
+inventory; the exact range remains available. These are commits delivered by the
+run, not a claim that the agent authored every commit in a merged source history.
+Older reports remain readable without inventing a base or commit list.
+
+Conversation cards read CI for the exact delivered candidate, independently of the
+development run's result. Pending, absent, failed or inaccessible source CI keeps
+refreshing at a slower interval after development completes. Failure links open
+the relevant GitHub check or workflow run; rerunning CI does not replay development.
+
+The workspace's **Latest workspace CI** separately resolves each configured source
+branch's current head and reads checks, commit statuses and Actions by that SHA.
+It refreshes about every 30 seconds while visible, backs off failures, pauses while
+hidden/offline and discards responses after workspace switches. A later branch head
+does not change the source attribution of an earlier execution. Missing permissions,
+partial inventories and no reported CI are explicit, never confirmed green.
+The status summarizes observed CI, not branch protection or methodology approval.
+Hosts need the read-only `commitCi` capability and authorized repository access.
+
 ## Effects and recovery
 
 - Pi owns normal tool → result → assistant scheduling. Tools run sequentially.

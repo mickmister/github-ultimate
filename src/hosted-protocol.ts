@@ -11,6 +11,7 @@ import { actionsReadSchema } from './actions-protocol';
 import { agentSnapshotSchema } from './agent-snapshot';
 import { agentGraphqlSchema, agentScope } from './agent-graphql';
 import { workflowHostedSchemas } from './workflow-interface';
+import { commitCiRequestSchema } from './commit-ci';
 export { pageChannel, replyChannel } from './bridge-channels';
 
 export const hostedRequestSchema = z.discriminatedUnion('operation', [
@@ -33,6 +34,7 @@ export const hostedRequestSchema = z.discriminatedUnion('operation', [
   reviewWriteSchema,
   reviewProgressSchema,
   actionsReadSchema,
+  commitCiRequestSchema,
   ...workflowHostedSchemas,
   ...s3HostedSchemas,
   ...inferenceHostedSchemas,

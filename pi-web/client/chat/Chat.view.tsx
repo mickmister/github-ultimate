@@ -13,6 +13,7 @@ import { ErrorBoundary } from './ErrorBoundary.view';
 import { BeadsView, BeadDialogs } from './Beads.view';
 import { beadContext } from '../../../src/bead-context';
 import { WorkflowStatus } from './WorkflowStatus.view';
+import { WorkspaceCiStatus } from './WorkspaceCi.view';
 
 function Connections({ model: m }: { model: ChatModel }) {
   return <section className="chat-connections" aria-label="Connections"><h3>Connections</h3><div className="chat-controls">
@@ -47,6 +48,7 @@ export function CanonicalTranscript({ messages, sessionId, streaming = false }: 
 }
 function Conversation({ model: m }: { model: ChatModel }) {
   return <section className="chat-conversation" aria-label="Conversation"><header><h1>{m.draftMode ? 'New conversation' : m.snapshot.title}</h1><div className="chat-conversation-actions"><p role="status">{m.busy ? m.snapshot.dirty ? 'Saving…' : 'Working…' : m.snapshot.dirty ? 'Not saved' : m.snapshot.reference ? 'Saved to S3' : m.draftMode ? 'Draft · saved when you send your first message.' : 'Connect inference and S3 to begin.'}</p>{(m.snapshot.sessionId || m.draftMode) && <><button className="chat-icon-button" title="Copy conversation link" aria-label="Copy conversation link" disabled={!m.snapshot.reference || m.snapshot.dirty} onClick={() => void m.copyLink()}><ChatIcon name="link" /></button><button className="chat-icon-button" title="Close conversation" aria-label="Close conversation" disabled={m.busy || m.snapshot.dirty && Boolean(m.snapshot.messages.length)} onClick={m.close}><ChatIcon name="close" /></button></>}</div></header>
+    <WorkspaceCiStatus model={m.workspaceCi} />
     {m.error && <p role="alert">{m.error}</p>}
     {m.copiedCount > 0 && <aside aria-label="Copied conversations"><p>{m.copiedCount} copied conversation(s) still name their previous storage. Import preserves their saved messages and workspace associations. No model requests are sent.</p><button disabled={m.busy} onClick={() => void m.importCopied()}>Import copied conversations</button></aside>}
     {m.movedConversation && <button disabled={m.busy} onClick={() => void m.followConversation()}>Open conversation in {m.movedConversation.workspace?.workspace ?? 'Unassigned inbox'}</button>}

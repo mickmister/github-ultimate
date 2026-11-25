@@ -10,6 +10,7 @@ import { inferenceStream, piModel, type PiBridge } from './pi-transport';
 import { backblaze, cloudflareR2, checkpointReference, type PublicS3Connection, type S3Listing, type S3Object } from '../src/s3-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
 import type { ChatSnapshot, SavedChat, ChatWorkspace, ChatCatalog } from './pi-chat-contract';
+import { workflowNeedsRefresh } from './pi-chat-contract';
 import { PiTelemetry } from './pi-telemetry';
 
 const digest = (bytes: Uint8Array) => bytesToHex(sha256(bytes));
@@ -332,7 +333,7 @@ export class BrowserChat {
   /** Read-only view refresh. It does not invoke inference, spend the agent tool
    * budget, retry a dispatch, or resume an interrupted conversational turn. */
   async refreshWorkflows(signal?: AbortSignal) {
-    const records = [...(this.checkpoint.workflow_executions ?? [])].reverse().filter(execution => this.workflowObservations.get(execution.executionReference)?.observation?.executionState !== 'completed');
+    const records = [...(this.checkpoint.workflow_executions ?? [])].reverse().filter(execution => workflowNeedsRefresh({ execution, ...this.workflowObservations.get(execution.executionReference) }));
     if (!records.length || !this.workflowStatusReader) return;
     const connections = await this.workflowBridge<import('../src/hosted-protocol').HostedConnection[]>({ operation: 'connections' });
     signal?.throwIfAborted();

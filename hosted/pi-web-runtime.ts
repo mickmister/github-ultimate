@@ -9,6 +9,7 @@ import { loadPreviewSlots } from './preview-slots';
 import type { ChatWorkspace } from './pi-chat-contract';
 import { PiBeads } from './pi-beads';
 import { openPageStorage } from './page-storage';
+import { loadWorkspaceCi } from './ci-status';
 
 // Keep native Pi transfer assembly out of the independently budgeted legacy pages.
 const bridge: PiBridge = (request, timeoutMs) => bridgeRequest(request, timeoutMs, mobilePiRequest);
@@ -30,6 +31,7 @@ export function createPiWebRuntime(beads = new PiBeads(bridgeRequest)): PiWebRun
   // Git/nugs reads use the existing GitHub bridge, not the Pi-only native
   // transfer protocol. Credentials remain in the approved host connection.
   previews: (search: string) => loadPreviewSlots(bridgeRequest, search),
+   workspaceCi: selected => loadWorkspaceCi(bridgeRequest, selected),
   create: (inference: PublicInferenceConnection, storage: PublicS3Connection, selected?: ChatWorkspace) => new BrowserChat(new ChatStorage(bridge, storage), inference, bridge, undefined, selected, bridgeRequest, options),
   move: async (storage: PublicS3Connection, sessionId: string, workspace: ChatWorkspace | null) => {
     const objects = new ChatStorage(bridge, storage);

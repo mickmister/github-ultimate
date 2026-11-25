@@ -14,6 +14,7 @@ import { PiWorkspaceContext } from './pi-workspace-context';
 import { piCapabilities } from '../src/pi-capabilities';
 import type { BeadsQuery } from '../src/beads-query';
 import type { PiTelemetry } from './pi-telemetry';
+import { ciReader } from './ci-status';
 
 const scopeSchema = z.object({ repository: z.string(), workspace: z.string() });
 export const workflowIntentSchema = workflowDeliverySchema.pick({ digest: true, workspace: true, thread: true, process: true, userId: true, installationId: true }).extend({ storageRepository: z.string().regex(/^[\w.-]+\/[\w.-]+$/) });
@@ -130,7 +131,12 @@ export function piWorkflowTools(send: PiBridge, currentWorkspace: () => Promise<
           review = { url: link.href, version: requestEntry.sha, snapshot: opened.snapshot.commit };
         }
       }
-      return { ...status, candidateAcceptance: result.status, result, review, report: { name: status.reportName, version: entry.sha, snapshot: opened.snapshot.commit, url: url.href } };
+      let sourceCi, sourceCiError;
+      if (result.delivery?.status === 'delivered') {
+        try { sourceCi = await ciReader(send).read(result.delivery.repository, result.delivery.candidate, scope.id); }
+        catch { sourceCiError = 'Delivered commit CI unavailable. Check repository access and host support.'; }
+      }
+      return { ...status, candidateAcceptance: result.status, result, review, sourceCi, sourceCiError, report: { name: status.reportName, version: entry.sha, snapshot: opened.snapshot.commit, url: url.href } };
     } catch (error) { return { ...status, reportState: 'unavailable-or-invalid', reportError: error instanceof Error ? error.message : 'Report read failed.' }; }
   };
   context.statusReader?.((input, signal) => call('workflow_status', input, signal, true));

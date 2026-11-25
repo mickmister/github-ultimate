@@ -60,7 +60,7 @@ export function previewURL(provider: PreviewProvider, context: PreviewContext): 
   if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname)) throw Error('Preview path escaped the GitHub Pages site.');
   return url.href;
 }
-function githubRepository(remote: string): string | undefined {
+export function githubRepository(remote: string): string | undefined {
   const scp = /^git@github\.com:([\w.-]+\/[\w.-]+)$/.exec(remote);
   if (scp) return scp[1].replace(/\.git$/, '').toLowerCase();
   try { const url = new URL(remote); if (url.hostname !== 'github.com' || url.password || url.search || url.hash) return; return url.pathname.replace(/^\//, '').replace(/\/$/, '').replace(/\.git$/, '').toLowerCase(); } catch { return; }

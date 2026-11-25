@@ -28,6 +28,11 @@
 .chat-workflow p { margin: 5px 0; }
 .chat-workflow ul { display: flex; flex-wrap: wrap; gap: 6px 16px; padding-left: 16px; }
 .chat-workflow a { display: inline-block; min-height: 44px; padding: 12px 8px 8px 0; color: var(--accent); }
+.chat-workspace-ci { border-bottom: 1px solid var(--border); padding: 8px 16px; overflow-wrap: anywhere; max-height: 35vh; overflow-y: auto; }
+.chat-workspace-ci summary, .chat-ci-detail summary { min-height: 44px; padding: 10px 0; cursor: pointer; }
+.chat-workspace-ci p { margin: 6px 0; }
+.chat-workspace-ci a { display: inline-block; min-height: 44px; padding: 10px 0; color: var(--accent); }
+.chat-ci-detail ul { display: block; padding-left: 20px; }
 .chat-empty { max-width: 560px; margin: 15vh auto 0; text-align: center; color: var(--text-muted); }
 .chat-empty h2 { font-size: 24px; font-weight: 500; color: var(--text); margin-bottom: 12px; }
 .chat-composer { display: flex; gap: 8px; align-items: end; margin: 0 32px; padding: 8px; border: 1px solid var(--border); border-radius: 18px; background: var(--bg); box-shadow: 0 2px 8px rgba(0,0,0,.04); }
