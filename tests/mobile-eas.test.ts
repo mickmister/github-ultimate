@@ -1,10 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { configuredBuildProfiles, releasePlan } from '../scripts/eas-mobile';
+import { configuredBuildProfiles, inspectBuildArgs, releasePlan } from '../scripts/eas-mobile';
 
 const env = { EAS_OPERATION: 'build', EAS_PLATFORM: 'all', EAS_PROFILE: 'preview', EXPO_TOKEN: 'fixture-not-a-token', EXPO_PROJECT_ID: '11111111-2222-3333-4444-555555555555', EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: 'https://pages.example/app/', GITHUB_SHA: 'fixture-sha' };
 describe('manual EAS release boundary', () => {
+  it('diagnoses only an explicitly selected existing build without creating another binary', () => {
+    expect(inspectBuildArgs('f1aaafe9-90ec-40c8-aa7b-5e32882b04fa')).toEqual(['build:view', 'f1aaafe9-90ec-40c8-aa7b-5e32882b04fa', '--json']);
+    for (const value of ['--latest', 'bad; command', 'https://example.com']) expect(() => inspectBuildArgs(value)).toThrow();
+  });
   it('builds with explicit profile/platform and waits without submitting', () => {
     expect(releasePlan(env).args).toEqual(['build', '--platform', 'all', '--profile', 'preview', '--non-interactive', '--wait', '--json']);
   });

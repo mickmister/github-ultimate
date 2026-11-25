@@ -40,7 +40,30 @@ export function configuredBuildProfiles(config: EASConfig, plan: ReturnType<type
   return { ...config, build: { ...config.build, base: { ...config.build.base, env } } };
 }
 
-function main() {
+export function inspectBuildArgs(id: string) {
+  if (!/^[a-f\d]{8}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{4}-[a-f\d]{12}$/i.test(id)) throw new Error('Choose an existing EAS build UUID.');
+  return ['build:view', id, '--json'];
+}
+
+async function inspectBuild(id: string) {
+  const result = spawnSync('pnpm', ['--dir', 'mobile', 'exec', 'eas', ...inspectBuildArgs(id)], { cwd: new URL('..', import.meta.url), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024, stdio: ['ignore', 'pipe', 'inherit'] });
+  if (result.error) throw result.error;
+  if (result.status !== 0) throw new Error('Could not inspect the existing EAS build.');
+  const build = JSON.parse(result.stdout);
+  console.log(JSON.stringify({ id: build.id, status: build.status, error: build.error, runtimeVersion: build.runtimeVersion, source: build.gitCommitHash, app: build.app?.fullName, buildNumber: build.appBuildVersion }));
+  // Inspect Expo-owned logs in place; never publish raw bundles or signed log URLs.
+  for (const url of build.logFiles ?? []) {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:') throw new Error('Invalid EAS log URL.');
+    const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
+    if (!response.ok) throw new Error('Could not read EAS build diagnostics.');
+    const lines = (await response.text()).split('\n').filter(line => /error|failed|ERR_|unsupported/i.test(line));
+    if (lines.length) console.log(lines.slice(-20).join('\n').slice(-12000));
+  }
+}
+
+async function main() {
+  if (process.env.EAS_INSPECT_BUILD) { await inspectBuild(process.env.EAS_INSPECT_BUILD); return; }
   const plan = releasePlan(process.env);
   if (process.argv.includes('--check')) { console.log(`EAS ${plan.operation}: ${plan.platform}, ${plan.profile}; required settings present.`); return; }
   const path = new URL('../mobile/eas.json', import.meta.url);
@@ -72,5 +95,5 @@ function main() {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  try { main(); } catch (error) { console.error(error instanceof Error ? error.message : 'EAS release failed.'); process.exitCode = 1; }
+  main().catch(error => { console.error(error instanceof Error ? error.message : 'EAS release failed.'); process.exitCode = 1; });
 }

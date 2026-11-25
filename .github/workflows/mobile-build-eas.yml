@@ -17,6 +17,10 @@ on:
         type: choice
         default: '0'
         options: ['0', '1']
+      inspect_build:
+        description: Existing EAS build UUID to diagnose instead of creating another build
+        type: string
+        default: ''
 permissions:
   contents: read
 concurrency:
@@ -39,6 +43,7 @@ jobs:
       - name: Build on EAS and publish links
         env:
           EAS_OPERATION: build
+          EAS_INSPECT_BUILD: ${{ inputs.inspect_build }}
           EAS_PLATFORM: ${{ inputs.platform }}
           EAS_PROFILE: ${{ inputs.profile }}
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
