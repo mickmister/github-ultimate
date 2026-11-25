@@ -8,7 +8,8 @@ import { hostedGrants, loadedDocument, matchesGrant, trustedSubpath, type Hosted
 import type { WorkspaceNavigation } from './workspace-navigation';
 import { writeReview } from './review-writes';
 import { pilotReviewDispatch, type ReviewDispatchHost } from './review-dispatch';
-import type { ReviewReceipt, ReviewRequest } from './review-protocol';
+import type { ReviewReceipt } from './review-protocol';
+import type { ReviewDeliveryRoute } from './review-io';
 import { responseRun, type ReviewWorkflowProgress } from './review-progress';
 import { cacheSettingsSchema } from './cache-settings';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
@@ -344,7 +345,7 @@ export class Connections {
     return result;
   }
 
-  private async dispatchReview(storage: ConnectionRecord, approved: ConnectionRecord[], repositoryName: string, receipt: ReviewReceipt, review: ReviewRequest, isCurrent: () => boolean): Promise<ReviewReceipt> {
+  private async dispatchReview(storage: ConnectionRecord, approved: ConnectionRecord[], repositoryName: string, receipt: ReviewReceipt, review: ReviewDeliveryRoute, isCurrent: () => boolean): Promise<ReviewReceipt> {
     const host = this.reviewDispatch;
     const key = JSON.stringify([repositoryName.toLowerCase(), review.workspace, receipt.resource, receipt.version, receipt.reviewer]);
     const previous = storage.reviewDeliveries?.[key];

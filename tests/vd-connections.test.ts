@@ -90,7 +90,7 @@ test('queue change and revocation during awaited reads stop before POST', async 
 });
 test('process metadata selects Actions rather than a second VK effect', async () => {
   const f = fixture();
-  await f.broker().deliver(page, repository, receipt, { ...review, process: { kind: 'qrspi', id: 'process', workspace_ref: 'ws', thread_id: review.thread, config: (review.members[0] as any).target } }, () => true);
+  await f.broker().deliver(page, repository, receipt, { ...review, process: { kind: 'qrspi', id: 'process' } }, () => true);
   expect(f.fetcher).not.toHaveBeenCalled();
 });
 test('one instance connection serves different review workspaces, storage repositories and sessions without reconfiguration', async () => {

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { reviewWriteSchema, type ReviewWrite } from './review-protocol';
+import { reviewWriteSchema, type ReviewWrite } from './review-io';
 import { utf8Bytes } from './utf8';
 import { maxMobileReviewBytes, mobileReviewChunkChars, mobileReviewTransferTTL } from './mobile-transfer-protocol';
 

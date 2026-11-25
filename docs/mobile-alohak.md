@@ -109,7 +109,7 @@ workflow progress are available through this transport. S3, sign-in, grant chang
 arbitrary fetch and token export are unavailable to page RPC.
 Private document bytes are intentionally visible to approved deployment scripts.
 
-Review writes use the shared reviewer identity, pinned request/form validation,
+Review writes use the shared reviewer identity, deployed-app/receiver pinned request/form validation,
 draft compare-and-swap, non-force Documents ref updates and verified readback.
 Only submitted process-bound responses dispatch workflows; drafts do not. Larger
 review payloads use `github.reviewTransfer` with strict review-only metadata,

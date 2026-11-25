@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { expect, test, vi } from 'vitest';
 import { WorkspaceReader, type GitTransport } from '../hosted/workspaces';
-import { ReviewReader } from '../hosted/reviews';
+import { ReviewReader, validateReviewSave } from '../hosted/reviews';
+import type { ReviewDeliveryRoute } from '../src/review-io';
 import { writeReview } from '../src/review-writes';
 import { artifactResource, parseReviewRequest, reviewRequestSchema, validateReviewArtifact, type ReviewArtifact, type ReviewPin, type ReviewRequest } from '../src/review-protocol';
 import { reviewStatus, restoreReviewComments, storeReviewComments } from '../webapp/src/features/reviews/model';
@@ -160,6 +161,55 @@ function processFixture() {
   return f;
 }
 
+test.each(['direct', 'native'])('unchanged %s host preserves future metadata/answers without reading domain form bodies', async mode => {
+  const f = mobileFixture();
+  const requestText = JSON.stringify({ ...f.request, created_at: '2026-11-25T00:00:00Z', future_review_metadata: { enabled: true }, members: [{ future_member_type: 'new-form-version' }] });
+  f.value.request.version = f.git.blob(requestText);
+  f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': requestText });
+  const future = { ...f.value, future_response_metadata: { count: 42 }, forms: [{ version: 99, answers: { structured_future_value: [1, 2, 3] } }] };
+  const text = JSON.stringify(future, null, 3) + '\n';
+  expect(() => parseReviewRequest(requestText)).toThrow(); // Installed IO must not depend on this schema.
+  const reads: any[] = [];
+  const read: GitTransport = async input => { reads.push(input); return f.git.read(input); };
+  const input = { ...f.input(), text };
+  const receipt: ReviewReceipt = mode === 'direct'
+    ? await writeReview(input, 'github:1', read, f.git.mutate)
+    : await mobileGitHubRequest(f.client, input, 30000) as ReviewReceipt;
+  expect(f.git.blobs.get(receipt.version)).toBe(text);
+  expect(receipt.resource).toBe('review-requests/reader-01/responses/response-1.json');
+  if (mode === 'native') expect(receipt.dispatch?.state).toBe('dispatched');
+  else expect(reads.some(input => input.oid === f.git.blob(formText))).toBe(false);
+});
+
+test('IO rejects path/reviewer spoofing and missing request pins without allowing arbitrary Git destinations', async () => {
+  for (const change of [{ id: '../escape' }, { request: { id: '../escape', version: 'a'.repeat(40), snapshot: 'b'.repeat(40) } }, { reviewer: 'github:2' }, { request: { id: 'reader-01', version: 'f'.repeat(40), snapshot: 'b'.repeat(40) } }]) {
+    const f = fixture();
+    await expect(writeReview({ ...f.input(), text: JSON.stringify({ ...f.value, ...change }) }, 'github:1', f.git.read, f.git.mutate)).rejects.toThrow();
+    expect(f.git.mutations).toHaveLength(0);
+  }
+});
+
+test('persisted invalid answers are rejected by authoritative domain intake, not treated as approval', async () => {
+  const f = fixture();
+  f.value.forms[0].answers = { choice: { nonexistent_choice: true } };
+  const receipt = await writeReview(f.input(), 'github:1', f.git.read, f.git.mutate);
+  const saved = JSON.parse(f.git.blobs.get(receipt.version)!);
+  await expect(validateReviewArtifact(f.request, saved, async () => formText)).rejects.toThrow(/invalid choice|select an option/);
+});
+
+test('retry of a legacy formatted response keeps its original bytes/version and rejects any changed unknown field', async () => {
+  const f = fixture();
+  const legacy = JSON.stringify({ ...f.value, future_metadata: { a: 1, b: 2 } }, null, 2) + '\n';
+  const saved = await writeReview({ ...f.input(), text: legacy }, 'github:1', f.git.read, f.git.mutate);
+  const text = JSON.stringify({ future_metadata: { b: 2, a: 1 }, ...f.value });
+  const count = f.git.mutations.length;
+  const retry = await writeReview({ ...f.input(), text }, 'github:1', f.git.read, f.git.mutate);
+  expect(retry.version).toBe(saved.version);
+  expect(f.git.blobs.get(retry.version)).toBe(legacy);
+  expect(f.git.mutations).toHaveLength(count);
+  await expect(writeReview({ ...f.input(), text: JSON.stringify({ ...f.value, future_metadata: { b: 3, a: 1 } }) }, 'github:1', f.git.read, f.git.mutate)).rejects.toThrow('conflict');
+});
+
 test('VK effects run only after exact response persistence; draft, conflict and superseded revision never notify', async () => {
   const f = fixture();
   f.request.response_effect = { kind: 'vk-session', workspace_id: '46e5772c-a538-498f-b3ae-4d7073dddc39', session_id: '8d4c83eb-bfd9-4321-8bb4-976f1bac24c5' };
@@ -198,7 +248,7 @@ test('authenticated broker routes a saved process-less response through VD and d
     let data: unknown;
     if (init?.method === 'POST') {
       posts.push(String(url)); expect(f.git.blobs.size).toBeGreaterThan(0);
-      const persisted = [...f.git.blobs.values()].find(text => text.includes('"kind": "review-response"'));
+       const persisted = [...f.git.blobs.values()].find(text => { try { return JSON.parse(text).kind === 'review-response'; } catch { return false; } });
       expect(persisted).toBeTruthy(); data = { id: scope.id, session_id: sessionId };
     } else if (String(url).endsWith('/api/workspaces')) data = [{ id: workspaceId }];
     else if (String(url).endsWith('/queue')) data = { status: 'empty' };
@@ -401,8 +451,8 @@ test('legacy response-effect parser gives update guidance, retains answers and r
 
 test('process delivery runs only after immutable response readback and retries without writing answers', async () => {
   const { git, request, value, input } = processFixture();
-  const deliver = vi.fn(async (receipt: any, bound: ReviewRequest) => {
-    expect(bound.process).toEqual(request.process);
+  const deliver = vi.fn(async (receipt: any, bound: ReviewDeliveryRoute) => {
+    expect(bound.process).toEqual({ kind: request.process!.kind, id: request.process!.id });
     expect(JSON.parse(git.blobs.get(receipt.version)!)).toEqual(value);
     expect(git.head).toBe(receipt.snapshot);
     throw new Error('Actions unavailable');
@@ -425,7 +475,8 @@ test('process binding rejects unknown config pins, mismatched threads and featur
   expect(() => reviewRequestSchema.parse({ ...f.request, process: { ...f.request.process, thread_id: 'threads/task-other' } })).toThrow('Process thread');
   f.value.comments.push({ id: 'feature', member_id: 'doc', kind: 'feature-comment', text: 'Improve app' });
   const deliver = vi.fn();
-  await expect(writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver)).rejects.toThrow('separate app intake');
+  const reader = new ReviewReader(new WorkspaceReader(f.git.read, scope.id, scope.repository, 1, scope.workspace), scope.workspace);
+  await expect(validateReviewSave(reader, f.value)).rejects.toThrow('separate app intake');
   expect(deliver).not.toHaveBeenCalled();
   expect(f.git.mutations).toHaveLength(0);
   f.value.comments = [];
@@ -433,7 +484,7 @@ test('process binding rejects unknown config pins, mismatched threads and featur
   const text = JSON.stringify(f.request);
   f.value.request.version = f.git.blob(text);
   f.value.request.snapshot = f.git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': text });
-  await expect(writeReview(f.input(), 'github:1', f.git.read, f.git.mutate, deliver)).rejects.toThrow('unavailable');
+  await expect(validateReviewSave(reader, f.value)).rejects.toThrow('unavailable');
   expect(f.git.mutations).toHaveLength(0);
 });
 
@@ -577,11 +628,12 @@ test('draft identity survives unrelated commits and stale saves cannot overwrite
   draft.progress = [];
   await expect(save(first.version)).rejects.toThrow('conflict');
 });
-test('reviewer spoofing and changed form pins fail before any write', async () => {
+test('host enforces reviewer identity; deployed domain validator rejects changed form pins', async () => {
   const { git, value, input } = fixture();
   await expect(writeReview(input(), 'github:2', git.read, git.mutate)).rejects.toThrow('another authenticated');
   value.forms[0].dsl.version = 'c'.repeat(40);
-  await expect(writeReview(input(), 'github:1', git.read, git.mutate)).rejects.toThrow('pinned form');
+  const reader = new ReviewReader(new WorkspaceReader(git.read, scope.id, scope.repository, 1, scope.workspace), scope.workspace);
+  await expect(validateReviewSave(reader, value)).rejects.toThrow('pinned form');
   expect(git.mutations).toHaveLength(0);
 });
 test('hosted responses and drafts preserve multiple checked choices despite exclusive group metadata', async () => {
@@ -621,10 +673,11 @@ test('the personal inbox is not satisfied by another reviewer response or draft'
   const {intent: _intent, ...rest} = value as Extract<ReviewArtifact, {kind:'review-response'}>;
   expect(reviewStatus(review, [{value:{...rest,kind:'review-draft'},pin}], 'github:2')).toBe('Needs response');
 });
-test('withdrawal stops new saves against a previously published revision', async () => {
-  const { git, request, input } = fixture();
+test('deployed domain validation stops new saves against a withdrawn request', async () => {
+  const { git, request, value } = fixture();
   git.snapshot({ 'workspace/manifest.json': manifest, 'review-requests/reader-01/request.json': JSON.stringify({ ...request, status: 'withdrawn', revision_id: 'withdrawn-1' }) });
-  await expect(writeReview(input(), 'github:1', git.read, git.mutate)).rejects.toThrow('withdrawn');
+  const reader = new ReviewReader(new WorkspaceReader(git.read, scope.id, scope.repository, 1, scope.workspace), scope.workspace);
+  await expect(validateReviewSave(reader, value)).rejects.toThrow('withdrawn');
   expect(git.mutations).toHaveLength(0);
 });
 test('restored comments remain packet-scoped and discard ambient page URLs', () => {

@@ -1,5 +1,32 @@
 # Hosted QRSPI review delivery
 
+## Validation ownership
+
+Review/form business schemas are owned by the deployed hosted app and the
+receiving workflow, not installed extension/native releases. Before saving, the
+hosted app validates the exact request/form pins, answers, comment category,
+current withdrawal state and process config. The receiving workflow independently
+revalidates the pinned submission and approval scope before admitting work. VD
+notifications likewise instruct the receiving agent to read and validate exact
+pins before continuing; CLI `review ingest` validates before updating Beads.
+
+The installed writer uses `src/review-io.ts`: a small projection of storage
+identity/mode and pinned delivery routing. It enforces authenticated reviewer,
+approved caller/connection/repository, bounded payload, allowed resource paths,
+immutable submissions, conditional non-force writes and verified readback. It
+does not load form bodies or validate answers, question types, request metadata
+or review lifecycle semantics. Future metadata such as `created_at` is irrelevant
+to this IO contract. New payloads are saved byte-for-byte, including unknown
+fields. Retry comparison recognizes older JSON formatting/property order without
+rewriting immutable resources or ignoring changed unknown fields.
+
+Routing remains credential policy: process IDs and VD destination IDs come from
+the immutable request selected by exact pin, never an arbitrary page-supplied
+dispatch URL. Installed hosts retain configured trusted destinations and effect
+limits. A saved receipt or accepted notification is not semantic approval.
+Installing the boundary correction is a one-time migration; subsequent domain
+metadata changes must not require another installed release.
+
 The existing review-request schema accepts optional `process`:
 
 ```ts
@@ -86,6 +113,6 @@ The production review session reads pinned config/artifacts and optional current
 
 ## Feature feedback intake
 
-Content and feature comments cannot be combined into submitted content responses. Broker validation rejects feature comments in `review-response`, regardless of process presence. The production review UI excludes feature comments from remote content drafts/responses and keeps feature drafts in an independent tab-persisted intake queue; legacy remote feature drafts are migrated to that queue. Feature-only content submission is blocked.
+Content and feature comments cannot be combined into submitted content responses. Hosted application and receiving-workflow domain validation reject feature comments in `review-response`, regardless of process presence. The production review UI excludes feature comments from remote content drafts/responses and keeps feature drafts in an independent tab-persisted intake queue; legacy remote feature drafts are migrated to that queue. Feature-only content submission is blocked.
 
 The supported existing app-intake boundary here is clipboard export for agent-chat intake/discovery, not an invented remote product workspace. Content and Feature have separate export/clear controls, with same-category grouping preserved. Feature intake explicitly says destination workspace/thread **UNKNOWN**, marks viewed resources as reproduction context, and says copied is **not delivered**. It never dispatches a content process. There is no newly invented feature delivery server, approval gate, or Documents runtime queue. Resolving a real product destination remains downstream intake/discovery work, not a claimed delivery.

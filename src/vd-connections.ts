@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import { trustedOrigin } from './hosted-protocol';
 import { vdSettingsSchema, type VdDraft, type VdHeader, type PublicVdConnection } from './vd-protocol';
-import type { ReviewReceipt, ReviewRequest } from './review-protocol';
+import type { ReviewReceipt } from './review-protocol';
+import type { ReviewDeliveryRoute } from './review-io';
 import { utf8Text } from './utf8';
 
 export type VdRecord = Omit<PublicVdConnection, 'headers'> & { headers: VdHeader[] };
@@ -82,7 +83,7 @@ export class VdConnections {
       record.revision = this.newId(); await this.store.put(record); return summary(record);
     });
   }
-  deliver(documentURL: string, repository: string, receipt: ReviewReceipt, review: ReviewRequest, current: () => boolean): Promise<ReviewReceipt> {
+  deliver(documentURL: string, repository: string, receipt: ReviewReceipt, review: ReviewDeliveryRoute, current: () => boolean): Promise<ReviewReceipt> {
     const epoch = this.epoch;
     return this.serial(async () => {
       const effect = review.response_effect;

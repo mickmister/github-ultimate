@@ -1,8 +1,8 @@
 import { bridgeRequest } from '../../../hosted/client';
 import { mobileGitHubRequest } from '../../../src/mobile-github-client';
 import { WorkspaceReader, documents, documentText, type GitTransport } from '../../../hosted/workspaces';
-import { ReviewReader, type OpenReview } from '../../../hosted/reviews';
-import { artifactResource, parseReviewArtifact, requestResource, type ReviewArtifact, type ReviewPin, type ReviewReceipt } from '../../../src/review-protocol';
+import { ReviewReader, validateReviewSave, type OpenReview } from '../../../hosted/reviews';
+import { artifactResource, parseReviewArtifact, type ReviewArtifact, type ReviewPin, type ReviewReceipt } from '../../../src/review-protocol';
 import type { HostedConnection } from '../../../src/hosted-protocol';
 import type { WorkspaceScope } from './contracts';
 import { limitConcurrency } from '../../../hosted/concurrency';
@@ -108,7 +108,11 @@ export function createHostedReviews(send: GitTransport = bridgeRequest): Reviews
       if (!support.capabilities?.includes('reviewWrite')) throw new Error('Update the credential broker to save review drafts and responses.');
       if (value.kind === 'review-queue-state' && !support.capabilities.includes('reviewQueue')) throw new Error('Update the browser extension or Alohak credential broker to save review categories remotely. The request was not dismissed.');
       // Resolve the exact immutable request, not mutable head or page-supplied process data.
-      const pinned = await reviews(scope).open({ resource: requestResource(value.request.id), version_kind: 'git-blob', version: value.request.version, snapshot: value.request.snapshot });
+      // Domain validation follows the deployed application, never an installed
+      // credential broker. Receivers revalidate before interpreting authority.
+      const checked = await validateReviewSave(reviews(scope), value);
+      value = checked.value;
+      const { pinned } = checked;
       const processBound = Boolean(pinned.request.process);
       const responseEffectBound = Boolean(pinned.request.response_effect);
       if (value.kind !== 'review-queue-state' && processBound && !support.capabilities?.includes('qrspiProcessReview')) throw new Error(PROCESS_REVIEW_UPDATE);

@@ -4,7 +4,7 @@ import { gitReadSchemas } from './git-reads';
 import { workspaceNavigationSchema } from './workspace-navigation';
 import { s3HostedSchemas } from './s3-protocol';
 import { inferenceHostedSchemas } from './inference-protocol';
-import { reviewWriteSchema } from './review-protocol';
+import { reviewWriteSchema } from './review-io';
 import { reviewProgressSchema } from './review-progress';
 import { documentCacheSchema } from './document-cache';
 import { actionsReadSchema } from './actions-protocol';

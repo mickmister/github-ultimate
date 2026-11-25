@@ -1,5 +1,6 @@
 import { z } from 'zod';
-import { reviewOid, type ReviewReceipt } from './review-protocol';
+import { reviewOid } from './review-io';
+import type { ReviewReceipt } from './review-protocol';
 
 export const reviewProgressSchema = z.object({
   operation: z.literal('reviewProgress'), id: z.string().uuid(), installationId: z.number().int().positive(),
