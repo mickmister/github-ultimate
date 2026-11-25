@@ -1,13 +1,36 @@
-# Manual EAS builds and updates
+# EAS builds and updates
 
 Based on `mickmister/handy-actions` branch `vk/ddd8-lock-screen-acti`:
 `build_mobile.yml`, `update_mobile.yml`, their composite actions, app config and
-`eas.json`. Both Alohak release workflows run **only on workflow_dispatch**:
+`eas.json`. Builds are manual; updates also publish automatically from any
+branch when mobile-shell inputs change:
 
 | Workflow | Choices | Result |
 | --- | --- | --- |
-| `mobile-build-eas.yml` | all/android/ios; development/preview/production | Cloud EAS Build, waits for completion; links + JSON artifact |
-| `mobile-update-eas.yml` | all/android/ios; development/preview/production; message | EAS Update to matching channel/environment; links + JSON artifact |
+| `mobile-build-eas.yml` | all/android/ios; development/preview/production | Cloud EAS Build, waits for completion; compact release references |
+| `mobile-update-eas.yml` | all/android/ios; development/preview/production; message | EAS Update to matching channel/environment; compact release references |
+
+## Automatic preview updates
+
+Pushes to any branch publish an **iOS** update to the **preview**
+channel/environment with **GitHub connections enabled** for the personal testing
+pilot. The update message defaults to the source SHA. All branches share this
+preview channel; its latest successful publication is the preview update.
+Production and Android releases remain explicit dispatch
+choices; the manual GitHub-connections flag still defaults to `0`.
+
+The path filter covers `mobile/`, shared `src/` and `hosted/` services, native
+patches, root dependency manifests/lockfile, `.npmrc`, and the release helper and
+workflow. Shared services transitively import hosted workspace/review readers,
+so the shared-directory filters are deliberately conservative: some browser-only
+edits also trigger an update rather than risk missing a shell dependency.
+Changes solely to `webapp/`, `pi-web/`, or documentation do not trigger an OTA.
+
+Automatic and manual updates to the same channel share a serialized concurrency
+group. Each publication runs UI policy checks, native TypeScript checks and the
+mobile test suite first, and uses the same repository Expo secrets as dispatch.
+Native dependency/patch changes still require a new compatible binary; publishing
+an update does not rebuild the installed native runtime.
 
 The workflow ref is the source being released. No automatic store submission
 is included. Build failure/publish failure fails the job; CLI diagnostics are
@@ -99,8 +122,9 @@ part of normal repository review, then dispatch with the desired source ref.
 Pushing this feature alone does not authorize changing the default branch.
 
 Build JSON includes build IDs; update JSON includes update groups. The workflow
-summary points to the Expo build/update/project, and a seven-day JSON artifact
-preserves the CLI receipt. An EAS build link is not physical-device acceptance.
+summary points to the Expo build/update/project and records compact release
+references. Raw CLI receipts remain ephemeral. An EAS build link is not
+physical-device acceptance.
 
 ## Update boundary and compatibility
 
