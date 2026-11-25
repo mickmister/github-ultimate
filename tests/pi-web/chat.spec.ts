@@ -200,7 +200,7 @@ test('workspace context reads use real codemode and native Git/S3 brokers and su
     const saved = [...remote.objects.values()].map(object => JSON.parse(object.text)).reverse().find(checkpoint => checkpoint.phase === 'idle');
     const result = JSON.stringify(saved.messages.filter((message: { role: string }) => message.role === 'toolResult').at(-1));
     expect(result).toContain('Pinned repository context'); expect(result).toContain('Needle source line');
-    expect(result).toContain('manifestSnapshot'); expect(result).toContain('observedCommit');
+    expect(result).toContain('manifestSnapshot'); expect(result).not.toContain('observedCommit');
     expect(result).toContain('Workspace S3 context note'); expect(result).toContain('context-version-1'); expect(result).toContain('sha256');
     expect(result).not.toMatch(/private-key|private-s3-secret|private-github-secret/);
     expect(host.calls).toContain('/graphql');
