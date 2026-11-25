@@ -102,6 +102,16 @@ shows an empty menu; malformed config or unavailable repository context shows an
 explicit error. Git/nugs reads use the existing host GitHub bridge independently
 of inference/S3 transport. Credentials stay with the host.
 
+## Read-only workspace context
+
+Chat's existing codemode now includes `workspace_sources` and `workspace_files`
+for scoped document/GitHub/S3 discovery, listing, literal path/content search and
+line-window reads. Sources carry exact revisions and provenance, with lazy verified
+blob reads and one source commit per repository per invocation. S3 requires
+explicit published workspace bindings; the chat storage prefix is not implicitly
+exposed as workspace files. See [workspace context tools](pi-workspace-context.md)
+for examples, optional S3 configuration, coverage/limits and native host support.
+
 ## Mobile setup
 
 Alohak's native settings now include inference and S3 chat connections. Endpoints,

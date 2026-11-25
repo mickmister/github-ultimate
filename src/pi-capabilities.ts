@@ -1,3 +1,4 @@
 import { workflowTools } from './workflow-interface';
 import { beadsCapability } from './beads-query';
-export const piCapabilities = [...workflowTools, beadsCapability];
+import { workspaceContextCapabilities } from './workspace-context-interface';
+export const piCapabilities = [...workflowTools, beadsCapability, ...workspaceContextCapabilities];
