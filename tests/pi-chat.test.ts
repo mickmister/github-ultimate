@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { BrowserChat, ChatStorage, type ChatCheckpoint } from '../hosted/pi-chat';
+import { BrowserChat, ChatStorage, chatStorageId, type ChatCheckpoint } from '../hosted/pi-chat';
 import type { PiBridge } from '../hosted/pi-transport';
 import type { PublicS3Connection } from '../src/s3-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
@@ -58,6 +58,84 @@ test('chat durably journals the user before inference and restores with new devi
   await other.send('Continue');
   expect(f.requests[1].messages).toContainEqual({ role: 'assistant', content: 'Reply 1: Café 🌴' });
   expect((await otherStore.read(saved.session_id, other.snapshot().reference!)).messages).toHaveLength(4);
+});
+
+function copiedStorageFixture(sameTimestamp = false) {
+  const f = fixture(1, sameTimestamp); f.storage.endpoint = 'https://s3.us-west-004.backblazeb2.com/';
+  const r2 = { ...f.storage, id: crypto.randomUUID(), revision: crypto.randomUUID(), endpoint: 'https://account.r2.cloudflarestorage.com/', region: 'auto' };
+  const r2Ids = new Set<string>([r2.id]);
+  const bridge: PiBridge = async request => {
+    const r2Request = 'id' in request && r2Ids.has(request.id);
+    if (r2Request && (request.operation === 's3Read' && request.versionId || request.operation === 's3List' && request.versions)) throw Error('R2 does not implement version operations');
+    const result = await f.bridge(request);
+    if (request.operation === 's3Checkpoint' || request.operation === 's3Read') return { ...(result as object), ...(!r2Request ? { versionId: 'b2-version' } : {}) } as never;
+    if (request.operation === 's3List' && !r2Request) return { ...(result as object), objects: (result as { objects: object[] }).objects.map(value => ({ ...value, versionId: 'b2-version' })) } as never;
+    return result as never;
+  };
+  return { ...f, bridge, r2, r2Ids };
+}
+
+test('copied B2 conversations require explicit durable import into R2; original objects and interrupted history survive', async () => {
+  const f = copiedStorageFixture(), { r2, bridge } = f;
+  const originalStore = new ChatStorage(bridge, f.storage), workspace = { repository: 'owner/storage', workspace: 'migrated-workspace' };
+  const chat = new BrowserChat(originalStore, f.inference, bridge, undefined, workspace);
+  await chat.send('Original B2 conversation');
+  const original = await originalStore.read(chat.snapshot().sessionId!, chat.snapshot().reference!);
+  const pending = { ...original, phase: 'pending' as const, messages: [...original.messages, { role: 'user' as const, content: 'Interrupted request', timestamp: Date.now() }] };
+  const pendingReference = await originalStore.save(pending);
+  const copiedBytes = new Map(f.objects), target = new ChatStorage(bridge, r2);
+  expect(await target.list()).toMatchObject({ chats: [], copied: [{ storage: chatStorageId(f.storage), conversations: 1 }] });
+  await expect(target.read(original.session_id, pendingReference)).rejects.toThrow('Import copied conversations');
+  // Foreign catalog entries must not poison fresh R2 conversations.
+  const fresh = new BrowserChat(target, f.inference, bridge, undefined, workspace); await fresh.send('Fresh R2 conversation');
+  expect((await target.list()).chats).toHaveLength(1);
+  const calls = f.requests.length;
+  await target.importCopied(); expect(f.requests).toHaveLength(calls);
+  expect((await target.list()).copied).toEqual([]);
+  expect((await target.list()).chats).toContainEqual(expect.objectContaining({ sessionId: original.session_id, workspace }));
+  for (const [key, bytes] of copiedBytes) expect(f.objects.get(key)).toBe(bytes);
+  const count = f.objects.size; await target.importCopied(); expect(f.objects.size).toBe(count);
+  const otherConnection = { ...r2, id: crypto.randomUUID(), revision: crypto.randomUUID() }; f.r2Ids.add(otherConnection.id);
+  const otherDevice = new ChatStorage(bridge, otherConnection);
+  const restored = await otherDevice.read(original.session_id, pendingReference);
+  expect(restored).toEqual(pending);
+  const continued = new BrowserChat(otherDevice, f.inference, bridge, { checkpoint: restored, reference: pendingReference });
+  expect(continued.snapshot().phase).toBe('interrupted'); expect(f.requests).toHaveLength(calls);
+  await continued.send(); expect(f.requests).toHaveLength(calls + 1);
+  expect((await target.read(original.session_id, continued.snapshot().reference!)).storage).toBe(chatStorageId(r2));
+  expect((await target.read(original.session_id, pendingReference)).storage).toBe(chatStorageId(f.storage));
+  // Copying this import marker again cannot authorize a third destination.
+  const third = new ChatStorage(bridge, { ...r2, bucket: 'another-r2-bucket' });
+  await expect(third.read(original.session_id, pendingReference)).rejects.toThrow('Import copied conversations');
+});
+
+test('failed import is retryable and copied versioned catalog parent chains retain the final workspace', async () => {
+  const f = copiedStorageFixture(true), source = new ChatStorage(f.bridge, f.storage), chat = new BrowserChat(source, f.inference, f.bridge);
+  await chat.send('History');
+  const id = chat.snapshot().sessionId!;
+  for (const workspace of ['first', 'second', 'third', 'fourth']) await source.assign(id, { repository: 'owner/storage', workspace });
+  const target = new ChatStorage(f.bridge, f.r2);
+  f.setFailSave(true); await expect(target.importCopied()).rejects.toThrow('Storage offline');
+  expect((await target.list()).chats).toEqual([]);
+  f.setFailSave(false); await target.importCopied();
+  expect((await target.list()).chats).toMatchObject([{ sessionId: id, workspace: { workspace: 'fourth' } }]);
+  const before = f.objects.size;
+  await expect(new ChatStorage(f.bridge, { ...f.r2, allowUpload: false }).importCopied()).rejects.toThrow('immutable');
+  expect(f.objects.size).toBe(before);
+});
+
+test('append-only destination import records retain multiple old storage fingerprints', async () => {
+  const f = copiedStorageFixture(), workspace = { repository: 'owner/storage', workspace: 'workspace' };
+  const first = new BrowserChat(new ChatStorage(f.bridge, f.storage), f.inference, f.bridge, undefined, workspace);
+  await first.send('First source binding');
+  f.storage.region = 'another-source-region';
+  const second = new BrowserChat(new ChatStorage(f.bridge, f.storage), f.inference, f.bridge, undefined, workspace);
+  await second.send('Second source binding');
+  const target = new ChatStorage(f.bridge, f.r2);
+  expect((await target.list()).copied).toHaveLength(2);
+  await target.importCopied();
+  expect((await target.list()).copied).toEqual([]);
+  expect((await target.list()).chats.map(chat => chat.sessionId).sort()).toEqual([first.snapshot().sessionId, second.snapshot().sessionId].sort());
 });
 
 test('restored unresolved codemode calls become uncertainty observations without replay', async () => {

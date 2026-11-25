@@ -204,6 +204,37 @@ test('workspace context reads use real codemode and native Git/S3 brokers and su
   } finally { fixture.dispose(); }
 });
 
+test('Super Slurper B2 copies explicitly import into R2 without rewriting history or resending the interrupted turn', async ({ page }) => {
+  const remote = remoteFixture(), fixture = await nativeFixture(page, `${origin}${base}`, remote, undefined, { endpoint: 'https://fixture.r2.cloudflarestorage.com/', region: 'auto' });
+  try {
+    const copied = await fixture.seedCopied('Copied B2 conversation', true);
+    const originals = new Map(remote.objects);
+    const oldStorage = [...originals.values()].map(object => JSON.parse(object.text)).find(checkpoint => checkpoint.profile === 'pi-web-chat-1').storage;
+    await page.goto(`${fixture.url}&storage=${oldStorage}`);
+    await expect(page.getByRole('alert').filter({ hasText: 'Configure and grant the S3 location' })).toBeVisible();
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await page.getByRole('combobox', { name: 'S3 storage', exact: true }).selectOption(fixture.storage.id);
+    await page.getByRole('button', { name: 'Load conversations', exact: true }).click();
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Import copied conversations', exact: true })).toBeVisible();
+    expect(remote.requests).toHaveLength(1);
+    await page.getByRole('button', { name: 'Import copied conversations', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Import copied conversations', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Copied B2 conversation.*messages/ })).toBeVisible();
+    expect(remote.requests).toHaveLength(1);
+    for (const [key, value] of originals) expect(remote.objects.get(key)).toEqual(value);
+    await page.getByRole('button', { name: /Copied B2 conversation.*messages/ }).click();
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 1');
+    await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 1');
+    expect(remote.requests).toHaveLength(1);
+    await page.getByRole('button', { name: 'Continue interrupted turn', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    const latest = [...remote.objects.values()].map(object => JSON.parse(object.text)).reverse().find(checkpoint => checkpoint.session_id === copied.snapshot().sessionId && checkpoint.phase === 'idle');
+    expect(latest.messages).toHaveLength(4); expect(latest.storage).not.toBe(oldStorage);
+    expect(remote.requests).toHaveLength(2);
+  } finally { fixture.dispose(); }
+});
+
 test('published JavaScript links to usable first-party source maps', async ({ page }) => {
   await page.goto(`${origin}${base}`);
   const urls = await page.locator('script[src]').evaluateAll(scripts => scripts.map(script => (script as HTMLScriptElement).src));

@@ -6,6 +6,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 export type ChatMessage = Extract<AgentMessage, { role: 'user' | 'assistant' | 'toolResult' }>;
 export type ChatWorkspace = { repository: string; workspace: string };
 export type SavedChat = { sessionId: string; reference: string; label: string; updatedAt: string; messageCount: number; workspace?: ChatWorkspace };
+export type ChatCatalog = { chats: SavedChat[]; copied?: { storage: string; conversations: number }[] };
 export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: ChatMessage[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean };
 export interface ChatHandle {
   snapshot(): ChatSnapshot;
@@ -20,7 +21,8 @@ export interface PiWebRuntime {
   preferences(): Promise<import('../src/page-storage').HydratedPageStorage>;
   connections(): Promise<{ inference: PublicInferenceConnection[]; storage: PublicS3Connection[] }>;
   storageId(storage: PublicS3Connection): string;
-  list(storage: PublicS3Connection): Promise<{ chats: SavedChat[] }>;
+  list(storage: PublicS3Connection): Promise<ChatCatalog>;
+  importCopied(storage: PublicS3Connection): Promise<void>;
   previews(search: string): Promise<PreviewCatalog>;
   create(inference: PublicInferenceConnection, storage: PublicS3Connection, workspace?: ChatWorkspace): ChatHandle;
   move(storage: PublicS3Connection, sessionId: string, workspace: ChatWorkspace | null): Promise<void>;

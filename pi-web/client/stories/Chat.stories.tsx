@@ -24,6 +24,7 @@ function ChatStory({ mode = 'conversation', device = 'desktop' }: { mode?: Mode;
     beads, panel, choosePanel, attachment: undefined, attach: () => {}, sendAttachment: async () => {}, destinationSearch: '', setDestinationSearch: () => {}, closeAttachment: () => {}, changeAttachment: () => {},
     draftBeads: [], removeDraftBead: () => {}, pickerOpen: false, pickerSearch: '', setPickerSearch: () => {}, openPicker: () => {}, closePicker: () => {}, addPickedBeads: () => {}, workspaceChats: [],
     ...settings, openAlohak: () => {},
+    copiedCount: 0, importCopied: async () => {},
     theme, previews, route: { kind: 'workspace', workspace: { repository: 'example/storage', workspace: 'storybook-workspace' } }, movedConversation: undefined, followConversation: async () => {}, workspace: { repository: 'example/storage', workspace: 'storybook-workspace' }, workspaces: [], canCreate: true, chooseWorkspace: () => {}, moveWorkspace: async () => {}, presentation: device, inference: [inference], storage: [storage], inferenceId: inference.id, storageId: storage.id, selectedInference: inference, selectedStorage: storage,
     snapshot: { title: 'Browser conversation architecture', sessionId: draftMode ? undefined : 'conversation', reference: draftMode ? undefined : 'checkpoint', messages, busy: false, dirty, phase: mode === 'interrupted' ? 'interrupted' : 'idle' },
     chats: chats.filter(chat => chat.label.toLowerCase().includes(search.toLowerCase())), search, draftMode, busy: false,

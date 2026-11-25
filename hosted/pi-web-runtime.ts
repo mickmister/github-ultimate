@@ -26,6 +26,7 @@ export function createPiWebRuntime(beads = new PiBeads(bridgeRequest)): PiWebRun
   connections: async () => ({ inference: await bridge<PublicInferenceConnection[]>({ operation: 'inferenceConnections' }), storage: await bridge<PublicS3Connection[]>({ operation: 's3Connections' }) }),
   storageId: chatStorageId,
   list: (storage: PublicS3Connection) => new ChatStorage(bridge, storage).list(),
+  importCopied: (storage: PublicS3Connection) => new ChatStorage(bridge, storage).importCopied(),
   // Git/nugs reads use the existing GitHub bridge, not the Pi-only native
   // transfer protocol. Credentials remain in the approved host connection.
   previews: (search: string) => loadPreviewSlots(bridgeRequest, search),

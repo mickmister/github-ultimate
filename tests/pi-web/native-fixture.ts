@@ -39,11 +39,13 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
       } }), { headers: { 'content-type': 'text/event-stream' } });
       return Response.json({ choices: [{ finish_reason: 'stop', message: { content, reasoning_content: null, tool_calls: null } }] });
     }
-    if (url.hostname !== 's3.us-west-004.backblazeb2.com' || !request.headers.get('Authorization')?.startsWith('AWS4-HMAC-SHA256 ')) throw Error('Unexpected unsigned request');
+    const r2 = url.hostname === 'fixture.r2.cloudflarestorage.com';
+    if (url.hostname !== 's3.us-west-004.backblazeb2.com' && !r2 || !request.headers.get('Authorization')?.startsWith('AWS4-HMAC-SHA256 ')) throw Error('Unexpected unsigned request');
+    if (r2 && (url.searchParams.has('versions') || url.searchParams.has('versionId'))) return new Response('R2 version operations are not implemented', { status: 501 });
     const key = decodeURIComponent(url.pathname.slice('/chats/'.length));
     if (request.method === 'PUT') {
       if (failSaves) return new Response('', { status: 503 });
-      if (request.headers.has('If-None-Match')) return new Response('', { status: 501 });
+      if (request.headers.has('If-None-Match') && !r2) return new Response('', { status: 501 });
       const version = crypto.randomUUID(); objects.set(key, { text: await request.text(), version });
       return new Response('', { headers: { 'x-amz-version-id': version } });
     }
@@ -61,11 +63,11 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
   };
   return { objects, requests, fetcher, setFailSaves(value: boolean) { failSaves = value; } };
 }
-export async function nativeFixture(page: Page, source: string, remote: ReturnType<typeof remoteFixture>, github?: MobileGitHub) {
+export async function nativeFixture(page: Page, source: string, remote: ReturnType<typeof remoteFixture>, github?: MobileGitHub, location?: { endpoint: string; region: string }) {
   const previews = previewFixture(source);
   const url = new URL(source); url.searchParams.set('repository', previews.navigation.repository); url.searchParams.set('workspace', previews.workspace);
   const origin = new URL(source).origin, subpath = new URL(source).pathname;
-  const storage: S3ConnectionRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Shared chats', endpoint: 'https://s3.us-west-004.backblazeb2.com/', bucket: 'chats', prefix: 'workspace/', region: 'us-west-004', addressing: 'path', accessKeyId: 'private-key', secretAccessKey: 'private-s3-secret', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [{ origin, subpath }] };
+  const storage: S3ConnectionRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Shared chats', endpoint: 'https://s3.us-west-004.backblazeb2.com/', bucket: 'chats', prefix: 'workspace/', region: 'us-west-004', addressing: 'path', accessKeyId: 'private-key', secretAccessKey: 'private-s3-secret', allowRead: true, allowUpload: true, allowOverwrite: false, hostedGrants: [{ origin, subpath }], ...location };
   const inference: InferenceRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'Pi model', model: 'fixture-model', url: 'https://inference.example/chat', headers: [{ name: 'Authorization', value: 'Bearer private-fixture-secret' }], hostedGrants: [{ origin, subpath }] };
   const store = <T extends { id: string }>(record: T) => ({ async all() { return [record]; }, async get(id: string) { return id === record.id ? record : undefined; }, async put() {}, async remove() {} });
   const pi = new MobilePi(new S3Connections(store(storage), remote.fetcher, undefined, undefined, undefined, mobileS3Sign), new InferenceConnections(store(inference), remote.fetcher));
@@ -79,5 +81,17 @@ export async function nativeFixture(page: Page, source: string, remote: ReturnTy
     } } });
   }, { documentId: document.documentId });
   const bridge: PiBridge = (request) => pi.hosted(source, request, () => true) as never;
-  return { storage, inference, url: url.href, previews, async seedLegacy(text: string) { const chat = new BrowserChat(new ChatStorage(bridge, storage), inference, bridge); await chat.send(text); return chat; }, dispose: () => broker.invalidate() };
+  return { storage, inference, url: url.href, previews, async seedLegacy(text: string) { const chat = new BrowserChat(new ChatStorage(bridge, storage), inference, bridge); await chat.send(text); return chat; },
+    async seedCopied(text: string, pending = false) {
+      const old = { ...storage, endpoint: 'https://s3.us-west-004.backblazeb2.com/', region: 'us-west-004' };
+      const oldPi = new MobilePi(new S3Connections(store(old), remote.fetcher, undefined, undefined, undefined, mobileS3Sign), new InferenceConnections(store(inference), remote.fetcher));
+      const send: PiBridge = request => oldPi.hosted(source, request, () => true) as never;
+      const copiedStore = new ChatStorage(send, old), chat = new BrowserChat(copiedStore, inference, send, undefined, { repository: previews.navigation.repository, workspace: previews.workspace });
+      await chat.send(text);
+      if (pending) {
+        const checkpoint = await copiedStore.read(chat.snapshot().sessionId!, chat.snapshot().reference!);
+        await copiedStore.save({ ...checkpoint, phase: 'pending', parent: chat.snapshot().reference!, created_at: new Date().toISOString(), messages: [...checkpoint.messages, { role: 'user', content: 'Interrupted copied request', timestamp: Date.now() }] });
+      }
+      return chat;
+    }, dispose: () => broker.invalidate() };
 }

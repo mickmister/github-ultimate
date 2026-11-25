@@ -9,7 +9,7 @@ import { workflowDeliverySchema } from '../src/workflow-interface';
 import { inferenceStream, piModel, type PiBridge } from './pi-transport';
 import { backblaze, cloudflareR2, checkpointReference, type PublicS3Connection, type S3Listing, type S3Object } from '../src/s3-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
-import type { ChatSnapshot, SavedChat, ChatWorkspace } from './pi-chat-contract';
+import type { ChatSnapshot, SavedChat, ChatWorkspace, ChatCatalog } from './pi-chat-contract';
 
 const digest = (bytes: Uint8Array) => bytesToHex(sha256(bytes));
 const storageIdentity = (storage: PublicS3Connection) => ({ endpoint: storage.endpoint, bucket: storage.bucket, prefix: storage.prefix, region: storage.region, addressing: storage.addressing });
@@ -27,21 +27,31 @@ const chatSchema = z.object({
 }).strict();
 export type ChatCheckpoint = z.infer<typeof chatSchema>;
 class OtherCheckpointProfile extends Error {}
+class CopiedConversation extends Error {
+  constructor(readonly storage: string, readonly conversation: string) { super('This copied conversation still names its original storage location. Import copied conversations into the selected storage before continuing.'); }
+}
 const workspaceSchema = z.object({ repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), workspace: z.string().regex(/^[a-zA-Z0-9_-]{1,200}$/) }).strict();
 const catalogSchema = z.object({ kind: z.literal('browser-pi-checkpoint'), schema_version: z.literal(1), profile: z.literal('pi-web-catalog-1'), session_id: z.string().uuid(), conversation_id: z.string().uuid(), storage: z.string().regex(/^[a-f0-9]{64}$/), created_at: z.string().datetime(), parent: z.string().max(4096).nullable(), workspace: workspaceSchema.nullable() }).strict();
+const importSchema = z.object({ kind: z.literal('browser-pi-checkpoint'), schema_version: z.literal(1), profile: z.literal('pi-web-storage-import-1'), session_id: z.string().uuid(), storage: z.string().regex(/^[a-f0-9]{64}$/), source_storage: z.string().regex(/^[a-f0-9]{64}$/), created_at: z.string().datetime() }).strict();
 // A distinct deterministic UUID keeps small immutable catalog events separate
 // from transcript branches while using the existing scoped checkpoint broker.
 function catalogId(sessionId: string) {
-  const hash = digest(new TextEncoder().encode(`pi-web-catalog:${z.string().uuid().parse(sessionId)}`));
+  return recordId(`pi-web-catalog:${z.string().uuid().parse(sessionId)}`);
+}
+function recordId(seed: string) {
+  const hash = digest(new TextEncoder().encode(seed));
   return `${hash.slice(0, 8)}-${hash.slice(8, 12)}-8${hash.slice(13, 16)}-a${hash.slice(17, 20)}-${hash.slice(20, 32)}`;
 }
+const importId = (target: string) => recordId(`pi-web-storage-import:${target}`);
 
 /** Immutable, readback-verified chat checkpoints use the existing privileged S3
  * checkpoint operation, including B2's ordinary PUT + exact-version contract. */
 export class ChatStorage {
   constructor(private bridge: PiBridge, readonly connection: PublicS3Connection) {}
+  private referenceKey(reference: string) { return cloudflareR2(this.connection.endpoint) ? reference.split('#')[0] : reference; }
   private async latest() {
     const prefix = `${this.connection.prefix}pi-sessions/`;
+    const importSession = importId(chatStorageId(this.connection));
     const latest = new Map<string, { timestamp: string; references: string[] }>(), tokens = new Set<string>();
     let token: string | undefined;
     do {
@@ -52,6 +62,13 @@ export class ChatStorage {
         // Broker-generated keys start with a UTC timestamp. Resolve across every
         // listing page before choosing one visible row per canonical session.
         const timestamp = match[2].slice(0, 24), previous = latest.get(match[1]), reference = checkpointReference(object.key, object.versionId);
+        // Import grants are append-only. Union every record in this target's
+        // known index, including concurrent imports, without loading transcripts.
+        if (match[1] === importSession) {
+          if (!previous) latest.set(match[1], { timestamp, references: [reference] });
+          else if (!previous.references.includes(reference)) previous.references.push(reference);
+          continue;
+        }
         if (!previous || timestamp > previous.timestamp) latest.set(match[1], { timestamp, references: [reference] });
         else if (timestamp === previous.timestamp && !previous.references.includes(reference)) previous.references.push(reference);
       }
@@ -61,37 +78,58 @@ export class ChatStorage {
     } while (token);
     return latest;
   }
-  private async catalog(sessionId: string, references: string[]) {
+  private async importedStorages(latest = this.latest()) {
+    const index = await latest, session = importId(chatStorageId(this.connection));
+    const allowed = new Set([chatStorageId(this.connection)]);
+    const references = index.get(session)?.references ?? [];
+    if (references.length > 1000) throw Error('Conversation storage import index exceeds 1,000 records.');
+    for (const reference of references) {
+      const imported = importSchema.parse(await this.readRaw(session, reference));
+      if (imported.storage !== chatStorageId(this.connection) || imported.session_id !== session || imported.storage === imported.source_storage) throw Error('Invalid conversation storage import record.');
+      allowed.add(imported.source_storage);
+    }
+    return allowed;
+  }
+  private async catalog(sessionId: string, references: string[], allowed?: Set<string>) {
+    allowed ??= await this.importedStorages();
     const candidates = await Promise.all(references.map(async reference => {
       const checkpoint = catalogSchema.parse(await this.readRaw(sessionId, reference));
-      if (checkpoint.session_id !== sessionId || catalogId(checkpoint.conversation_id) !== sessionId || checkpoint.storage !== chatStorageId(this.connection)) throw Error('Invalid conversation workspace metadata.');
+      if (checkpoint.session_id !== sessionId || catalogId(checkpoint.conversation_id) !== sessionId) throw Error('Invalid conversation workspace metadata: catalog and conversation identities do not match.');
+      if (!allowed.has(checkpoint.storage)) throw new CopiedConversation(checkpoint.storage, checkpoint.conversation_id);
       return { checkpoint, reference };
     }));
-    const byReference = new Map(candidates.map(item => [item.reference, item]));
+    const byReference = new Map(candidates.map(item => [this.referenceKey(item.reference), item]));
+    const referenceKey = this.referenceKey.bind(this);
     function depth(item: typeof candidates[number]) {
-      const visited = new Set<string>(); let parent = item.checkpoint.parent;
-      while (parent && byReference.has(parent) && !visited.has(parent)) { visited.add(parent); parent = byReference.get(parent)!.checkpoint.parent; }
+      const visited = new Set<string>(); let parent = item.checkpoint.parent && referenceKey(item.checkpoint.parent);
+      while (parent && byReference.has(parent) && !visited.has(parent)) { visited.add(parent); const next = byReference.get(parent)!.checkpoint.parent; parent = next && referenceKey(next); }
       return visited.size;
     }
     return candidates.sort((a, b) => depth(b) - depth(a) || b.checkpoint.created_at.localeCompare(a.checkpoint.created_at) || a.reference.localeCompare(b.reference))[0];
   }
-  async list(): Promise<{ chats: SavedChat[] }> {
-    const latest = await this.latest();
+  async list(): Promise<ChatCatalog> {
+    const latest = await this.latest(), allowed = await this.importedStorages(Promise.resolve(latest));
     const chats: SavedChat[] = [];
     const metadata = new Map<string, ChatWorkspace | null>();
+    const copied = new Map<string, Set<string>>(), unavailable = new Set<string>();
     for (const [sessionId, item] of latest) {
+      if (sessionId === importId(chatStorageId(this.connection))) continue;
       const candidates: { checkpoint: ChatCheckpoint; reference: string }[] = [];
       for (const reference of item.references) try {
-        const raw = await this.readRaw(sessionId, reference);
-        if (raw?.profile === 'pi-web-catalog-1') {
-          const selected = await this.catalog(sessionId, item.references);
+        const value = await this.readRaw(sessionId, reference);
+        if (value.profile === 'pi-web-catalog-1') {
+          const selected = await this.catalog(sessionId, item.references, allowed);
           metadata.set(selected.checkpoint.conversation_id, selected.checkpoint.workspace);
           break;
-        } else candidates.push({ checkpoint: this.parseChat(sessionId, raw), reference });
-      } catch (error) { if (!(error instanceof OtherCheckpointProfile)) throw error; }
+        } else candidates.push({ checkpoint: this.parseChat(sessionId, value, allowed), reference });
+      } catch (error) {
+        if (error instanceof CopiedConversation) {
+          const sessions = copied.get(error.storage) ?? new Set<string>(); sessions.add(error.conversation); copied.set(error.storage, sessions); unavailable.add(error.conversation);
+        } else if (!(error instanceof OtherCheckpointProfile)) throw error;
+      }
       // Multiple saves can share a broker timestamp. Prefer a descendant and
       // completed transcript rather than a random UUID ordering within that ms.
-      candidates.sort((a, b) => a.checkpoint.parent === b.reference ? -1 : b.checkpoint.parent === a.reference ? 1 :
+      candidates.sort((a, b) => a.checkpoint.parent && this.referenceKey(a.checkpoint.parent) === this.referenceKey(b.reference) ? -1 : b.checkpoint.parent && this.referenceKey(b.checkpoint.parent) === this.referenceKey(a.reference) ? 1 :
         b.checkpoint.created_at.localeCompare(a.checkpoint.created_at) || b.checkpoint.messages.length - a.checkpoint.messages.length || a.reference.localeCompare(b.reference));
       const selected = candidates[0];
       if (selected) {
@@ -101,10 +139,11 @@ export class ChatStorage {
       }
     }
     for (const chat of chats) { const workspace = metadata.get(chat.sessionId); if (workspace) chat.workspace = workspace; }
-    return { chats: chats.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.sessionId.localeCompare(b.sessionId)) };
+    return { chats: chats.filter(chat => !unavailable.has(chat.sessionId)).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.sessionId.localeCompare(b.sessionId)), copied: [...copied].map(([storage, sessions]) => ({ storage, conversations: sessions.size })) };
   }
   async read(sessionId: string, reference: string): Promise<ChatCheckpoint> {
-    return this.parseChat(sessionId, await this.readRaw(sessionId, reference));
+    const raw = await this.readRaw(sessionId, reference);
+    return this.parseChat(sessionId, raw, raw.storage === chatStorageId(this.connection) ? undefined : await this.importedStorages());
   }
   private async readRaw(sessionId: string, reference: string): Promise<Record<string, unknown>> {
     z.string().uuid().parse(sessionId);
@@ -119,12 +158,24 @@ export class ChatStorage {
     if (bytes.length !== object.size || digest(bytes) !== hash) throw Error('Chat checkpoint integrity check failed.');
     return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
   }
-  private parseChat(sessionId: string, raw: Record<string, unknown>): ChatCheckpoint {
+  private parseChat(sessionId: string, raw: Record<string, unknown>, allowed = new Set([chatStorageId(this.connection)])): ChatCheckpoint {
     if (raw?.schema_version !== 2 || raw?.profile !== 'pi-web-chat-1') throw new OtherCheckpointProfile('Open workspace-agent checkpoints in the Agent screen.');
     const checkpoint = chatSchema.parse(raw);
     if (checkpoint.phase === 'idle') validateTranscript(checkpoint.messages);
-    if (checkpoint.session_id !== sessionId || checkpoint.storage !== chatStorageId(this.connection)) throw Error('This conversation belongs to another storage location.');
+    if (checkpoint.session_id !== sessionId) throw Error('Conversation checkpoint identity mismatch.');
+    if (!allowed.has(checkpoint.storage)) throw new CopiedConversation(checkpoint.storage, checkpoint.session_id);
     return checkpoint;
+  }
+  async importCopied() {
+    if (!this.connection.allowRead || !this.connection.allowUpload || this.connection.allowOverwrite) throw Error('Import requires immutable read/write storage.');
+    const target = chatStorageId(this.connection);
+    for (const source of (await this.list()).copied ?? []) {
+      const imported = importSchema.parse({ kind: 'browser-pi-checkpoint', schema_version: 1, profile: 'pi-web-storage-import-1', session_id: importId(target), storage: target, source_storage: source.storage, created_at: new Date().toISOString() });
+      const text = JSON.stringify(imported), bytes = new TextEncoder().encode(text);
+      const receipt = z.object({ key: z.string(), versionId: z.string().optional(), sha256: z.literal(digest(bytes)) }).parse(await this.bridge({ operation: 's3Checkpoint', id: this.connection.id, revision: this.connection.revision, sessionId: imported.session_id, base64: btoa(text) }));
+      const restored = importSchema.parse(await this.readRaw(imported.session_id, checkpointReference(receipt.key, cloudflareR2(this.connection.endpoint) ? undefined : receipt.versionId)));
+      if (JSON.stringify(restored) !== text) throw Error('Storage import readback differs.');
+    }
   }
   async assign(sessionId: string, workspace: ChatWorkspace | null) {
     if (!this.connection.allowRead || !this.connection.allowUpload || this.connection.allowOverwrite) throw Error('Conversation metadata requires immutable read/write storage.');
@@ -181,7 +232,7 @@ export class BrowserChat {
   private turnWorkspace?: ChatWorkspace;
   constructor(private storage: ChatStorage, private inference: PublicInferenceConnection, private bridge: PiBridge, restored?: { checkpoint: ChatCheckpoint; reference: string }, private initialWorkspace?: ChatWorkspace, private workflowBridge: PiBridge = bridge, private options: { limits?: Partial<ChatLimits>; workspace?: () => ChatWorkspace | undefined; beadsQuery?: import('./pi-workflow-tools').WorkflowToolContext['beadsQuery'] } = {}) {
     if (restored && restored.checkpoint.model !== inference.model) throw Error('Select an inference connection with the saved conversation’s model.');
-    this.checkpoint = restored ? { ...restored.checkpoint, branch_id: crypto.randomUUID(), phase: restored.checkpoint.phase === 'pending' ? 'interrupted' : restored.checkpoint.phase } : {
+    this.checkpoint = restored ? { ...restored.checkpoint, storage: chatStorageId(storage.connection), branch_id: crypto.randomUUID(), phase: restored.checkpoint.phase === 'pending' ? 'interrupted' : restored.checkpoint.phase } : {
       kind: 'browser-pi-checkpoint', schema_version: 2, profile: 'pi-web-chat-1', session_id: crypto.randomUUID(), branch_id: crypto.randomUUID(), parent: null, created_at: new Date().toISOString(), title: 'New conversation', model: inference.model, storage: chatStorageId(storage.connection), phase: 'idle', messages: [],
     };
     this.reference = restored?.reference;

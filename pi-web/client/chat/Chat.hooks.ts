@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useEffectEvent, useRef, useState, useSyncExternalStore } from 'react';
-import type { ChatHandle, ChatSnapshot, SavedChat, ChatWorkspace } from '../../../hosted/pi-chat-contract';
+import type { ChatHandle, ChatSnapshot, SavedChat, ChatWorkspace, ChatCatalog } from '../../../hosted/pi-chat-contract';
 import type { PublicInferenceConnection } from '../../../src/inference-protocol';
 import type { PublicS3Connection } from '../../../src/s3-protocol';
 import { copyText } from '@/lib/clipboard';
@@ -37,6 +37,8 @@ export function useChat() {
   const [inference, setInference] = useState<PublicInferenceConnection[]>([]), [storage, setStorage] = useState<PublicS3Connection[]>([]);
   const [inferenceId, setInferenceId] = useState(''), [storageId, setStorageId] = useState('');
   const [chats, setChats] = useState<SavedChat[]>([]), [search, setSearch] = useState('');
+  const [copied, setCopied] = useState<NonNullable<ChatCatalog['copied']>>([]);
+  function acceptCatalog(page: ChatCatalog) { setChats(page.chats); setCopied(page.copied ?? []); }
   const [route, setRoute] = useState<ChatRoute>({ kind: 'chooser' });
   const workspace = route.kind === 'workspace' ? route.workspace : undefined;
   const beads = useBeads(workspace);
@@ -109,7 +111,7 @@ export function useChat() {
       setStorageId(target?.id ?? ''); setInferenceId(model?.id ?? '');
       if (expected && !target) throw Error('Configure and grant the S3 location used by this conversation, then reconnect.');
       if (!target) return;
-      const page = await api.list(target); if (current !== generation.current || location.href !== expectedURL) return; setChats(page.chats);
+      const page = await api.list(target); if (current !== generation.current || location.href !== expectedURL) return; acceptCatalog(page);
       const session = params.get('session'), checkpoint = params.get('checkpoint');
       if (session && model) {
         const saved = page.chats.find(item => item.sessionId === session);
@@ -119,7 +121,7 @@ export function useChat() {
           scope = saved.workspace ? { kind: 'workspace', workspace: saved.workspace } : { kind: 'inbox' };
           setRoute(scope); writeURL(routeURL(new URL(location.href), scope, true), true); expectedURL = location.href; void previews.refresh();
         }
-        if (!saved) throw Error('This conversation is not available in the selected workspace catalog.');
+        if (!saved) throw Error(page.copied?.length ? 'Copied conversations need importing into this storage. Use Import copied conversations below; interrupted turns will not be resent.' : 'This conversation is not available in the selected workspace catalog.');
         checkConversation(saved, scope);
         // Ordinary conversation URLs follow the same canonical head as the
         // sidebar. Only explicitly shared checkpoint views pin old history.
@@ -155,12 +157,21 @@ export function useChat() {
       if (!selectedStorage) throw Error('Choose S3 storage.');
       const api = await runtime(), page = await api.list(selectedStorage);
       const current = active.current?.snapshot(), latest = page.chats.find(item => item.sessionId === current?.sessionId);
-      setChats(page.chats);
+      acceptCatalog(page);
       if (latest && !inChatScope(route, latest.workspace)) { setChat(undefined); active.current = undefined; checkConversation(latest); }
       if (current && latest && selectedInference && !current.dirty && current.phase === 'idle' && latest.reference !== current.reference && new URL(location.href).searchParams.get('view') !== 'checkpoint') {
         setChat(await api.restore(selectedInference, selectedStorage, latest.sessionId, latest.reference));
       }
-      setChats(page.chats); setShowList(true);
+      acceptCatalog(page); setShowList(true);
+    });
+  }
+  async function importCopied() {
+    await action(async () => {
+      if (!selectedStorage) throw Error('Choose the destination storage first.');
+      const api = await runtime(); await api.importCopied(selectedStorage);
+      acceptCatalog(await api.list(selectedStorage));
+      const url = new URL(location.href); url.searchParams.set('storage', api.storageId(selectedStorage)); writeURL(url, true);
+      try { localStorage.setItem('pi-web:storage', api.storageId(selectedStorage)); } catch { /* Optional selection hint. */ }
     });
   }
   async function open(saved: SavedChat) {
@@ -201,7 +212,7 @@ export function useChat() {
       drafts.current.delete(workspaceKey(workspace) + ':' + next.snapshot().sessionId); drafts.current.delete(workspaceKey(workspace) + ':new');
       try { await next.send(resume ? undefined : message); } catch (error) { if (!resume) { setDraft(text); setDraftBeads(draftBeads); } throw error; }
       if (next.snapshot().reference) {
-        const page = await api.list(selectedStorage); setChats(page.chats);
+        const page = await api.list(selectedStorage); acceptCatalog(page);
         const saved = page.chats.find(item => item.sessionId === next.snapshot().sessionId);
         if (saved && !inChatScope(route, saved.workspace)) { setChat(undefined); active.current = undefined; checkConversation(saved); }
       }
@@ -209,7 +220,7 @@ export function useChat() {
   }
   function chooseStorage(id: string) {
     if (snapshot.busy || snapshot.dirty) return;
-    setStorageId(id); setChats([]); setChat(undefined); setDraftMode(false); setMovedConversation(undefined); setError(''); setShowList(true);
+    setStorageId(id); setChats([]); setCopied([]); setChat(undefined); setDraftMode(false); setMovedConversation(undefined); setError(''); setShowList(true);
     writeURL(clearConversationURL(new URL(location.href)));
   }
   function close() {
@@ -292,6 +303,7 @@ export function useChat() {
   return { beads, panel, choosePanel, attachment, attach, sendAttachment, destinationSearch, setDestinationSearch, closeAttachment: () => setAttachment(undefined), changeAttachment: (patch: Partial<NonNullable<typeof attachment>>) => setAttachment(value => value ? { ...value, ...patch } : value),
     draftBeads, removeDraftBead: (id: string) => setDraftBeads(value => value.filter(bead => bead.id !== id)), pickerOpen, pickerSearch, setPickerSearch, openPicker: () => setPickerOpen(true), closePicker: () => setPickerOpen(false), addPickedBeads: () => { setDraftBeads(value => [...new Map([...value, ...beads.selected].map(bead => [bead.id, bead])).values()]); setPickerOpen(false); }, workspaceChats,
     theme, previews: scopedPreviews, route, movedConversation, followConversation, workspace, workspaces, canCreate, chooseWorkspace, moveWorkspace, snapshot, presentation, inference, storage, inferenceId, storageId, selectedStorage, selectedInference, chats: workspaceChats.filter(item => item.label.toLowerCase().includes(search.trim().toLowerCase())), search, draftMode, busy: busy || snapshot.busy, error: error || snapshot.error, draft, showList,
-    settingsDialog, openSettings, closeSettings, openAlohak, setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) setChats((await (await runtime()).list(selectedStorage)).chats); }) };
+    copiedCount: copied.reduce((count, item) => count + item.conversations, 0), importCopied,
+    settingsDialog, openSettings, closeSettings, openAlohak, setSearch, setDraft, setInferenceId, chooseStorage, setShowList, connect, list, open, create, send, close, copyLink, stop: () => chat?.stop(), retrySave: () => action(async () => { await active.current?.retrySave(); if (selectedStorage) acceptCatalog(await (await runtime()).list(selectedStorage)); }) };
 }
 export type ChatModel = ReturnType<typeof useChat>;

@@ -102,6 +102,32 @@ shows an empty menu; malformed config or unavailable repository context shows an
 explicit error. Git/nugs reads use the existing host GitHub bridge independently
 of inference/S3 transport. Credentials stay with the host.
 
+## Import conversations copied to another storage location
+
+Checkpoint bytes include the original endpoint/bucket/prefix/region/addressing
+fingerprint. Copying B2 objects to R2 with Super Slurper preserves that old binding;
+changing extension settings alone does not migrate it. This is separate from R2's
+unsupported version-specific operations and the HTTP 501 fix.
+
+After copying, open **Settings → Connections**, choose the destination R2 storage
+and select **Load conversations**. Close Settings, then choose **Import copied
+conversations**. Copied conversations are reported separately until imported;
+they do not prevent fresh conversations in the destination from working.
+
+Import writes small immutable, readback-verified authorization records to the
+destination. It preserves original checkpoint bytes, IDs, messages, workflow
+receipts, workspace associations and branches. The records bind the old storage
+fingerprints to this exact destination and work on another authorized device;
+copying them to a third location does not authorize that location. Concurrent
+import records are unioned rather than replacing each other's authorizations.
+
+Reload and import do not resend messages. Open the imported conversation, then
+explicitly choose **Continue interrupted turn** if appropriate. New continuation
+checkpoints use the destination fingerprint; original checkpoints remain unchanged.
+R2 reads discard copied B2 version fragments while verifying each content-addressed
+object's bytes. Old links naming the B2 storage location must be reopened through
+the destination catalog; newly copied links name R2.
+
 ## Read-only workspace context
 
 Chat's existing codemode now includes `workspace_sources` and `workspace_files`
