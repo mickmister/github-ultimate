@@ -42,8 +42,9 @@ The caller does not supply a source commit. At startup CI resolves the latest
 remote commit of every configured repository branch and retains the captured
 source vector. That vector and the resulting candidate remain exact execution
 evidence even when branches advance. Old observed branch commits in historical
-workspace manifests do not select new work; current manifests omit them. Explicit
-detached source pointers still need a commit because there is no branch to resolve.
+workspace manifests do not select new work; current manifests omit them. Every
+workspace source member selects a repository branch. CI checks out those branches
+and records their resolved commits as execution evidence, not as manifest fields.
 
 ## Effects and recovery
 

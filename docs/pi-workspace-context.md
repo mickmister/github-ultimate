@@ -29,8 +29,8 @@ selection. Separate uniquely authorized connections can serve storage and source
 - `github:<manifest-member-path>`: associated repository source. Repository
   identity comes from a unique GitHub origin remote (or a unique GitHub remote
   when no origin exists), never a machine-local path. Branches resolve to published
-  remote commits when context is first used in the invocation; detached members
-  retain their explicit commit. All members of the same repository must use one
+  remote commits when context is first used in the invocation. All workspace
+  source members require configured branches. All members of the same repository must use one
   consistent revision. Unavailable, conflicting, ambiguous and unpublished
   revisions produce source notices. Branch manifests do not retain observed local
   commits; publication/dirty flags remain separate from the actual read commit. Reads use

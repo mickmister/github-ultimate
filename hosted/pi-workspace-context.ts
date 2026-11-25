@@ -128,7 +128,7 @@ export class PiWorkspaceContext {
         if (repositories.length !== 1) throw Error('Member needs one unambiguous GitHub origin remote; local paths are not repository identities.');
         const repository = repositories[0], connection = choose(repository, true);
         const scope = { id: connection.id, userId: connection.user!.id, installationId: connection.installation!.id, repository };
-        const expression = member.detached ? member.commit! : member.branch!;
+        const expression = member.branch;
         let pin = revisions.get(repository);
         if (pin && pin.expression !== expression) throw Error('Members of one repository name conflicting revisions; no mixed-revision reads are allowed.');
         if (!pin) {
@@ -136,7 +136,7 @@ export class PiWorkspaceContext {
           const value = await this.request(this.send, { operation: 'agentGraphql', id: scope.id, userId: scope.userId, installationId: scope.installationId,
             query: 'query($owner:String!,$name:String!,$expression:String!){repository(owner:$owner,name:$name){object(expression:$expression){... on Commit{oid tree{oid}}}}}', variables: { owner, name, expression } }, signal);
           const result = z.object({ data: z.object({ repository: z.object({ object: z.object({ oid, tree: z.object({ oid }) }) }) }), errors: z.array(z.unknown()).optional() }).parse(value);
-          if (result.errors?.length || member.detached && result.data.repository.object.oid !== member.commit) throw Error('Source revision is not available at the published remote.');
+          if (result.errors?.length) throw Error('Source branch is not available at the published remote.');
           pin = { expression, commit: result.data.repository.object.oid, tree: result.data.repository.object.tree.oid }; revisions.set(repository, pin);
         }
         const trees = new Map<string, Promise<z.infer<typeof treeEntries>>>();

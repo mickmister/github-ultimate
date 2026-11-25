@@ -15,7 +15,7 @@ function fixture(options: { s3?: boolean; members?: boolean; connectionCopies?: 
   const docText = blob('Workspace document\nNeedle document');
   const members = options.members === false ? [] : [
     { path: 'app', branch: 'refs/heads/main', publication: 'unverified', remotes: [{ name: 'origin', url: 'git@github.com:owner/app.git' }] },
-    { path: 'library', detached: true, commit: '2'.repeat(40), publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/owner/library.git' }] },
+    { path: 'library', branch: 'refs/heads/main', publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/owner/library.git' }] },
   ];
   const manifest = blob(JSON.stringify({ schema_version: 1, workspace: workspace.workspace, observed_at: '2026-11-25T00:00:00Z', purpose: 'Context test', repositories: members }));
   const config = blob(JSON.stringify({ schema_version: 1, sources: [{ id: 'notes', kind: 's3', endpoint: 'https://s3.example/', bucket: 'private', prefix: 'workspace/notes/' }] }));

@@ -13,12 +13,13 @@ test('standalone manifests require a reason and do not require repository or bra
 test('existing repo-backed schema-v1 manifests remain valid and malformed pointers do not', () => {
   const { commit: _observed, ...branch } = repository;
   expect(parseWorkspaceManifest(JSON.stringify({ ...base, repositories: [branch] }), 'planning').repositories).toHaveLength(1);
-  expect(parseWorkspaceManifest(JSON.stringify({ ...base, repositories: [repository] }), 'planning').repositories).toHaveLength(1);
-  expect(parseWorkspaceManifest(JSON.stringify({ ...base, repositories: [{ ...repository, branch: '', detached: true }] }), 'planning').repositories).toHaveLength(1);
+  const old = parseWorkspaceManifest(JSON.stringify({ ...base, repositories: [repository] }), 'planning').repositories![0];
+  expect(old.branch).toBe('refs/heads/main');
+  expect(old).not.toHaveProperty('commit'); expect(old).not.toHaveProperty('detached');
   for (const change of [
     { schema_version: 2 }, { workspace: 'different' }, { observed_at: 'not-a-timestamp' }, { observed_at: '2026-02-30T00:00:00Z' }, { observed_at: '2026-11-09T24:00:00Z' }, { repositories: {} },
     { repositories: [{ ...repository, path: '../outside' }] }, { repositories: [repository, repository] },
-    { repositories: [{ ...repository, branch: 'main' }] }, { repositories: [{ ...repository, commit: 'short' }] },
+    { repositories: [{ ...repository, branch: 'main' }] },
     { repositories: [{ ...branch, branch: '', detached: true }] },
     { repositories: [{ ...repository, publication: 'unverified', remotes: [{ name: 'origin', url: 'https://user:secret@example.com/repo' }] }] },
   ]) expect(() => parseWorkspaceManifest(JSON.stringify({ ...base, repositories: [repository], ...change }), 'planning')).toThrow('Invalid workspace/manifest.json');

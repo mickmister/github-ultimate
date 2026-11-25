@@ -1,6 +1,6 @@
 export type WorkspaceManifest = {
   schema_version: 1; workspace: string; observed_at: string; purpose?: string;
-  repositories?: { path: string; branch?: string; commit?: string; detached?: boolean; dirty?: boolean; remotes?: { name: string; url: string }[] | null; publication: 'unverified' | 'no_remote' }[] | null;
+  repositories?: { path: string; branch: string; dirty?: boolean; remotes?: { name: string; url: string }[] | null; publication: 'unverified' | 'no_remote' }[] | null;
 };
 
 function object(value: unknown): value is Record<string, unknown> { return !!value && typeof value === 'object' && !Array.isArray(value); }
@@ -33,9 +33,8 @@ export function parseWorkspaceManifest(text: string, workspace: string): Workspa
   for (const repository of repositories) {
     if (!object(repository) || repository.path !== '.' && !safePath(repository.path) || typeof repository.path !== 'string' || seen.has(repository.path)) throw bad();
     seen.add(repository.path);
-    if (repository.detached && repository.commit == null || repository.commit != null && (typeof repository.commit !== 'string' || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/.test(repository.commit))) throw bad();
-    if (repository.detached != null && typeof repository.detached !== 'boolean' || repository.dirty != null && typeof repository.dirty !== 'boolean') throw bad();
-    if (repository.detached ? repository.branch != null && repository.branch !== '' : typeof repository.branch !== 'string' || !repository.branch.startsWith('refs/heads/')) throw bad();
+    if (repository.dirty != null && typeof repository.dirty !== 'boolean') throw bad();
+    if (typeof repository.branch !== 'string' || !repository.branch.startsWith('refs/heads/') || repository.branch === 'refs/heads/') throw bad();
     if (repository.publication !== 'unverified' && repository.publication !== 'no_remote' || repository.remotes != null && !Array.isArray(repository.remotes)) throw bad();
     const remotes = (repository.remotes ?? []) as unknown[];
     if ((remotes.length === 0) !== (repository.publication === 'no_remote')) throw bad();
@@ -50,5 +49,10 @@ export function parseWorkspaceManifest(text: string, workspace: string): Workspa
       }
     }
   }
-  return value as WorkspaceManifest;
+  // Old branch observations remain readable, but never expose obsolete source
+  // selection fields as part of the current workspace contract.
+  return { ...value, repositories: value.repositories == null ? value.repositories : repositories.map(repository => {
+    const { commit: _commit, detached: _detached, ...branch } = repository as Record<string, unknown>;
+    return branch;
+  }) } as WorkspaceManifest;
 }

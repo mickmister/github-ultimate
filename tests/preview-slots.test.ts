@@ -13,7 +13,7 @@ import type { WorkspaceManifest } from '../hosted/manifest';
 import type { PiBridge } from '../hosted/pi-transport';
 
 const branch = 'vk/46e5-vd-multi-instanc', workspace = 'vk-46e5-vd-multi-instanc';
-const manifest: WorkspaceManifest = { schema_version: 1, workspace, observed_at: '2026-11-24T00:00:00Z', repositories: [{ path: 'github-ultimate', branch: `refs/heads/${branch}`, commit: 'c'.repeat(40), publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/mickmister/github-ultimate.git' }] }] };
+const manifest: WorkspaceManifest = { schema_version: 1, workspace, observed_at: '2026-11-24T00:00:00Z', repositories: [{ path: 'github-ultimate', branch: `refs/heads/${branch}`, publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/mickmister/github-ultimate.git' }] }] };
 const provider = { kind: 'github-pages' as const, baseUrl: 'https://mickmister.github.io/github-ultimate/', path: 'pi-web-storybooks/{previewDirectory}/' };
 const config = { schema_version: 1, repositories: [{ repository: 'mickmister/github-ultimate', previewSlots: [{ id: 'storybook', title: 'Pi Web Storybook', service: 'pi-web-storybook', provider }] }] };
 function fixture() {
