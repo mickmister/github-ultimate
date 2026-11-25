@@ -14,7 +14,7 @@ function fixture(options: { s3?: boolean; members?: boolean; connectionCopies?: 
   const nextFiles = [makeFile('README.md', 'New branch content')];
   const docText = blob('Workspace document\nNeedle document');
   const members = options.members === false ? [] : [
-    { path: 'app', branch: 'refs/heads/main', commit: '1'.repeat(40), publication: 'unverified', remotes: [{ name: 'origin', url: 'git@github.com:owner/app.git' }] },
+    { path: 'app', branch: 'refs/heads/main', publication: 'unverified', remotes: [{ name: 'origin', url: 'git@github.com:owner/app.git' }] },
     { path: 'library', detached: true, commit: '2'.repeat(40), publication: 'unverified', remotes: [{ name: 'origin', url: 'https://github.com/owner/library.git' }] },
   ];
   const manifest = blob(JSON.stringify({ schema_version: 1, workspace: workspace.workspace, observed_at: '2026-11-25T00:00:00Z', purpose: 'Context test', repositories: members }));
@@ -52,7 +52,8 @@ test('discovers only manifest members, pins branches once across calls, reads bl
   const f = fixture(), context = f.context();
   const discovered = await context.discover({});
   expect(discovered.sources.map(source => source.id)).toEqual(['documents', 'github:app', 'github:library']);
-  expect(discovered.sources[1]).toMatchObject({ repository: 'owner/app', commit: 'a'.repeat(40), observedCommit: '1'.repeat(40) });
+  expect(discovered.sources[1]).toMatchObject({ repository: 'owner/app', commit: 'a'.repeat(40) });
+  expect(discovered.sources[1]).not.toHaveProperty('observedCommit');
   expect(f.calls.some(call => call.operation === 'agentBlob' || call.operation === 'agentTree')).toBe(false);
   expect(f.calls.filter(call => call.operation === 'agentGraphql')).toHaveLength(2);
   f.advance();

@@ -87,7 +87,7 @@ export function piWorkflowTools(send: PiBridge, currentWorkspace: () => Promise<
       if (attempted) throw Error('This workflow identity has an unresolved attempted launch. Use workflows_list on the original authenticated host to recover its receipt. Do not redispatch or allocate a replacement identity.');
       if (context.legacyUncertainty?.()) throw Error('This restored conversation has an unresolved legacy tool call. Inspect its original execution; use a new conversation for new launches.');
       const opened = await readerFor(workspace);
-      if (!opened.manifest.repositories?.some(member => member.path === input.request.member && member.commit === input.request.baseCommit)) throw Error('Workflow member/baseCommit must match a pinned member of the conversation workspace.');
+      if (!opened.manifest.repositories?.some(member => member.path === input.request.member && !member.detached && member.branch?.startsWith('refs/heads/'))) throw Error('Workflow member must be a configured source branch of the conversation workspace.');
       await beforeLaunch({ storageRepository: workspace.repository, workspace: workspace.workspace, thread: input.request.thread, process: input.request.process, digest, userId: scope.userId, installationId: scope.installationId }); signal?.throwIfAborted();
       const result = await send({ operation: 'workflowStart', ...args, ...scope });
       // Save the external receipt even if Stop arrived while the host was acting.

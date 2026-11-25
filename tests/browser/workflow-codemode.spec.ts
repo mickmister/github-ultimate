@@ -30,7 +30,7 @@ for (const mode of ['normal', 'script-failure', 'checkpoint-failure', 'second-de
   let record: ConnectionRecord = { id, name: 'GitHub', appId: 1, clientId: 'client', user: { id: 6913320, login: 'owner' }, installation: { id: 7, account: 'owner' }, tokens: { accessToken: 'private-never-in-browser', expiresAt: Date.now() + 3600000 }, hostedGrants: [{ origin, subpath: '/' }] };
   const store = { all: async () => [structuredClone(record)], get: async () => structuredClone(record), put: async (next: ConnectionRecord) => { record = structuredClone(next); }, remove: async () => {} };
   let posts = 0, dispatched: any;
-  const manifest = JSON.stringify({ schema_version: 1, workspace: 'workspace', observed_at: new Date().toISOString(), repositories: [{ path: 'app', branch: 'refs/heads/main', commit: 'b'.repeat(40), remotes: [{ name: 'origin', url: 'https://github.com/owner/app.git' }], publication: 'unverified' }] });
+  const manifest = JSON.stringify({ schema_version: 1, workspace: 'workspace', observed_at: new Date().toISOString(), repositories: [{ path: 'app', branch: 'refs/heads/main', remotes: [{ name: 'origin', url: 'https://github.com/owner/app.git' }], publication: 'unverified' }] });
   const candidate = 'c'.repeat(40), result = { schemaVersion: 1, workspace: 'workspace', thread: 'conversation', process: 'request-1', executionId: '42-1', status: 'accepted', currentStep: 'candidate-accepted', nextStep: 'human-review-candidate', cycle: 1, candidate, testsPassed: true, evaluations: ['reviewer-1', 'reviewer-2', 'tester'].map(role => ({ role, candidate, approval: 'approve' })) };
   const report = `# Development candidate\n\n## Result contract\n\n\`\`\`json\n${JSON.stringify(result)}\n\`\`\`\n`;
   const blobs = new Map([manifest, report].map(text => [gitObject('blob', text), text]));
@@ -56,7 +56,7 @@ for (const mode of ['normal', 'script-failure', 'checkpoint-failure', 'second-de
   let broker = new Connections(store, fetcher);
   await page.exposeFunction('workflowHost', (input: unknown) => broker.handleHosted(url, input));
   await page.goto(url); await page.waitForFunction(() => !!window.workflowExperiment);
-  const request = { schemaVersion: 2, process: 'request-1', thread: 'conversation', member: 'app', baseCommit: 'b'.repeat(40), task: 'Fix source', acceptanceCriteria: ['Checks pass'], publishCandidate: false };
+  const request = { schemaVersion: 2, process: 'request-1', thread: 'conversation', member: 'app', task: 'Fix source', acceptanceCriteria: ['Checks pass'], publishCandidate: false };
   const code = `const catalog = await tools.workflows_list({}); const receipt = await tools.workflow_start({connectionRef:catalog.connections[0].connectionRef,workspace:'workspace',request:${JSON.stringify(request)},allowSourceEffects:true}); text(receipt); ${mode === 'script-failure' ? 'throw Error("After launch failure")' : ''}`;
   if (mode === 'checkpoint-failure') await page.evaluate(() => window.workflowExperiment.failReceiptSave());
   if (mode === 'lost-reply') await page.evaluate(() => window.workflowExperiment.loseLaunchReply());
@@ -113,8 +113,8 @@ for (const mode of ['normal', 'script-failure', 'checkpoint-failure', 'second-de
   if (mode === 'normal') {
     const wrong = await page.evaluate(request => window.workflowExperiment.run(`const c=await tools.workflows_list({}); text(await tools.workflow_start({connectionRef:c.connections[0].connectionRef,workspace:'other-workspace',request:${JSON.stringify(request)},allowSourceEffects:true}));`), request);
     expect(JSON.stringify(wrong.checkpoint.messages.filter(m => m.role === 'toolResult').at(-1))).toContain('current conversation workspace');
-    const wrongBase = await page.evaluate(request => window.workflowExperiment.run(`const c=await tools.workflows_list({}); text(await tools.workflow_start({connectionRef:c.connections[0].connectionRef,workspace:'workspace',request:${JSON.stringify(request)},allowSourceEffects:true}));`), { ...request, process: 'wrong-base', baseCommit: 'f'.repeat(40) });
-    expect(JSON.stringify(wrongBase.checkpoint.messages.filter(m => m.role === 'toolResult').at(-1))).toContain('pinned member');
+    const wrongMember = await page.evaluate(request => window.workflowExperiment.run(`const c=await tools.workflows_list({}); text(await tools.workflow_start({connectionRef:c.connections[0].connectionRef,workspace:'workspace',request:${JSON.stringify(request)},allowSourceEffects:true}));`), { ...request, process: 'wrong-member', member: 'unrelated' });
+    expect(JSON.stringify(wrongMember.checkpoint.messages.filter(m => m.role === 'toolResult').at(-1))).toContain('configured source branch');
     expect(posts).toBe(1);
   }
 });

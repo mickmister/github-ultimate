@@ -25,7 +25,7 @@ function fixture(lost = false) {
     throw Error(`Unexpected route ${url}`);
   };
   const broker = new Connections(store, fetcher), scope = { id, installationId, userId }, page = 'https://example.test/app/';
-  const request = { operation: 'workflowStart', ...scope, workspace: 'workspace', allowSourceEffects: true, request: { schemaVersion: 2, thread: 'conversation', process: 'request-1', member: 'app', baseCommit: 'b'.repeat(40), task: 'Fix the source', acceptanceCriteria: ['Required checks pass'], publishCandidate: false } };
+  const request = { operation: 'workflowStart', ...scope, workspace: 'workspace', allowSourceEffects: true, request: { schemaVersion: 2, thread: 'conversation', process: 'request-1', member: 'app', task: 'Fix the source', acceptanceCriteria: ['Required checks pass'], publishCandidate: false } };
   return { broker, store, scope, page, request, bodies, runs, engineCommit, writes: () => writes, readonly() { permissions = 'read'; }, run() { const delivery = Object.values(record.workflowDeliveries!)[0]; return { id: 42, run_attempt: 1, display_title: workflowRunName(delivery), event: 'workflow_dispatch', head_branch: developmentHost.ref, head_sha: engineCommit, actor: { id: userId }, created_at: delivery.attemptedAt, status: 'completed', conclusion: 'success' }; } };
 }
 

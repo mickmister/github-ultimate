@@ -128,7 +128,7 @@ export class PiWorkspaceContext {
         if (repositories.length !== 1) throw Error('Member needs one unambiguous GitHub origin remote; local paths are not repository identities.');
         const repository = repositories[0], connection = choose(repository, true);
         const scope = { id: connection.id, userId: connection.user!.id, installationId: connection.installation!.id, repository };
-        const expression = member.detached ? member.commit : member.branch!;
+        const expression = member.detached ? member.commit! : member.branch!;
         let pin = revisions.get(repository);
         if (pin && pin.expression !== expression) throw Error('Members of one repository name conflicting revisions; no mixed-revision reads are allowed.');
         if (!pin) {
@@ -145,7 +145,7 @@ export class PiWorkspaceContext {
           return trees.get(oid)!;
         };
         const root = pin.tree;
-        const provenance = { ...workspace, manifestSnapshot: this.snapshot, member: member.path, repository, ref: expression, commit: pin.commit, observedCommit: member.commit, publication: member.publication, dirty: member.dirty ?? false };
+        const provenance = { ...workspace, manifestSnapshot: this.snapshot, member: member.path, repository, ref: expression, commit: pin.commit, publication: member.publication, dirty: member.dirty ?? false };
         this.sources.set(id, { id, kind: 'github', provenance,
           authorize: signal => this.authorizeGit(connection, repository, signal),
           list: async (path, signal) => {

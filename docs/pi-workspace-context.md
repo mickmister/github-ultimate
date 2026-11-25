@@ -32,8 +32,8 @@ selection. Separate uniquely authorized connections can serve storage and source
   remote commits when context is first used in the invocation; detached members
   retain their explicit commit. All members of the same repository must use one
   consistent revision. Unavailable, conflicting, ambiguous and unpublished
-  revisions produce source notices. The manifest's observed local commit and
-  publication/dirty flags remain separate from the actual read commit. Reads use
+  revisions produce source notices. Branch manifests do not retain observed local
+  commits; publication/dirty flags remain separate from the actual read commit. Reads use
   verified lazy tree/blob operations and return exact GitHub commit URLs.
 - `s3:<configured-id>`: explicitly bound workspace object files. No S3 source is
   inferred from the chat storage connection, a connection name or a broad bucket

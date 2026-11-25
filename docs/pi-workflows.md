@@ -17,12 +17,12 @@ The current conversation's canonical `{repository,workspace}` identity is inject
 into the system context and codemode tool description before each invocation.
 The URL scope must match durable catalog membership. It is fixed for that invocation;
 a later cross-device move blocks fresh workspace-specific effects until refresh.
-Launches must use that workspace and an exact manifest member/base commit.
+Launches must use that workspace and a configured source branch member.
 Host credentials, grants, actor and installation checks remain authoritative.
 
 Discovery uses the conversation's selected nugs workspace, or an explicit
 `{workspace:{repository,workspace}}` scope. It reads the pinned authored manifest
-and returns source member paths/commits and authorized connection references.
+and returns source member paths/branches and authorized connection references.
 It does not read or restore Dolt/Beads. Ambiguous storage connections need an
 explicit connectionId; no global/default workspace is inferred. The core API can
 discover supported workflow types without a selected workspace. The normal Unassigned UI is
@@ -30,13 +30,20 @@ migration-only and does not run inference. Retained receipt
 discovery requires the selected or explicitly supplied original workspace scope.
 
 The designated browser parent agent supplies task text, acceptance criteria,
-member and baseCommit, stable thread/process identities, an opaque connectionRef,
+member, stable thread/process identities, an opaque connectionRef,
 and explicit source/publication scope to `workflow_start`. Request version 2 has
 no mandatory tracker and no caller setup/test arrays. The workflow repository must
 already have a trusted identity for the selected workspace. An unsupported
 workspace fails; dispatch is not implicit onboarding. The first supported workflow
 is Spec Kit's bounded implementer → parallel two reviewers/tester method, max four
 cycles. Acceptance does not integrate source or create a PR.
+
+The caller does not supply a source commit. At startup CI resolves the latest
+remote commit of every configured repository branch and retains the captured
+source vector. That vector and the resulting candidate remain exact execution
+evidence even when branches advance. Old observed branch commits in historical
+workspace manifests do not select new work; current manifests omit them. Explicit
+detached source pointers still need a commit because there is no branch to resolve.
 
 ## Effects and recovery
 
