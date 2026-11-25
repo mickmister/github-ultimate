@@ -97,7 +97,7 @@ connectButton.addEventListener('click', () => void action(connect));
 document.getElementById('vd-refresh')!.addEventListener('click', () => {
   const info = document.getElementById('vd-info')!;
   void bridgeRequest<import('../src/vd-protocol').PublicVdConnection[]>({ operation: 'vdConnections' }).then(records => {
-    info.textContent = records.map(record => `${record.name}: ${record.origin} · ${record.repository} / ${record.workspace} → ${record.workspaceId}`).join('\n') || 'No VD connections are approved for this deployment. Configure a binding and grant in extension/native settings.';
+    info.textContent = records.map(record => `${record.name}: ${record.origin} · All accessible workspaces`).join('\n') || 'No VD connections are approved for this deployment. Configure an instance connection and grant in extension/native settings.';
   }).catch(() => { info.textContent = 'VD status unavailable. Update the extension/native host, connect GitHub and approve this deployment in settings.'; });
 });
 select.addEventListener('change', () => { generation++; result.textContent = 'No request yet.'; resetWorkspaces(); remember(false); report('Connection selected. Discover workspaces to browse its storage.'); update(); });

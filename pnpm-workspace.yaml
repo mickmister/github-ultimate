@@ -16,3 +16,7 @@ allowBuilds:
 
 patchedDependencies:
   react-native-webview@13.15.0: patches/react-native-webview@13.15.0.patch
+
+minimumReleaseAgeExclude:
+  # Published compiler being evaluated; keep this experiment's version explicit.
+  - '@tsrs/wasm@7.1.0-beta.tsrs5'

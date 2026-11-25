@@ -2,9 +2,11 @@ import { Connections, ConnectionError, type ConnectionRequest } from './connecti
 import { hostedRequestSchema } from './hosted-protocol';
 import { MobileReviewTransfers } from './mobile-review-transfer';
 import { ZodError } from 'zod';
+import { workflowOperations } from './workflow-interface';
 
-export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'reviewQueue', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'mobileReviewTransfer'];
-const operations = new Set(['discover', 'connections', 'vdConnections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', 'loadNavigation', 'saveNavigation', 'forgetNavigation', 'documentCache', 'reviewWrite', 'reviewProgress']);
+const contextReads = ['agentGraphql', 'agentTree', 'agentBlob'];
+export const mobileGitHubCapabilities = ['connections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', ...contextReads, 'beadsServingPacks', 'implicitWorkspaces', 'rememberNavigation', 'reviewWrite', 'reviewQueue', 'qrspiProcessReview', 'qrspiWorkflowProgress', 'mobileReviewTransfer', ...workflowOperations];
+const operations = new Set(['discover', 'connections', 'vdConnections', 'repositories', 'probe', 'gitRefs', 'gitCommit', 'gitTree', 'gitBlob', 'gitBlobPart', ...contextReads, 'loadNavigation', 'saveNavigation', 'forgetNavigation', 'documentCache', 'reviewWrite', 'reviewProgress', ...workflowOperations]);
 
 /** Settings stay native-only; hosted calls reuse the shared bounded GitHub engine. */
 export class MobileGitHub {

@@ -2,7 +2,8 @@ import { z } from 'zod';
 import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import { trustedOrigin } from './hosted-protocol';
 import { vdSettingsSchema, type VdDraft, type VdHeader, type PublicVdConnection } from './vd-protocol';
-import type { ReviewReceipt, ReviewRequest } from './review-protocol';
+import type { ReviewReceipt } from './review-protocol';
+import type { ReviewDeliveryRoute } from './review-io';
 import { utf8Text } from './utf8';
 
 export type VdRecord = Omit<PublicVdConnection, 'headers'> & { headers: VdHeader[] };
@@ -17,7 +18,8 @@ export interface VdStore {
 export class VdError extends Error {}
 const sessionSchema = z.object({ id: z.string().uuid(), workspace_id: z.string().uuid(), executor: z.string().min(1).max(100) });
 const queueSchema = z.discriminatedUnion('status', [z.object({ status: z.literal('empty') }), z.object({ status: z.literal('queued') })]);
-const summary = ({ headers, ...record }: VdRecord): PublicVdConnection => ({ ...record, headers: headers.map(({ name, mode, value }) => ({ name, mode, configured: Boolean(value), ...(mode === 'plaintext' ? { value } : {}) })) });
+// Explicit projection also drops obsolete workspace bindings from saved records.
+const summary = ({ id, revision, name, origin, hostedGrants, headers }: VdRecord): PublicVdConnection => ({ id, revision, name, origin, hostedGrants, headers: headers.map(({ name, mode, value }) => ({ name, mode, configured: Boolean(value), ...(mode === 'plaintext' ? { value } : {}) })) });
 function redact(text: string, record: VdRecord) {
   const values = record.headers.filter(header => header.mode === 'secret').flatMap(header => {
     const raw = header.value, credential = /^(?:proxy-)?authorization$/i.test(header.name) ? raw.replace(/^(?:Bearer|Basic)\s+/i, '') : raw;
@@ -56,7 +58,7 @@ export class VdConnections {
   }
   handle(input: unknown): Promise<unknown> {
     const parsed = vdSettingsSchema.safeParse(input);
-    if (!parsed.success) return Promise.reject(new VdError('Invalid VD settings. Check the origin, workspace IDs and headers.'));
+    if (!parsed.success) return Promise.reject(new VdError('Invalid VD settings. Check the origin and headers.'));
     const request = parsed.data;
     if (request.operation !== 'list' && request.operation !== 'test') this.epoch++;
     return this.serial(async () => {
@@ -68,8 +70,7 @@ export class VdConnections {
           const data = await this.api(record, '/api/workspaces', undefined, true);
           const result = z.array(z.object({ id: z.string() })).safeParse(data);
           if (!result.success) throw new VdError('VD returned an unexpected workspace list.');
-          if (!result.data.some(workspace => workspace.id === record.workspaceId)) throw new VdError('VD connected, but the configured workspace is not visible.');
-          return { message: `VD connection succeeded. ${result.data.length} workspace(s) visible; configured workspace found.` };
+          return { message: `VD connection succeeded. ${result.data.length} workspace(s) visible. Review requests select their own workspace and session.` };
         }
         await this.store.put(record); return summary(record);
       }
@@ -82,14 +83,26 @@ export class VdConnections {
       record.revision = this.newId(); await this.store.put(record); return summary(record);
     });
   }
-  deliver(documentURL: string, repository: string, receipt: ReviewReceipt, review: ReviewRequest, current: () => boolean): Promise<ReviewReceipt> {
+  deliver(documentURL: string, repository: string, receipt: ReviewReceipt, review: ReviewDeliveryRoute, current: () => boolean): Promise<ReviewReceipt> {
     const epoch = this.epoch;
     return this.serial(async () => {
       const effect = review.response_effect;
       if (!effect || review.process) return receipt;
       const source = loadedDocument(documentURL);
-      const candidates = (await this.store.all()).filter(record => record.repository.toLowerCase() === repository.toLowerCase() && record.workspace === review.workspace && record.workspaceId === effect.workspace_id && record.hostedGrants.some(grant => matchesGrant(grant, source)));
-      if (candidates.length !== 1) return { ...receipt, dispatch: { kind: 'vk', state: 'pending', message: 'Response saved. Configure exactly one matching VD connection and hosted continuation grant in extension/native settings, then retry this saved response.' } };
+      const approved = (await this.store.all()).filter(record => record.hostedGrants.some(grant => matchesGrant(grant, source)));
+      const candidates: VdRecord[] = [];
+      // Instance discovery is read-only. The request supplies both destination IDs;
+      // settings never bind a connection to a storage repository or VD workspace.
+      try {
+        for (const record of approved) {
+          if (!current() || epoch !== this.epoch || !await this.hasHostAccess(record.origin)) throw new VdError('VD connection authority changed.');
+          const workspaces = z.array(z.object({ id: z.string() })).parse(await this.api(record, '/api/workspaces'));
+          if (workspaces.some(workspace => workspace.id === effect.workspace_id)) candidates.push(record);
+        }
+      } catch {
+        return { ...receipt, dispatch: { kind: 'vk', state: 'pending', message: 'Response saved. VD instance discovery is unavailable. Check approved connections and retry this saved response.' } };
+      }
+      if (candidates.length !== 1) return { ...receipt, dispatch: { kind: 'vk', state: 'pending', message: 'Response saved. The requested workspace must be visible in exactly one approved VD connection. Check instance connections and hosted continuation grants, then retry this saved response.' } };
       const record = candidates[0];
       // Connection revisions/IDs are deliberately NOT part of replay identity:
       // credential rotation or removing/readding a profile must not resend work.
@@ -113,7 +126,7 @@ export class VdConnections {
         await requireCurrent();
         const path = `/api/sessions/${encodeURIComponent(effect.session_id)}`;
         const session = sessionSchema.parse(await this.api(record, path));
-        if (session.id !== effect.session_id || session.workspace_id !== effect.workspace_id) throw new VdError('VD session does not belong to the configured workspace. No fallback was used.');
+        if (session.id !== effect.session_id || session.workspace_id !== effect.workspace_id) throw new VdError('VD session does not belong to the review request workspace. No fallback was used.');
         const workspaces = z.array(z.object({ id: z.string(), archived: z.boolean().optional(), worktree_deleted: z.boolean().optional() })).parse(await this.api(record, '/api/workspaces'));
         if (!workspaces.some(item => item.id === effect.workspace_id && !item.archived && !item.worktree_deleted)) throw new VdError('VD workspace is missing, archived or deleted.');
         const queue = queueSchema.parse(await this.api(record, `${path}/queue`));

@@ -28,6 +28,7 @@ function github(store: MobileConnectionStore, enabled = () => true) {
     if (url.includes('/user/installations/7/repositories?')) return Response.json({ repositories: [{ full_name: 'owner/private', private: true, default_branch: 'main' }] });
     if (url.includes('/matching-refs/beads/')) return Response.json([{ ref: 'refs/beads/workspace', object: { sha: 'b'.repeat(40), type: 'commit' } }]);
     if (url.includes('/matching-refs/')) return Response.json([{ ref: 'refs/documents/workspace', object: { sha: 'a'.repeat(40), type: 'commit' } }]);
+    if (url.endsWith('/graphql')) return Response.json({ data: { viewer: { login: 'owner' } } });
     throw new Error('Unexpected fixture route');
   }, () => clock);
   const host = new MobileGitHub(engine, enabled);
@@ -94,6 +95,19 @@ describe('native GitHub credential persistence', () => {
 });
 
 describe('scoped native GitHub bridge', () => {
+  it('allows bounded context reads through shared actor validation, but rejects GraphQL mutations, changed identities and outside repositories', async () => {
+    const disk = storage(); await disk.store.put(record()); const app = github(disk.store);
+    expect((await app.call({ operation: 'discover' })).result).toMatchObject({ capabilities: expect.arrayContaining(['agentGraphql', 'agentTree', 'agentBlob']) });
+    const request = { operation: 'agentGraphql', id, installationId: 7, userId: 1, query: 'query { viewer { login } }', variables: {} };
+    expect((await app.call(request)).result).toMatchObject({ data: { viewer: { login: 'owner' } } });
+    const requests = app.calls.filter(call => call.url.endsWith('/graphql')).length;
+    expect((await app.call({ ...request, query: 'mutation { deleteRepository(input:{repositoryId:"x"}) { clientMutationId } }' })).error).toBeDefined();
+    expect((await app.call({ ...request, userId: 2 })).error).toBeDefined();
+    expect(app.calls.filter(call => call.url.endsWith('/graphql'))).toHaveLength(requests);
+    expect((await app.call({ operation: 'agentBlob', id, installationId: 7, userId: 1, repository: 'owner/outside', oid: 'a'.repeat(40) })).error).toBeDefined();
+    await app.host.settings({ operation: 'revokeOrigin', id, ...grantForEntry(entry) });
+    expect((await app.call(request)).error).toBeDefined();
+  });
   it('keeps GitHub approval independent and rejects page settings, arbitrary operations, forged scopes and subframes', async () => {
     const disk = storage(); await disk.store.put({ ...record(), hostedGrants: [] });
     const app = github(disk.store); app.broker.approve(grantForEntry(entry)); app.broker.approveStorage(grantForEntry(entry));

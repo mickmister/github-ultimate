@@ -1,14 +1,21 @@
 import type { StreamFn } from '@earendil-works/pi-agent-core';
 import type { AssistantMessage, Context, Message, Model, Tool } from '@earendil-works/pi-ai';
 import { AssistantMessageEventStream } from '@earendil-works/pi-ai/utils/event-stream';
+import { streamSimple as providerStream } from '@earendil-works/pi-ai/api/openai-completions';
+import { streamSimple as codexStream } from '@earendil-works/pi-ai/api/openai-codex-responses';
 import { z } from 'zod';
 import type { HostedRequest } from '../src/hosted-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
+import { inferenceFetch } from './pi-fetch';
+
+// The independently bounded historical POC keeps its original transport. The
+// production Pi Web/workspace app bundles include the provider SDK.
+declare const PI_LEGACY_POC: boolean | undefined;
 
 export type PiBridge = <T>(request: HostedRequest, timeoutMs?: number) => Promise<T>;
 export const emptyUsage = () => ({ input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalTokens: 0, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 } });
-export function piModel(connection: PublicInferenceConnection): Model<'openai-completions'> {
-  return { id: connection.model, name: connection.model, api: 'openai-completions', provider: 'extension', baseUrl: 'https://extension.invalid', reasoning: false, input: ['text'], contextWindow: 32768, maxTokens: 4096, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
+export function piModel(connection: PublicInferenceConnection): Model<'openai-completions' | 'openai-codex-responses'> {
+  return { id: connection.model, name: connection.model, api: connection.protocol ?? 'openai-completions', provider: 'extension', baseUrl: 'https://extension.invalid', reasoning: connection.transport === 'http-stream-v1', input: ['text'], contextWindow: 32768, maxTokens: 4096, cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } };
 }
 function text(content: Message['content']): string {
   if (typeof content === 'string') return content;
@@ -35,11 +42,27 @@ export function completionBody(context: Context) {
 }
 const responseSchema = z.object({ choices: z.array(z.object({ finish_reason: z.enum(['stop', 'tool_calls', 'length']), message: z.object({
   content: z.string().nullable().optional(), refusal: z.string().nullable().optional(),
-  tool_calls: z.array(z.object({ id: z.string().min(1).max(200), type: z.literal('function'), function: z.object({ name: z.string().min(1).max(100), arguments: z.string().max(65536) }) })).max(16).optional(),
+  tool_calls: z.array(z.object({ id: z.string().min(1).max(200), type: z.literal('function'), function: z.object({ name: z.string().min(1).max(100), arguments: z.string().max(65536) }) })).max(16).nullish(),
 }) })).length(1), usage: z.object({ prompt_tokens: z.number().nonnegative(), completion_tokens: z.number().nonnegative(), total_tokens: z.number().nonnegative() }).optional() });
 
 /** Pi's stream contract over a single bounded JSON bridge reply. No tokens or endpoint in page memory. */
 export function inferenceStream(bridge: PiBridge, connection: PublicInferenceConnection): StreamFn {
+  if (connection.protocol === 'openai-codex-responses') {
+    if (connection.transport !== 'http-stream-v1' || typeof PI_LEGACY_POC !== 'undefined' && PI_LEGACY_POC) throw new Error('ChatGPT requires the updated streaming Pi app.');
+    // Pi requires a JWT-shaped key to build account headers. This is a PUBLIC
+    // placeholder, not a credential/identity. The broker ignores all SDK headers
+    // and applies the actual private account and token itself. Force SSE so the
+    // SDK cannot open a page-owned WebSocket outside the broker.
+    const placeholder = `host.${btoa(JSON.stringify({ 'https://api.openai.com/auth': { chatgpt_account_id: 'host-owned' } }))}.placeholder`;
+    return (model, context, options) => codexStream(model as Model<'openai-codex-responses'>, context, {
+      ...options, apiKey: placeholder, transport: 'sse', fetch: inferenceFetch(bridge, connection), maxRetries: 0,
+    });
+  }
+  if ((typeof PI_LEGACY_POC === 'undefined' || !PI_LEGACY_POC) && connection.transport === 'http-stream-v1') return (model, context, options) => providerStream(model as Model<'openai-completions'>, context, {
+    ...options, apiKey: 'host-owned', fetch: inferenceFetch(bridge, connection), maxRetries: 0,
+  });
+  // Compatibility with already-installed hosts. New hosts advertise the HTTP
+  // transport and use Pi's adapter for serialization, SSE, usage and tool calls.
   return (model, context, options) => {
     const stream = new AssistantMessageEventStream(), requestId = crypto.randomUUID();
     const message: AssistantMessage = { role: 'assistant', content: [], api: model.api, provider: model.provider, model: model.id, usage: emptyUsage(), stopReason: 'stop', timestamp: Date.now() };

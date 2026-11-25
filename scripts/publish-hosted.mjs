@@ -5,9 +5,13 @@ import { tmpdir } from 'node:os';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-// Bound the app, mock-data Storybook and Pi Web demo, including local assets.
+// Bound the app, mock-data Storybook and Pi Web chat, including local assets.
 export const previewLimit = 36 * 1024 * 1024;
 export const siteLimit = 50 * 1024 * 1024;
+// Independently built component workbench; not part of a production app preview.
+export const piWebStorybookLimit = 14 * 1024 * 1024;
+// Pages publication runs without npm dependencies. Browser parity is covered by
+// tests/preview-slots.test.ts; retain this built-in Node implementation here.
 export function previewDirectory(branch) {
   return `b-${branch.replace(/[^a-zA-Z0-9_-]/g, '-').slice(0, 48)}-${createHash('sha256').update(branch).digest('hex').slice(0, 16)}`;
 }
@@ -26,10 +30,15 @@ export async function payloadSize(directory) {
 // One current tree per branch; no per-commit copies, source maps, dependencies,
 // test recordings or extension ZIPs. Git history is ordinary append-only history
 // (not force-squashed); its cumulative storage is intentionally not claimed bounded.
-export async function publishHosted({ remote, source, output, branch, sha, token, deleted = false }) {
+export async function publishHosted({ remote, source, output, branch, sha, token, deleted = false, piWebStorybook }) {
   if (!branch || branch === 'gh-pages' || !/^[a-f0-9]{40,64}$/.test(sha)) throw new Error('Invalid source branch or SHA.');
   if (!deleted && await payloadSize(source) > previewLimit) throw new Error('Hosted preview exceeds the 36 MiB payload limit.');
   if (!deleted && (!await readFile(join(source, 'index.html'), 'utf8') || JSON.parse(await readFile(join(source, 'build.json'), 'utf8')).sha !== sha)) throw new Error('Built hosted page does not match the source SHA.');
+  if (!deleted && piWebStorybook) {
+    if (await payloadSize(piWebStorybook) > piWebStorybookLimit) throw new Error('Pi Web Storybook exceeds the 14 MiB payload limit.');
+    const metadata = JSON.parse(await readFile(join(piWebStorybook, 'build.json'), 'utf8'));
+    if (metadata.sha !== sha || metadata.kind !== 'pi-web-storybook' || metadata.storiesOnly !== true || !await readFile(join(piWebStorybook, 'index.html'), 'utf8')) throw new Error('Pi Web Storybook does not match the source SHA.');
+  }
   const directory = await mkdtemp(join(tmpdir(), 'github-ultimate-pages-'));
   const env = { ...process.env, GIT_AUTHOR_NAME: 'github-actions[bot]', GIT_AUTHOR_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com', GIT_COMMITTER_NAME: 'github-actions[bot]', GIT_COMMITTER_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com', GIT_TERMINAL_PROMPT: '0' };
   if (token) Object.assign(env, { GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader', GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}` });
@@ -53,16 +62,23 @@ export async function publishHosted({ remote, source, output, branch, sha, token
       if (entry.directory !== previewDirectory(name)) throw new Error('Existing preview manifest contains an invalid directory.');
       if (!heads.has(name) || name === 'gh-pages') {
         await rm(join(directory, 'previews', entry.directory), { recursive: true, force: true }); delete manifest[name];
+        await rm(join(directory, 'pi-web-storybooks', entry.directory), { recursive: true, force: true });
       }
     }
     const target = join(directory, 'previews', previewDirectory(branch));
+    const storyTarget = join(directory, 'pi-web-storybooks', previewDirectory(branch));
     if (deleted) {
       if (heads.has(branch)) return { skipped: true, reason: 'Branch exists again; preserve its current preview.' };
       await rm(target, { recursive: true, force: true }); delete manifest[branch];
+      await rm(storyTarget, { recursive: true, force: true });
     } else {
       await rm(target, { recursive: true, force: true });
       await mkdir(target, { recursive: true }); await cp(source, target, { recursive: true });
       manifest[branch] = { directory: previewDirectory(branch), sha };
+      if (piWebStorybook) {
+        await rm(storyTarget, { recursive: true, force: true });
+        await mkdir(storyTarget, { recursive: true }); await cp(piWebStorybook, storyTarget, { recursive: true });
+      }
     }
     await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n');
     const links = (await Promise.all(Object.entries(manifest).sort(([a], [b]) => a.localeCompare(b)).map(async ([name, entry]) => {
@@ -70,6 +86,10 @@ export async function publishHosted({ remote, source, output, branch, sha, token
       try {
         await access(join(directory, 'previews', entry.directory, 'storybook', 'index.html'));
         storybook = ` · <a href="./previews/${entry.directory}/storybook/">Storybook</a>`;
+      } catch (error) { if (error.code !== 'ENOENT') throw error; }
+      try {
+        await access(join(directory, 'pi-web-storybooks', entry.directory, 'index.html'));
+        storybook += ` · <a href="./pi-web-storybooks/${entry.directory}/">Pi Web Storybook</a>`;
       } catch (error) { if (error.code !== 'ENOENT') throw error; }
       return `<li><a href="./previews/${entry.directory}/">${escape(name)}</a> <code>${entry.sha.slice(0, 12)}</code>${storybook}</li>`;
     }))).join('\n');
@@ -98,7 +118,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     const deleted = process.env.GITHUB_EVENT_NAME === 'delete';
     if (deleted && event.ref_type !== 'branch') throw new Error('Only branch deletion is supported.');
     const selectedBranch = deleted ? event.ref : branch;
-    const result = await publishHosted({ remote: `https://github.com/${repository}.git`, source: resolve('hosted-dist'), output: resolve('pages-site'), branch: selectedBranch, sha, token, deleted });
+    const result = await publishHosted({ remote: `https://github.com/${repository}.git`, source: resolve('hosted-dist'), piWebStorybook: deleted ? undefined : resolve('pi-web/client/storybook-static'), output: resolve('pages-site'), branch: selectedBranch, sha, token, deleted });
     if (process.env.GITHUB_OUTPUT) await writeFile(process.env.GITHUB_OUTPUT, `skipped=${result.skipped}\npreview_path=${result.directory ?? ''}\n`, { flag: 'a' });
     console.log(JSON.stringify(result));
   } catch (error) { console.error(error.message); process.exitCode = 1; }

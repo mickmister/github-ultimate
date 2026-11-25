@@ -45,18 +45,20 @@ input[type=checkbox]{display:inline-block;width:auto;min-width:20px;min-height:2
 <form id="workspace-cache-settings"><label><input name="cacheDolt" type="checkbox">Persist Dolt reads</label><button>Save cache settings</button></form>
 <p id="workspace-cache-status" role="status"></p></section>
 <section id="vd-section" aria-labelledby="vd-heading"><h2 id="vd-heading">VD / Vibe Kanban connections</h2>
-<p>Configure the VD API origin and headers used to notify the originating session after a review response is saved. Test performs only GET /api/workspaces. Credentials stay in the extension broker. Queue conflicts retain the saved response for retry.</p>
+<p>Connect a VD instance using its API origin and headers. All accessible workspaces are supported; each review request identifies its originating workspace and session. Test performs only GET /api/workspaces. Credentials stay in the extension broker. Queue conflicts retain the saved response for retry.</p>
 <form id="vd-add"><h3>Add or edit VD connection</h3>
 <label>VD connection name<input name="name" required maxlength="80"></label>
 <label>VD origin<input name="origin" required type="url" placeholder="https://vd.example.com"></label>
-<label>Storage repository<input name="repository" required placeholder="owner/workspace-storage"></label>
-<label>Nugs workspace handle<input name="workspace" required placeholder="vk-my-workspace"></label>
-<label>VK workspace UUID<input name="workspaceId" required></label>
 <div id="vd-headers"></div><div id="vd-header-actions"></div>
 <button type="submit">Save VD connection</button><div id="vd-actions"></div></form>
 <p id="vd-status" role="status" aria-live="polite"></p><div id="vd-connections"></div></section>
 <section aria-labelledby="inference-heading"><h2 id="inference-heading">Inference connections</h2>
-<p>Use a full OpenAI-compatible Chat Completions URL, for example https://provider.example/v1/chat/completions. Optional headers (including Authorization) stay in private extension storage. The hosted Pi POC runs the agent; this connection performs bounded, non-streaming inference requests.</p>
+<form id="chatgpt-connect"><h3>Connect to ChatGPT</h3>
+<p>Sign in using a one-time device code. Enable device-code login in ChatGPT security settings or workspace permissions. This uses Pi's Codex subscription connection, independently of your custom inference endpoints.</p>
+<label>ChatGPT connection name<input name="name" value="ChatGPT" required maxlength="80"></label>
+<label>ChatGPT model<input name="model" value="gpt-6.1-sol" required maxlength="200"></label>
+<button>Connect to ChatGPT</button></form>
+<p>Or use a full OpenAI-compatible Chat Completions URL, for example https://provider.example/v1/chat/completions. Optional headers (including Authorization) stay in private extension storage. Both connection methods support bounded streaming inference in the updated hosted app.</p>
 <form id="inference-add">
 <label>Inference connection name<input name="name" required maxlength="80"></label>
 <label>Inference URL<input name="url" type="url" required></label>

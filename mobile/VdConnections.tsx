@@ -5,7 +5,7 @@ import { vd } from './github';
 import type { MobileGrant } from '../src/mobile-protocol';
 import type { PublicVdConnection, VdDraft, VdSettingsRequest } from '../src/vd-protocol';
 
-const fresh = (): VdDraft => ({ name: '', origin: '', repository: '', workspace: '', workspaceId: '', headers: [] });
+const fresh = (): VdDraft => ({ name: '', origin: '', headers: [] });
 export default function VdConnections({ grant }: { grant?: MobileGrant }) {
   const [records, setRecords] = useState<PublicVdConnection[]>([]), [draft, setDraft] = useState<VdDraft>(fresh);
   const [busy, setBusy] = useState(false), [notice, setNotice] = useState('');
@@ -22,8 +22,8 @@ export default function VdConnections({ grant }: { grant?: MobileGrant }) {
   }
   return <View style={styles.section}>
     <Text accessibilityRole="header">VD / Vibe Kanban connections</Text>
-    <Text>Saved review responses notify their originating session through this device's configured connection. Headers stay in native secure storage.</Text>
-    {(['name', 'origin', 'repository', 'workspace', 'workspaceId'] as const).map(key => <TextInput key={key} accessibilityLabel={`VD ${key}`} placeholder={`VD ${key}`} autoCapitalize="none" autoCorrect={false} editable={!busy} style={styles.input} value={draft[key]} onChangeText={value => setDraft({ ...draft, [key]: value })} />)}
+    <Text>Connect a VD instance for all accessible workspaces. Each review request selects its originating workspace and session. Headers stay in native secure storage.</Text>
+    {(['name', 'origin'] as const).map(key => <TextInput key={key} accessibilityLabel={`VD ${key}`} placeholder={`VD ${key}`} autoCapitalize="none" autoCorrect={false} editable={!busy} style={styles.input} value={draft[key]} onChangeText={value => setDraft({ ...draft, [key]: value })} />)}
     {draft.headers.map((header, index) => <View key={index}>
       <TextInput accessibilityLabel={`VD header ${index + 1} name`} placeholder="Header name" autoCapitalize="none" editable={!busy} style={styles.input} value={header.name} onChangeText={name => setDraft({ ...draft, headers: draft.headers.map((h, i) => i === index ? { ...h, name } : h) })} />
       <Button title={header.mode === 'secret' ? 'Secret header (change to plaintext)' : 'Plaintext header (change to secret)'} disabled={busy} onPress={() => setDraft({ ...draft, headers: draft.headers.map((h, i) => i === index ? { name: h.name, mode: h.mode === 'secret' ? 'plaintext' : 'secret', value: '' } : h) })} />
@@ -36,9 +36,9 @@ export default function VdConnections({ grant }: { grant?: MobileGrant }) {
     <Button title="Cancel VD edit" disabled={busy} onPress={() => setDraft(fresh())} />
     <Text selectable accessibilityLiveRegion="polite">{notice}</Text>
     {records.map(record => <View key={record.id} style={styles.card}>
-      <Text>{record.name} · {record.origin}</Text><Text>{record.repository} · {record.workspace} → {record.workspaceId}</Text>
+      <Text>{record.name} · {record.origin}</Text><Text>All accessible workspaces</Text>
       {record.headers.map(header => <Text key={header.name}>{header.name}: {header.mode === 'secret' ? 'Secret configured' : header.value}</Text>)}
-      <Button title="Edit VD connection" disabled={busy} onPress={() => setDraft({ id: record.id, name: record.name, origin: record.origin, repository: record.repository, workspace: record.workspace, workspaceId: record.workspaceId, headers: record.headers.map(header => ({ name: header.name, mode: header.mode, ...(header.mode === 'plaintext' ? { value: header.value } : {}) })) })} />
+      <Button title="Edit VD connection" disabled={busy} onPress={() => setDraft({ id: record.id, name: record.name, origin: record.origin, headers: record.headers.map(header => ({ name: header.name, mode: header.mode, ...(header.mode === 'plaintext' ? { value: header.value } : {}) })) })} />
       {grant && <Button title="Grant current deployment VK continuation" disabled={busy} onPress={() => void run({ operation: 'grantOrigin', id: record.id, ...grant })} />}
       {record.hostedGrants.map(item => <View key={item.origin + item.subpath}><Text>{item.origin}{item.subpath}</Text><Button title="Revoke VD deployment grant" disabled={busy} onPress={() => void run({ operation: 'revokeOrigin', id: record.id, ...item })} /></View>)}
       <Button title="Remove VD connection" disabled={busy} onPress={() => void run({ operation: 'remove', id: record.id })} />

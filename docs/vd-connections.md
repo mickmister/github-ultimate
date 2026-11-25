@@ -9,11 +9,15 @@ In extension connection settings or Alohak **Native settings**, add a VD connect
 
 - A name and HTTPS API origin, without path/query/embedded credentials. HTTP loopback is supported for local development; loopback refers to the client device.
 - Authentication headers for your deployment, marked secret or plaintext.
-- The storage repository, readable nugs workspace handle and VK workspace UUID.
+
+Connections are instance-level: one connection supports all workspaces accessible
+with those headers, across document-storage repositories and nugs workspaces.
+Do not configure a workspace or session in extension/native settings. Every review
+request supplies its originating workspace and session IDs.
 
 **Test VD connection** performs an uncached, read-only `GET /api/workspaces` with
-the current editor, including retained saved secrets. It verifies that the configured
-workspace is visible; it does not send an agent message or prove mutation permission.
+the current editor, including retained saved secrets. It reports the visible workspace
+count (including zero); it does not send an agent message or prove mutation permission.
 Save the connection and grant the hosted origin/subpath **VK continuation** access.
 This grant is separate from GitHub connection access. Hosted **Connection & storage
 settings** can display approved VD bindings. Credentials are edited in privileged
@@ -45,8 +49,11 @@ Actions continuation path; captured VK context does not also start a VK turn.
 Requests with neither binding only save responses.
 
 Normal review **Submit** persists and reads back an immutable response first, then
-resolves exactly one approved VD connection for its storage/VK workspace binding.
-The broker verifies the exact session, nonarchived workspace, queue and activity.
+discovers which approved VD instance contains the request's workspace. Exactly one
+connection must match; ambiguous matches or unavailable instance discovery leave the
+response saved for explicit resolution and retry. The storage repository and nugs
+workspace are response context, not connection selectors.
+The broker verifies the request's exact session, nonarchived workspace, queue and activity.
 Idle sessions receive `/follow-up`; busy sessions with empty queues receive `/queue`.
 An occupied or changed queue retains the saved response and asks the user to resolve
 it in VD before retry. It never silently appends or overwrites observed queued work.
@@ -73,3 +80,11 @@ delivery across devices, browser profiles, local storage deletion, or concurrent
 clients. There is no always-on background daemon: closing/suspending the host can
 leave work pending or uncertain. Standalone web-without-bridge access and durable
 server-side admission are separate capabilities.
+
+## Existing connections
+
+Previously saved origin, headers and hosted grants remain usable. Obsolete stored
+repository/workspace bindings are ignored and omitted from settings summaries;
+saving an edit removes them. Their secrets do not need to be re-entered unless the
+origin or header mode changes. A hosted continuation grant authorizes that VD instance
+across its accessible workspaces, with destination IDs supplied by each request.

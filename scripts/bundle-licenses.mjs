@@ -12,7 +12,7 @@ export async function bundleLicenses(metafile) {
     seen.add(identity);
     const names = (await readdir(directory)).filter(file => /^licen[sc]e(?:\.|$)/i.test(file));
     const override = identity === '@nodable/entities@3.1.0' ? 'licenses/nodable-val-parsers-MIT.txt'
-      : /^@earendil-works\/pi-(agent-core|ai|schema|telemetry)@1\.5\.2$/.test(identity) ? 'licenses/pi-MIT.txt' : undefined;
+      : /^@earendil-works\/pi-(agent-core|ai|schema|telemetry|codemode)@1\.5\.2$/.test(identity) ? 'licenses/pi-MIT.txt' : undefined;
     if (!names.length && !override) throw new Error(`Missing bundled license for ${identity}`);
     result += `\n${identity} — ${pkg.license}\n`;
     for (const name of names) result += await readFile(`${directory}/${name}`, 'utf8') + '\n';

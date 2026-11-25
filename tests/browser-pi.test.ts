@@ -48,6 +48,34 @@ it('runs real Pi tool loop, persists UTF-8 transcript, restores with new device 
   expect(forkA).not.toBe(forkB);
   expect((await otherSessions.read(forkB, sessionId, binding)).parent).toBe(key);
 });
+it('accepts a provider text completion with null tool calls and preserves its usage and follow-up context', async () => {
+  const payloads: any[] = [];
+  const bridge: PiBridge = async <T>(request: Parameters<PiBridge>[0]): Promise<T> => {
+    if (request.operation !== 'inferenceComplete') throw new Error('Must not invoke tools');
+    payloads.push(JSON.parse(request.body));
+    return { object: 'chat.completion', model: 'gpt-6.1-sol', choices: [{ index: 0, message: {
+      role: 'assistant', content: 'Hi! What can I help you with today?', reasoning_content: null, tool_calls: null,
+    }, finish_reason: 'stop', native_finish_reason: 'stop' }], usage: {
+      completion_tokens: 14, total_tokens: 350, prompt_tokens: 336,
+      prompt_tokens_details: { cached_tokens: 0, cache_write_tokens: 0, cached_creation_tokens: 0 },
+      completion_tokens_details: { reasoning_tokens: 0 },
+    } } as T;
+  };
+  const { agent } = browserPiAgent(bridge, inference, github);
+  await agent.prompt('Hello');
+  expect(agent.state.messages.at(-1)).toMatchObject({ role: 'assistant', stopReason: 'stop',
+    content: [{ type: 'text', text: 'Hi! What can I help you with today?' }],
+    usage: { input: 336, output: 14, totalTokens: 350 },
+  });
+  expect(agent.state.messages.at(-1)).not.toHaveProperty('errorMessage');
+  await agent.prompt('Continue');
+  expect(payloads[1].messages).toContainEqual({ role: 'assistant', content: 'Hi! What can I help you with today?' });
+});
+it('still rejects a tool-call finish reason with null calls', async () => {
+  const bridge: PiBridge = async <T>(): Promise<T> => ({ choices: [{ finish_reason: 'tool_calls', message: { content: 'Hello', tool_calls: null } }] } as T);
+  const { agent } = browserPiAgent(bridge, inference, github); await agent.prompt('Hello');
+  expect(agent.state.messages.at(-1)).toMatchObject({ role: 'assistant', stopReason: 'error', errorMessage: 'The provider reported tool calls without any calls.' });
+});
 it('fails closed on mismatched identity and corrupt readback', async () => {
   const { bridge, objects } = fixture(), sessions = new PiSessions(bridge, storage), id = crypto.randomUUID();
   const key = await sessions.save(id, binding, [], null);

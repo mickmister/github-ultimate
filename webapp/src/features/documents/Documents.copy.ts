@@ -2,6 +2,7 @@ import { defineCopy } from '../../presentation/copy';
 export const copy = defineCopy({
   title: { purpose: 'heading', text: 'Documents' },
   agent: { purpose: 'action', text: 'Agent' },
+  piWeb: { purpose: 'action', text: 'Pi Web' },
   workspace: { purpose: 'heading', text: 'Choose your workspace' },
   changeWorkspace: { purpose: 'action', text: 'Change workspace' },
   reconnect: { purpose: 'action', text: 'Reconnect host' },

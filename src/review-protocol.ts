@@ -4,7 +4,8 @@ import { parseRecord, validateAnswers } from './protocol.ts';
 
 const key = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/);
 const bead = z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/);
-export const reviewOid = z.string().regex(/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/);
+import { reviewOid } from './review-io.ts';
+export { reviewOid, reviewWriteSchema, type ReviewWrite } from './review-io.ts';
 const resource = z.string().min(1).max(1000).refine(value => !/[\\\x00-\x1f%]/.test(value) && value.split('/').every(part => part && part !== '.' && part !== '..' && part.toLowerCase() !== '.git'), 'Expected a relative document path');
 export const reviewPinSchema = z.object({ resource, version_kind: z.literal('git-blob'), version: reviewOid, snapshot: reviewOid }).strict();
 const member = { id: key, label: z.string().min(1).max(1000) };
@@ -54,12 +55,6 @@ export type ReviewMember = z.infer<typeof reviewMemberSchema>;
 export type ReviewPin = z.infer<typeof reviewPinSchema>;
 export type ReviewArtifact = z.infer<typeof reviewArtifactSchema>;
 export interface ReviewReceipt { resource: string; version: string; snapshot: string; reviewer: string; dispatch?: { kind?: 'vk'; state: 'pending' | 'dispatched' | 'failed' | 'unknown'; target?: string; message?: string; attempted_at?: string; process_id?: string; queued?: boolean } }
-export const reviewWriteSchema = z.object({
-  operation: z.literal('reviewWrite'), id: z.string().uuid(), installationId: z.number().int().positive(),
-  repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220), workspace: key,
-  text: z.string().max(256000), expected: reviewOid.nullable(),
-}).strict();
-export type ReviewWrite = z.infer<typeof reviewWriteSchema>;
 export function parseReviewRequest(text: string) {
   if (utf8Bytes(text) > 256000) throw new Error('Review request exceeds 256 KB.');
   return reviewRequestSchema.parse(JSON.parse(text));

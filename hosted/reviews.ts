@@ -1,7 +1,24 @@
 import { WorkspaceReader, documents, documentText, type Snapshot } from './workspaces';
-import { parseReviewRequest, reviewPinSchema, requestResource, type ReviewPin, type ReviewRequest } from '../src/review-protocol';
+import { parseReviewRequest, parseReviewArtifact, validateReviewArtifact, reviewPinSchema, requestResource, type ReviewPin, type ReviewRequest, type ReviewArtifact } from '../src/review-protocol';
 
 export interface OpenReview { request: ReviewRequest; pin: ReviewPin }
+/** Deployed application / receiver validation, never credential-host policy. */
+export async function validateReviewSave(reviews: ReviewReader, input: ReviewArtifact) {
+  parseReviewArtifact(JSON.stringify(input));
+  const value = input;
+  const pinned = await reviews.open({ resource: requestResource(value.request.id), version_kind: 'git-blob', version: value.request.version, snapshot: value.request.snapshot });
+  await validateReviewArtifact(pinned.request, value, pin => reviews.read(pin));
+  const found = (await reviews.reader.discover()).find(item => item.name === reviews.workspace);
+  if (!found) throw new Error('Workspace is unavailable.');
+  const { snapshot } = await reviews.reader.open(found);
+  const currentEntry = documents(snapshot).find(item => item.path === `documents/${requestResource(value.request.id)}`);
+  if (!currentEntry) throw new Error('This request is no longer present in the workspace.');
+  const current = parseReviewRequest(documentText(await reviews.reader.blob(currentEntry)));
+  if (current.workspace !== reviews.workspace || current.request_id !== value.request.id) throw new Error('Current request identity mismatch.');
+  if (current.status === 'withdrawn' && value.kind !== 'review-queue-state') throw new Error('This request has been withdrawn. Existing responses remain available.');
+  if (pinned.request.process && value.kind !== 'review-queue-state') await reviews.read(pinned.request.process.config);
+  return { value, pinned };
+}
 export class ReviewReader {
   private snapshots = new Map<string, Promise<Snapshot>>();
   constructor(readonly reader: WorkspaceReader, readonly workspace: string) {}

@@ -8,9 +8,7 @@ export const vdHeaderSchema = z.object({
 export const vdDraftSchema = z.object({
   id: z.string().uuid().optional(), name: z.string().trim().min(1).max(80),
   origin: z.string().max(500).transform(value => trustedOrigin(value.trim())),
-  repository: z.string().regex(/^[\w.-]+\/[\w.-]+$/).max(220),
-  workspace: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{0,159}$/),
-  workspaceId: z.string().uuid(), headers: z.array(vdHeaderSchema).max(12),
+  headers: z.array(vdHeaderSchema).max(12),
 }).strict();
 export const vdSettingsSchema = z.discriminatedUnion('operation', [
   z.object({ operation: z.literal('list') }).strict(),

@@ -1,4 +1,3 @@
-import { AwsClient } from 'aws4fetch';
 import { XMLParser } from 'fast-xml-parser';
 import { z } from 'zod';
 import { sha256 } from '@noble/hashes/sha2.js';
@@ -50,7 +49,7 @@ function base64(bytes: Uint8Array) {
 export class S3Connections {
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
-  constructor(private store: S3ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private cache?: WorkspaceCache) {}
+  constructor(private store: S3ConnectionStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private cache?: WorkspaceCache, private newId: () => string = () => crypto.randomUUID(), private signer?: (record: S3ConnectionRecord, url: URL, init: RequestInit) => Promise<Request>, private timeout = (ms: number) => AbortSignal.timeout(ms)) {}
   private serialize<T>(work: () => Promise<T>) {
     const result = this.tail.catch(() => {}).then(work); this.tail = result; return result;
   }
@@ -70,7 +69,7 @@ export class S3Connections {
         });
         const target = s3BucketURL(config);
         if (!await this.hasHostAccess(target.origin)) throw new ConnectionError('Browser host access to the S3 endpoint was not granted.');
-        const record: S3ConnectionRecord = { ...config, endpoint: new URL(config.endpoint).href, prefix: s3Prefix(config.prefix), id: existing?.id ?? crypto.randomUUID(), revision: crypto.randomUUID(), hostedGrants: existing?.hostedGrants ?? [] };
+        const record: S3ConnectionRecord = { ...config, endpoint: new URL(config.endpoint).href, prefix: s3Prefix(config.prefix), id: existing?.id ?? this.newId(), revision: this.newId(), hostedGrants: existing?.hostedGrants ?? [] };
         await this.store.put(record); if (existing) await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {}); return publicConnection(record);
       }
       const record = await this.store.get(request.id);
@@ -85,10 +84,11 @@ export class S3Connections {
       await this.store.put(record); if (request.operation === 'revokeOrigin') await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {}); return publicConnection(record);
     });
   }
-  handleHosted(documentURL: string, input: unknown) {
+  handleHosted(documentURL: string, input: unknown, current: () => boolean = () => true) {
     const document = loadedDocument(documentURL), request = s3HostedSchema.parse(input);
     const epoch = this.epoch;
     return this.serialize(async () => {
+      if (!current() || epoch !== this.epoch) throw new ConnectionError('S3 document or access changed.');
       const approved = (await this.store.all()).filter(record => record.hostedGrants.some(grant => matchesGrant(grant, document)));
       // Public protocol information; data operations still require their own
       // original-document grant. S3-only readers need no GitHub connection.
@@ -108,10 +108,10 @@ export class S3Connections {
         const header = z.object({ kind: z.literal('browser-pi-checkpoint'), session_id: z.literal(request.sessionId) }).safeParse(JSON.parse(utf8Text(bytes)));
         if (!header.success) throw new ConnectionError('Checkpoint session identity mismatch.');
         const digest = bytesToHex(sha256(bytes));
-        const key = s3Key(`${record.prefix}pi-sessions/${request.sessionId}/${new Date().toISOString().replace(/[:.]/g, '-')}-${crypto.randomUUID()}-${digest}.json`);
+        const key = s3Key(`${record.prefix}pi-sessions/${request.sessionId}/${new Date().toISOString().replace(/[:.]/g, '-')}-${this.newId()}-${digest}.json`);
         url.pathname += key.split('/').map(encodeURIComponent).join('/');
         const versioned = backblaze(record.endpoint);
-        const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': 'application/json', ...(!versioned ? { 'If-None-Match': '*' } : {}) } });
+        const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': 'application/json', ...(!versioned ? { 'If-None-Match': '*' } : {}) } }, false, current);
         await response.body?.cancel();
         const rawVersionId = response.headers.get('x-amz-version-id');
         const versionId = rawVersionId && rawVersionId !== 'null' ? rawVersionId : undefined;
@@ -156,7 +156,7 @@ export class S3Connections {
         }
         url.searchParams.set('list-type', '2'); url.searchParams.set('max-keys', '100'); url.searchParams.set('prefix', path); url.searchParams.set('encoding-type', 'url');
         if (request.continuationToken) url.searchParams.set('continuation-token', request.continuationToken);
-        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} });
+        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} }, false, current);
         if (response.status === 304 && cached) return cached.result;
         const xml = new TextDecoder('utf-8', { fatal: true }).decode(await boundedBytes(response, 2 * 1024 * 1024));
         if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new ConnectionError('Unsupported S3 XML response.');
@@ -182,7 +182,7 @@ export class S3Connections {
       url.pathname += path.split('/').map(encodeURIComponent).join('/');
       if (request.operation === 's3Read') {
         if (request.versionId) url.searchParams.set('versionId', request.versionId);
-        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} }, request.allowMissing);
+        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} }, request.allowMissing, current);
         if (response.status === 404) { await response.body?.cancel(); return { key: path, missing: true as const }; }
         if (response.status === 304 && cached) return cached.result;
         const bytes = await boundedBytes(response, maxS3ObjectBytes);
@@ -194,17 +194,19 @@ export class S3Connections {
       if (!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(request.base64)) throw new ConnectionError('Upload must contain canonical base64 bytes.');
       const bytes = Uint8Array.from(atob(request.base64), char => char.charCodeAt(0));
       if (bytes.length > maxS3ObjectBytes) throw new ConnectionError('Upload exceeds the 8 MiB object limit.');
-      const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': request.contentType, ...(!record.allowOverwrite ? { 'If-None-Match': '*' } : {}) } });
+      const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': request.contentType, ...(!record.allowOverwrite ? { 'If-None-Match': '*' } : {}) } }, false, current);
       await response.body?.cancel();
       await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});
       return { key: path, size: bytes.length, etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined };
-    }).then(value => { if (epoch !== this.epoch) throw new ConnectionError('S3 access changed during the request. Reconnect.'); return value; });
+    }).then(value => { if (!current() || epoch !== this.epoch) throw new ConnectionError('S3 access changed during the request. Reconnect.'); return value; });
   }
-  private async send(record: S3ConnectionRecord, url: URL, init: RequestInit = {}, allowMissing = false) {
-    const client = new AwsClient({ accessKeyId: record.accessKeyId, secretAccessKey: record.secretAccessKey, sessionToken: record.sessionToken, service: 's3', region: record.region, retries: 0 });
-    const signed = await client.sign(url, { ...init, aws: { allHeaders: true } });
+  private async send(record: S3ConnectionRecord, url: URL, init: RequestInit = {}, allowMissing = false, current = () => true) {
+    // Hermes uses the injected portable signer; it must not evaluate aws4fetch's
+    // browser-only top-level TextEncoder/WebCrypto assumptions.
+    const signed = this.signer ? await this.signer(record, url, init) : await new (await import('aws4fetch')).AwsClient({ accessKeyId: record.accessKeyId, secretAccessKey: record.secretAccessKey, sessionToken: record.sessionToken, service: 's3', region: record.region, retries: 0 }).sign(url, { ...init, aws: { allHeaders: true } });
+    if (!current()) throw new ConnectionError('S3 document changed before transmission.');
     let response: Response;
-    try { response = await this.fetcher(signed, { credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30000) }); }
+    try { response = await this.fetcher(signed, { credentials: 'omit', redirect: 'error', cache: 'no-store', signal: this.timeout(30000) }); }
     catch { throw new ConnectionError('S3 request failed or timed out. Check endpoint, region, credentials and browser host access.'); }
     const notModified = response.status === 304 && (!init.method || init.method === 'GET') && new Headers(init.headers).has('If-None-Match');
     if (!response.ok && !notModified && !(allowMissing && response.status === 404)) {
