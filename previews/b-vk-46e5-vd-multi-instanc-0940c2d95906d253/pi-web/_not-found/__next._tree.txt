@@ -1,2 +1,2 @@
 :HL["/github-ultimate/previews/b-vk-46e5-vd-multi-instanc-0940c2d95906d253/pi-web/_next/static/chunks/0bn6trg47jcuv.css","style"]
-0:{"tree":{"name":"","param":null,"prefetchHints":4176,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":4192,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}},"staleTime":300,"buildId":"KhpX4lcLQOnXAIMIEMaVB"}
+0:{"tree":{"name":"","param":null,"prefetchHints":4176,"slots":{"children":{"name":"/_not-found","param":null,"prefetchHints":4192,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}},"staleTime":300,"buildId":"Be_saaLMr11_FytvgVkpv"}
