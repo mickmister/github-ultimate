@@ -3,16 +3,17 @@ import { Menu } from '@ark-ui/react/menu';
 import { Dialog } from '@ark-ui/react/dialog';
 import { Portal } from '@ark-ui/react/portal';
 import type { ReactNode } from 'react';
-import type { FeedbackCapture, FeedbackKind, FeedbackModel } from './contracts';
+import type { FeedbackCapture, FeedbackKind, FeedbackModel, FeedbackSubmission } from './contracts';
 import './feedback.css';
 import { FeedbackRegion } from './Feedback.presentation';
 import { feedbackCopy as copy } from './Feedback.copy';
 
 interface Props extends Omit<FeedbackModel, 'api'> {
   uiSuppressed?: boolean;
+  submission?: FeedbackSubmission;
   children: ReactNode;
 }
-export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, dockRef, textareaRef, returnFocusEl, portalContainer, selectionPoint, actions, uiSuppressed = false }: Props) {
+export function FeedbackShellView({ children, active, composer, review, state, notice, commentRef, dockRef, textareaRef, returnFocusEl, portalContainer, selectionPoint, actions, uiSuppressed = false, submission }: Props) {
   const container = portalContainer ? { current: portalContainer } : undefined;
   return <>
     <Menu.Root aria-label={copy.commentActions.text} open={!uiSuppressed && Boolean(active)} positioning={{ placement: 'bottom-start', strategy: 'fixed' }}
@@ -29,8 +30,8 @@ export function FeedbackShellView({ children, active, composer, review, state, n
     </Menu.Root>
     {!uiSuppressed && selectionPoint && <Portal container={container}><button type="button" className="feedback-selection-action" data-feedback-control="true"
       style={{ left: selectionPoint.x, top: selectionPoint.y }} onPointerDown={event => event.preventDefault()} onClick={actions.openSelection}>{copy.selectionComment.text}</button></Portal>}
-    {!uiSuppressed && <Portal container={container}><div className="feedback-dock" data-feedback-control="true">
-      <button ref={dockRef} type="button" onClick={event => actions.openReview(event.currentTarget)}>{copy.comments.text}{copy.countSeparator.text}{state.items.length}</button>
+    {!uiSuppressed && Boolean(state.items.length || notice || state.message) && <Portal container={container}><div className="feedback-dock" data-feedback-control="true">
+      {state.items.length > 0 && <button ref={dockRef} type="button" onClick={event => actions.openReview(event.currentTarget)}>{copy.comments.text}{copy.countSeparator.text}{state.items.length}</button>}
       {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}
     </div></Portal>}
     <Dialog.Root open={!uiSuppressed && Boolean(composer || review)} onOpenChange={details => { if (!uiSuppressed && !details.open) actions.closeDialog(); }}
@@ -39,13 +40,13 @@ export function FeedbackShellView({ children, active, composer, review, state, n
         <Dialog.Content className="feedback-dialog" data-feedback-control="true" aria-label={composer ? composer.kind === 'content-comment' ? copy.contentComment.text : copy.featureComment.text : copy.queue.text}>
           <header><Dialog.Title>{composer ? composer.kind === 'content-comment' ? copy.contentComment.text : copy.featureComment.text : copy.queue.text}</Dialog.Title>
             <button type="button" onClick={actions.closeDialog} aria-label={copy.closeComments.text}>{copy.close.text}</button></header>
-          <Dialog.Description>{copy.draft.text}</Dialog.Description>
+          <Dialog.Description>{submission ? copy.reviewDraft.text : copy.draft.text}</Dialog.Description>
           <FeedbackRegion context={composer ? <>
              <p><strong>{composer.context.target.label}</strong></p>
              <CaptureDetails context={composer.context} kind={composer.kind} />
               <blockquote>{composer.context.selection?.text ?? copy.wholeElement.text}</blockquote>
-              <details><summary>{copy.routingHeading.text}</summary><p>{copy.routing.text}</p></details>
-             </> : <p>{copy.routing.text}</p>} editor={composer ? <form id="feedback-composer-form" onSubmit={event => { event.preventDefault(); actions.addComment(); }}>
+               <details><summary>{copy.routingHeading.text}</summary><p>{submission ? copy.reviewRouting.text : copy.routing.text}</p></details>
+             </> : <p>{submission ? copy.reviewRouting.text : copy.routing.text}</p>} editor={composer ? <form id="feedback-composer-form" onSubmit={event => { event.preventDefault(); actions.addComment(); }}>
             <label htmlFor="feedback-new-comment">{copy.comment.text}</label><textarea id="feedback-new-comment" ref={textareaRef('composer')} value={composer.text} onChange={event => actions.setComment(event.target.value)} rows={4} />
            </form> : <>
             {!state.items.length && <p>{copy.empty.text}</p>}
@@ -58,7 +59,10 @@ export function FeedbackShellView({ children, active, composer, review, state, n
               <button type="button" onClick={() => actions.remove(item.id)} aria-label={`${copy.removeComment.text} ${index + 1}`}>{copy.remove.text}</button>
             </li>)}</ol>
           </>} footer={composer ? <button type="submit" form="feedback-composer-form" disabled={!composer.text.trim()}>{copy.add.text}</button> :
-            (['content-comment', 'feature-comment'] as const).map(kind => <ark.button data-ui="feedback-category-export" key={kind} type="button" disabled={!state.items.some(item => item.kind === kind) || state.exporting} onClick={() => actions.copyAndClear(kind)}>{state.exporting ? copy.copying.text : kind === 'content-comment' ? copy.copyContent.text : copy.copyFeature.text}</ark.button>)} />
+            <>{submission && <ark.button data-ui="feedback-review-submit" type="button" disabled={submission.disabled || !state.items.some(item => item.kind === 'content-comment')} onClick={() => submission.submit()}>{copy.submitReview.text}</ark.button>}
+            {(['content-comment', 'feature-comment'] as const).filter(kind => !submission || kind !== 'content-comment').map(kind => <ark.button data-ui="feedback-category-export" key={kind} type="button" disabled={!state.items.some(item => item.kind === kind) || state.exporting} onClick={() => actions.copyAndClear(kind)}>{state.exporting ? copy.copying.text : kind === 'content-comment' ? copy.copyContent.text : copy.copyFeature.text}</ark.button>)}</>} />
+          {submission?.notice && <p role="status">{submission.notice}</p>}
+          {submission?.error && <p role="alert">{submission.error}</p>}
           {(notice || state.message) && <p aria-live="polite">{notice || state.message}</p>}
         </Dialog.Content>
       </Dialog.Positioner></Portal>

@@ -15,6 +15,39 @@ for (const [device, width, height] of [
   ['tablet portrait', 820, 1180], ['tablet landscape', 1180, 820],
   ['desktop portrait', 900, 1440], ['desktop landscape', 1440, 900],
 ] as const) {
+  test(`queued content submits through the review on ${device}`, async ({ page }) => {
+    await page.setViewportSize({ width, height });
+    let state: any = { artifacts: [], revision: 1 };
+    await page.route('**/__review-fixture', async route => {
+      if (route.request().method() === 'POST') state = route.request().postDataJSON();
+      await route.fulfill({ json: state });
+    });
+    await page.goto(pinnedReviewURL());
+    await expect(page.locator('.feedback-dock')).toHaveCount(0);
+    await page.getByText('The full target document is pinned to this packet.').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: 'Comment on Content', exact: true }).click();
+    await page.getByLabel('Your comment').fill('Submit this pinned document comment.');
+    await page.getByRole('button', { name: 'Add to queue', exact: true }).click();
+    await page.getByRole('button', { name: 'Save draft remotely', exact: true }).click();
+    await expect(page.getByRole('status')).toContainText('Draft saved remotely');
+    await page.getByRole('button', { name: 'Comments · 1', exact: true }).click();
+    const queue = page.getByRole('dialog', { name: 'Queued comments', exact: true });
+    await expect(queue.getByRole('button', { name: 'Copy Content & clear Content', exact: true })).toHaveCount(0);
+    await queue.getByRole('button', { name: 'Submit review feedback', exact: true }).click();
+    await expect(queue.getByRole('status')).toContainText('Response saved remotely');
+    const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
+    expect(response.comments).toEqual([expect.objectContaining({ member_id: 'plan', text: 'Submit this pinned document comment.' })]);
+    expect(response.request.version).toBe('e'.repeat(40));
+    await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveCount(0);
+    await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
+    await expect(page.locator('.feedback-dock')).toHaveCount(0);
+    // Old remote drafts must not resurrect acknowledged comment versions.
+    await page.evaluate(() => { localStorage.clear(); sessionStorage.clear(); });
+    await page.reload();
+    await expect(page.getByRole('region', { name: 'Focused review session', exact: true })).toBeVisible();
+    await expect(page.locator('.feedback-dock')).toHaveCount(0);
+  });
+
   test(`document Zen mode survives delayed saved-state restoration and draft updates on ${device}`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     let release!: () => void;
@@ -42,6 +75,37 @@ for (const [device, width, height] of [
     await expect(page.getByRole('button', { name: 'Zen mode', exact: true })).toBeFocused();
   });
 }
+
+test('failed review submission retains content and feature queues; retry submits only content', async ({ page }) => {
+  let state: any = { artifacts: [], revision: 1 };
+  let fail = true;
+  await page.route('**/__review-fixture', async route => {
+    if (route.request().method() === 'POST') {
+      if (fail) { await route.abort('failed'); return; }
+      state = route.request().postDataJSON();
+    }
+    await route.fulfill({ json: state });
+  });
+  await page.goto(pinnedReviewURL());
+  for (const kind of ['Content', 'Feature']) {
+    await page.getByText('The full target document is pinned to this packet.').click({ button: 'right' });
+    await page.getByRole('menuitem', { name: `Comment on ${kind}`, exact: true }).click();
+    await page.getByLabel('Your comment').fill(`${kind} stays until its own submission succeeds.`);
+    await page.getByRole('button', { name: 'Add to queue', exact: true }).click();
+  }
+  await page.getByRole('button', { name: 'Comments · 2', exact: true }).click();
+  const queue = page.getByRole('dialog', { name: 'Queued comments', exact: true });
+  await queue.getByRole('button', { name: 'Submit review feedback', exact: true }).click();
+  await expect(queue.getByRole('alert')).toBeVisible();
+  await expect(queue.getByRole('textbox')).toHaveCount(2);
+  fail = false;
+  await queue.getByRole('button', { name: 'Submit review feedback', exact: true }).click();
+  await expect(queue.getByRole('status')).toContainText('Response saved remotely');
+  await expect(queue.getByLabel('Comment 1', { exact: true })).toHaveValue('Feature stays until its own submission succeeds.');
+  const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
+  expect(response.comments).toEqual([expect.objectContaining({ kind: 'content-comment' })]);
+  await expect(queue.getByRole('button', { name: 'Submit review feedback', exact: true })).toBeDisabled();
+});
 
 for (const exit of ['Back', 'Escape'] as const) {
   test(`leaving document Zen mode with ${exit} before restoration keeps it closed`, async ({ page }) => {
@@ -181,7 +245,7 @@ test('next form retains answers without submitting, and final form submits the f
   await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
   await fresh.getByRole('link', { name: 'Review inbox', exact: true }).click();
   await fresh.getByRole('link', { name: 'Independent reader review' }).click();
-  await expect(fresh.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await expect(fresh.getByRole('button', { name: 'Comments · 0', exact: true })).toHaveCount(0);
   await fresh.goto(url);
   await fresh.getByRole('button', { name: 'Reader decisions', exact: true }).click();
   await fresh.getByText('Keep this approach', { exact: true }).click();
@@ -199,11 +263,9 @@ test('next form retains answers without submitting, and final form submits the f
   const response = state.artifacts.find((item: any) => item.value.kind === 'review-response').value;
   expect(response.forms).toHaveLength(2);
   expect(response.comments).toEqual([expect.objectContaining({ member_id: 'plan', text: 'Edited locally before submitting.' })]);
-  await fresh.getByRole('button', { name: 'Comments · 1', exact: true }).click();
-  await queue.getByRole('button', { name: 'Remove comment 1', exact: true }).click();
-  await queue.getByRole('button', { name: 'Close comments', exact: true }).click();
+  await expect(fresh.locator('.feedback-dock')).toHaveCount(0);
   await fresh.reload();
-  await expect(fresh.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await expect(fresh.locator('.feedback-dock')).toHaveCount(0);
   await fresh.close();
 });
 
@@ -599,7 +661,7 @@ for (const viewport of [{ width: 1280, height: 800 }, { width: 390, height: 844 
     await expect(zen.getByRole('heading', { name: 'Additional notes', exact: true })).toBeFocused();
     await expect(page.getByRole('link', { name: 'Review inbox', exact: true })).toHaveCount(0);
     await expect(page.getByRole('complementary', { name: 'Review items', exact: true })).toHaveCount(0);
-    await expect(zen.getByRole('button', { name: /Comments ·/ })).toHaveCount(1);
+    await expect(zen.getByRole('button', { name: /Comments ·/ })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Check for updates and receipts' })).toHaveCount(0);
     const bounds = (await zen.boundingBox())!;
     expect(bounds).toMatchObject({ x: 0, y: 0, width: viewport.width, height: viewport.height });

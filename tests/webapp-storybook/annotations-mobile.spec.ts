@@ -18,5 +18,5 @@ test('phone annotations keep touch selection, stack comments and support deletio
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.getByRole('button', { name: 'Delete queued comment 1', exact: true }).tap();
   await expect(page.locator('.feedback-text-highlight')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toHaveCount(0);
 });

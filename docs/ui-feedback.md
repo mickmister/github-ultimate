@@ -23,10 +23,20 @@ The current browser URL is omitted by default, including from stored drafts and
 exported events. Location is represented by the explicitly supplied target and
 resource fields; these should contain only context the embedding app needs.
 
-## Queue and clipboard
+## Review submission and clipboard intake
 
-**Comments · N** opens the review dialog. Edit or remove items, then choose
-**Copy review & clear** and paste the compact Markdown review into agent chat.
+**Comments · N** appears only when comments are queued and opens the queue dialog.
+In a review session, **Submit review feedback** submits content comments together
+with the review's current form answers through the normal pinned response path.
+Failed submissions retain comments and show the error in the queue. A saved response
+clears only the submitted content versions; edits and additions made during submission
+remain queued. Receipts retain the submitted comments, and older remote drafts do
+not restore already-submitted versions. Form-only submission clears only that form's
+submitted comments.
+
+Feature feedback stays in separate app intake. Outside review sessions, content
+comments also use clipboard intake. The category's **Copy … & clear …** action
+copies compact Markdown for pasting into agent chat.
 Repository and workspace are included once per scope, with a heading and exact
 revision for each document. Each numbered comment contains only the highlighted
 text and the verbatim comment. Source selections include their actual line ranges;
@@ -48,7 +58,7 @@ means the text was copied, not that an agent received or acted on it.
 
 Clipboard access requires a secure origin and browser permission/user activation.
 Use the actual Copy button; if the browser denies access, retry without losing
-the draft. Workflow dispatch and server-side comment publication are future work.
+the draft. Clipboard intake does not submit a review or dispatch its workflow.
 
 ## Inline document comments
 

@@ -31,6 +31,12 @@ export interface FeedbackCapture {
   readonly capturedAt: string;
 }
 export type FeedbackKind = 'content-comment' | 'feature-comment';
+export interface FeedbackSubmission {
+  submit(): void;
+  readonly disabled: boolean;
+  readonly notice: string;
+  readonly error: string;
+}
 export interface FeedbackOptions {
   /** Expose the current browser URL only when the embedding app explicitly opts in. */
   readonly includePageUrl?: boolean;
