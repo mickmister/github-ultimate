@@ -2,7 +2,7 @@ import type { AgentMessage } from '@earendil-works/pi-agent-core';
 import type { ChatMessage } from './pi-chat-contract';
 import { z } from 'zod';
 import type { PublicS3Connection, S3Object } from '../src/s3-protocol';
-import { backblaze, checkpointReference } from '../src/s3-protocol';
+import { backblaze, cloudflareR2, checkpointReference } from '../src/s3-protocol';
 import { sha256 } from '@noble/hashes/sha2.js';
 import { bytesToHex } from '@noble/hashes/utils.js';
 import type { PiBridge } from './pi-transport';
@@ -61,7 +61,7 @@ export class PiSessions {
     const digest = bytesToHex(sha256(new TextEncoder().encode(json)));
     const receipt = z.object({ key: z.string().max(1024), versionId: z.string().max(2000).optional(), sha256: z.literal(digest) }).parse(await this.bridge({ operation: 's3Checkpoint', id: this.storage.id, revision: this.storage.revision, sessionId, base64: encode(json) }));
     if (!receipt.key.startsWith(this.prefix(sessionId)) || !receipt.key.endsWith(`-${digest}.json`) || backblaze(this.storage.endpoint) && !receipt.versionId) throw Error('Invalid checkpoint storage receipt.');
-    const key = checkpointReference(receipt.key, receipt.versionId);
+    const key = checkpointReference(receipt.key, cloudflareR2(this.storage.endpoint) ? undefined : receipt.versionId);
     // A PUT acknowledgement alone is not proof that the session can be restored.
     const stored = await this.read(key, sessionId, binding);
     if (JSON.stringify(stored) !== json) throw new Error('Session readback differs from the saved checkpoint.');
@@ -69,8 +69,9 @@ export class PiSessions {
   }
   async read(key: string, sessionId: string, binding: SessionBinding): Promise<PiCheckpoint> {
     const [objectKey, fragment, extra] = key.split('#');
-    const versionId = fragment?.startsWith('versionId=') ? decodeURIComponent(fragment.slice(10)) : undefined;
-    if (extra || fragment && !versionId || !objectKey.startsWith(this.prefix(sessionId)) || !objectKey.endsWith('.json') || backblaze(this.storage.endpoint) && !versionId) throw new Error('Checkpoint is outside the selected session or needs an exact version.');
+    const referenceVersion = fragment?.startsWith('versionId=') ? decodeURIComponent(fragment.slice(10)) : undefined;
+    const versionId = cloudflareR2(this.storage.endpoint) ? undefined : referenceVersion;
+    if (extra || fragment && !referenceVersion || !objectKey.startsWith(this.prefix(sessionId)) || !objectKey.endsWith('.json') || cloudflareR2(this.storage.endpoint) && !/-[a-f0-9]{64}\.json$/.test(objectKey) || backblaze(this.storage.endpoint) && !versionId) throw new Error('Checkpoint is outside the selected session or needs an exact version.');
     const object = await this.bridge<S3Object>({ operation: 's3Read', id: this.storage.id, revision: this.storage.revision, key: objectKey, ...(versionId ? { versionId } : {}) });
     if (object.key !== objectKey || object.size > 4 * 1024 * 1024 || versionId && object.versionId !== versionId) throw new Error('Invalid checkpoint object or version.');
     const bytes = Uint8Array.from(atob(object.base64), char => char.charCodeAt(0));

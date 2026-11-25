@@ -7,7 +7,7 @@ import { piWorkflowTools, workflowIntentSchema } from './pi-workflow-tools';
 import { ChatBudget, type ChatLimits } from './pi-chat-budget';
 import { workflowDeliverySchema } from '../src/workflow-interface';
 import { inferenceStream, piModel, type PiBridge } from './pi-transport';
-import { backblaze, checkpointReference, type PublicS3Connection, type S3Listing, type S3Object } from '../src/s3-protocol';
+import { backblaze, cloudflareR2, checkpointReference, type PublicS3Connection, type S3Listing, type S3Object } from '../src/s3-protocol';
 import type { PublicInferenceConnection } from '../src/inference-protocol';
 import type { ChatSnapshot, SavedChat, ChatWorkspace } from './pi-chat-contract';
 
@@ -109,9 +109,10 @@ export class ChatStorage {
   private async readRaw(sessionId: string, reference: string): Promise<Record<string, unknown>> {
     z.string().uuid().parse(sessionId);
     const [key, fragment, extra] = reference.split('#');
-    const versionId = fragment?.startsWith('versionId=') ? decodeURIComponent(fragment.slice(10)) : undefined;
+    const referenceVersion = fragment?.startsWith('versionId=') ? decodeURIComponent(fragment.slice(10)) : undefined;
+    const versionId = cloudflareR2(this.connection.endpoint) ? undefined : referenceVersion;
     const hash = /-([a-f0-9]{64})\.json$/.exec(key)?.[1];
-    if (extra || fragment && !versionId || !key.startsWith(`${this.connection.prefix}pi-sessions/${sessionId}/`) || !hash || backblaze(this.connection.endpoint) && !versionId) throw Error('Choose an exact checkpoint within the selected storage and conversation.');
+    if (extra || fragment && !referenceVersion || !key.startsWith(`${this.connection.prefix}pi-sessions/${sessionId}/`) || !hash || backblaze(this.connection.endpoint) && !versionId) throw Error('Choose an exact checkpoint within the selected storage and conversation.');
     const object = await this.bridge<S3Object>({ operation: 's3Read', id: this.connection.id, revision: this.connection.revision, key, ...(versionId ? { versionId } : {}) });
     if (object.key !== key || object.size > 4 * 1024 * 1024 || versionId && object.versionId !== versionId) throw Error('Invalid chat checkpoint receipt.');
     const bytes = Uint8Array.from(atob(object.base64), character => character.charCodeAt(0));
@@ -132,7 +133,7 @@ export class ChatStorage {
     const metadata = catalogSchema.parse({ kind: 'browser-pi-checkpoint', schema_version: 1, profile: 'pi-web-catalog-1', session_id: id, conversation_id: sessionId, storage: chatStorageId(this.connection), created_at: new Date().toISOString(), parent, workspace });
     const text = JSON.stringify(metadata), bytes = new TextEncoder().encode(text);
     const receipt = z.object({ key: z.string(), versionId: z.string().optional(), sha256: z.literal(digest(bytes)) }).parse(await this.bridge({ operation: 's3Checkpoint', id: this.connection.id, revision: this.connection.revision, sessionId: metadata.session_id, base64: btoa(String.fromCharCode(...bytes)) }));
-    const restored = catalogSchema.parse(await this.readRaw(metadata.session_id, checkpointReference(receipt.key, receipt.versionId)));
+    const restored = catalogSchema.parse(await this.readRaw(metadata.session_id, checkpointReference(receipt.key, cloudflareR2(this.connection.endpoint) ? undefined : receipt.versionId)));
     if (JSON.stringify(restored) !== text) throw Error('Saved conversation workspace readback differs.');
   }
   async save(checkpoint: ChatCheckpoint): Promise<string> {
@@ -141,7 +142,7 @@ export class ChatStorage {
     if (bytes.length > 4 * 1024 * 1024) throw Error('Conversation exceeds the 4 MiB checkpoint limit.');
     let binary = ''; for (let offset = 0; offset < bytes.length; offset += 16384) binary += String.fromCharCode(...bytes.subarray(offset, offset + 16384));
     const receipt = z.object({ key: z.string(), versionId: z.string().optional(), sha256: z.literal(digest(bytes)) }).parse(await this.bridge({ operation: 's3Checkpoint', id: this.connection.id, revision: this.connection.revision, sessionId: checkpoint.session_id, base64: btoa(binary) }));
-    const reference = checkpointReference(receipt.key, receipt.versionId);
+    const reference = checkpointReference(receipt.key, cloudflareR2(this.connection.endpoint) ? undefined : receipt.versionId);
     if (JSON.stringify(await this.read(checkpoint.session_id, reference)) !== json) throw Error('Saved chat readback differs from its checkpoint.');
     return reference;
   }

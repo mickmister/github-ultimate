@@ -42,6 +42,7 @@ export type S3Listing = { objects: { key: string; size: number; etag?: string; v
 export type S3Object = { key: string; size: number; contentType: string; base64: string; etag?: string; versionId?: string };
 export type S3ReadResult = S3Object | { key: string; missing: true };
 export function backblaze(endpoint: string) { return new URL(endpoint).hostname.endsWith('.backblazeb2.com'); }
+export function cloudflareR2(endpoint: string) { return new URL(endpoint).hostname.endsWith('.r2.cloudflarestorage.com'); }
 export function checkpointReference(key: string, versionId?: string) { return versionId ? `${key}#versionId=${encodeURIComponent(versionId)}` : key; }
 
 export function s3BucketURL(config: Pick<S3Configuration, 'endpoint' | 'bucket' | 'addressing'>): URL {

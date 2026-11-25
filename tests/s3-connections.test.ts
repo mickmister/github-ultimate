@@ -202,3 +202,24 @@ test('Backblaze checkpoints use broker-owned unique keys without conditional PUT
   override = () => new Response('{}', { headers: { 'x-amz-version-id': 'wrong-version' } });
   await expect(broker.handleHosted(documentURL, { operation: 's3Read', ...scope(record), key: first.key, versionId: first.versionId })).rejects.toThrow('different object version');
 });
+
+
+test('R2 checkpoint receipts ignore opaque version headers and retain conditional creation', async () => {
+  const record = await broker.handle({ operation: 'add', ...config, endpoint: 'https://account.r2.cloudflarestorage.com/' }) as PublicS3Connection;
+  await broker.handle({ operation: 'grantOrigin', id: record.id, origin, subpath: '/storage/' });
+  const sessionId = crypto.randomUUID(), json = JSON.stringify({ kind: 'browser-pi-checkpoint', session_id: sessionId });
+  override = request => {
+    const url = new URL(request.url);
+    expect(url.searchParams.has('versionId')).toBe(false);
+    if (request.method === 'PUT') { expect(request.headers.get('If-None-Match')).toBe('*'); return new Response(null, { headers: { 'x-amz-version-id': 'opaque-r2-id' } }); }
+    return new Response(json, { headers: { 'x-amz-version-id': 'opaque-r2-id' } });
+  };
+  const receipt = await broker.handleHosted(documentURL, { operation: 's3Checkpoint', ...scope(record), sessionId, base64: btoa(json) }) as { key: string; versionId?: string };
+  expect(receipt.versionId).toBeUndefined();
+  const read = { operation: 's3Read', ...scope(record), key: receipt.key };
+  expect((await broker.handleHosted(documentURL, read) as S3Object).versionId).toBeUndefined();
+  const before = calls.length;
+  await expect(broker.handleHosted(documentURL, { ...read, versionId: 'opaque-r2-id' })).rejects.toThrow('does not support version-specific');
+  await expect(broker.handleHosted(documentURL, { operation: 's3List', ...scope(record), prefix: 'workspace-a/', versions: true })).rejects.toThrow('does not support version-specific');
+  expect(calls.length).toBe(before);
+});

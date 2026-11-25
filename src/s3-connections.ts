@@ -6,7 +6,7 @@ import { utf8Text } from './utf8';
 import { ConnectionError } from './connections';
 import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from './hosted-access';
 import { trustedOrigin } from './hosted-protocol';
-import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, s3ConfigurationSchema, backblaze, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
+import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, s3ConfigurationSchema, backblaze, cloudflareR2, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
 
 export type S3ConnectionRecord = S3Configuration & { id: string; revision: string; hostedGrants: HostedGrant[] };
@@ -113,12 +113,13 @@ export class S3Connections {
         const versioned = backblaze(record.endpoint);
         const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': 'application/json', ...(!versioned ? { 'If-None-Match': '*' } : {}) } }, false, current);
         await response.body?.cancel();
-        const rawVersionId = response.headers.get('x-amz-version-id');
+        const rawVersionId = cloudflareR2(record.endpoint) ? null : response.headers.get('x-amz-version-id');
         const versionId = rawVersionId && rawVersionId !== 'null' ? rawVersionId : undefined;
         if (versioned && (!versionId || versionId === 'null')) throw new ConnectionError('Backblaze did not return a checkpoint version ID. Save was not verified.');
         await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});
         return { key, size: bytes.length, versionId, sha256: digest };
       }
+      if (cloudflareR2(record.endpoint) && (request.operation === 's3List' && request.versions || request.operation === 's3Read' && request.versionId)) throw new ConnectionError('R2 does not support version-specific object operations.');
       const path = s3Key(request.operation === 's3List' ? request.prefix ?? record.prefix : request.key);
       if (!path.startsWith(record.prefix)) throw new ConnectionError('The object key or listing prefix is outside this connection’s allowed prefix.');
       const scope: CacheScope = { connection: `s3:${record.id}`, account: 0, installation: 0, generation: record.revision, repository: record.endpoint + record.bucket, workspace: record.prefix, namespace: 'metadata' };
@@ -156,7 +157,7 @@ export class S3Connections {
         }
         url.searchParams.set('list-type', '2'); url.searchParams.set('max-keys', '100'); url.searchParams.set('prefix', path); url.searchParams.set('encoding-type', 'url');
         if (request.continuationToken) url.searchParams.set('continuation-token', request.continuationToken);
-        const response = await this.send(record, url, { headers: cached?.etag ? { 'If-None-Match': cached.etag } : {} }, false, current);
+        const response = await this.send(record, url, {}, false, current);
         if (response.status === 304 && cached) return cached.result;
         const xml = new TextDecoder('utf-8', { fatal: true }).decode(await boundedBytes(response, 2 * 1024 * 1024));
         if (/<!DOCTYPE|<!ENTITY/i.test(xml)) throw new ConnectionError('Unsupported S3 XML response.');
@@ -186,7 +187,7 @@ export class S3Connections {
         if (response.status === 404) { await response.body?.cancel(); return { key: path, missing: true as const }; }
         if (response.status === 304 && cached) return cached.result;
         const bytes = await boundedBytes(response, maxS3ObjectBytes);
-        const result = { key: path, size: bytes.length, contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', base64: base64(bytes), etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined } satisfies S3Object;
+        const result = { key: path, size: bytes.length, contentType: response.headers.get('Content-Type') ?? 'application/octet-stream', base64: base64(bytes), etag: response.headers.get('ETag') ?? undefined, versionId: cloudflareR2(record.endpoint) ? undefined : response.headers.get('x-amz-version-id') ?? undefined } satisfies S3Object;
         if (request.versionId && result.versionId !== request.versionId) throw new ConnectionError('S3 returned a different object version.');
         if (epoch === this.epoch) await this.cache?.put(scope, resource, { result, etag: result.etag });
         return result;
@@ -197,7 +198,7 @@ export class S3Connections {
       const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': request.contentType, ...(!record.allowOverwrite ? { 'If-None-Match': '*' } : {}) } }, false, current);
       await response.body?.cancel();
       await this.cache?.clearConnection(`s3:${record.id}`).catch(() => {});
-      return { key: path, size: bytes.length, etag: response.headers.get('ETag') ?? undefined, versionId: response.headers.get('x-amz-version-id') ?? undefined };
+      return { key: path, size: bytes.length, etag: response.headers.get('ETag') ?? undefined, versionId: cloudflareR2(record.endpoint) ? undefined : response.headers.get('x-amz-version-id') ?? undefined };
     }).then(value => { if (!current() || epoch !== this.epoch) throw new ConnectionError('S3 access changed during the request. Reconnect.'); return value; });
   }
   private async send(record: S3ConnectionRecord, url: URL, init: RequestInit = {}, allowMissing = false, current = () => true) {
