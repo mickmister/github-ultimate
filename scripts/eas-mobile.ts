@@ -50,7 +50,7 @@ async function inspectBuild(id: string) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error('Could not inspect the existing EAS build.');
   const build = JSON.parse(result.stdout);
-  console.log(JSON.stringify({ id: build.id, status: build.status, error: build.error, runtimeVersion: build.runtimeVersion, source: build.gitCommitHash, app: build.project?.slug, owner: build.project?.ownerAccount?.name, buildNumber: build.appBuildVersion }));
+  console.log(JSON.stringify({ id: build.id, status: build.status, error: build.error, runtimeVersion: build.runtime?.version ?? build.runtimeVersion, fingerprint: build.fingerprint?.hash, source: build.gitCommitHash, app: build.app?.slug, owner: build.app?.ownerAccount?.name, buildNumber: build.appBuildVersion, installPage: `https://expo.dev/builds/${build.id}` }));
   // Inspect Expo-owned logs in place; never publish raw bundles or signed log URLs.
   for (const url of build.logFiles ?? []) {
     const parsed = new URL(url);
@@ -84,11 +84,11 @@ async function main() {
     if (result.status !== 0) throw new Error(`EAS ${plan.operation} failed (exit ${result.status ?? 'unknown'}). See CLI diagnostics above.`);
     const receipt = JSON.parse(result.stdout);
     const project = `https://expo.dev/accounts/${plan.publicEnv.EXPO_OWNER}/projects/alohak`;
-    const records: { id?: string; platform?: string; group?: string; runtimeVersion?: string; gitCommitHash?: string }[] = Array.isArray(receipt) ? receipt : [receipt];
+    const records: { id?: string; platform?: string; group?: string; runtimeVersion?: string; runtime?: { version?: string }; gitCommitHash?: string }[] = Array.isArray(receipt) ? receipt : [receipt];
     const links = plan.operation === 'build'
       ? records.filter(item => typeof item.id === 'string' && /^[\w-]+$/.test(item.id)).map(item => `[${item.platform ?? 'Build'}](${project}/builds/${item.id})`)
       : records.filter(item => typeof item.group === 'string' && /^[\w-]+$/.test(item.group)).map(item => `[Update group](${project}/updates/${item.group})`);
-    const references = records.map(item => ({ platform: item.platform, id: item.id, group: item.group, runtimeVersion: item.runtimeVersion, source: item.gitCommitHash ?? process.env.GITHUB_SHA, githubConnections: plan.publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS }));
+    const references = records.map(item => ({ platform: item.platform, id: item.id, group: item.group, runtimeVersion: item.runtimeVersion ?? item.runtime?.version, source: item.gitCommitHash ?? process.env.GITHUB_SHA, githubConnections: plan.publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS }));
     // Compact public release references are enough to verify the Expo publication.
     // Raw receipts stay ephemeral; agent workflows do not upload Actions artifacts.
     const summary = `## EAS ${plan.operation}\n\nSource: \`${process.env.GITHUB_SHA ?? 'local'}\`\n\nPlatform: ${plan.platform} · Profile/channel: ${plan.profile} · GitHub connections: ${plan.publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS}\n\n${[...new Set(links)].join(' · ') || `[Expo project](${project})`}\n\nRelease references: ${JSON.stringify(references)}\n`;
