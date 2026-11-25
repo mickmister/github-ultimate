@@ -174,6 +174,36 @@ test('SDK-shaped streamed tool calls render, execute, persist and restore', asyn
   } finally { release(); fixture.dispose(); }
 });
 
+test('workspace context reads use real codemode and native Git/S3 brokers and survive reload with provenance', async ({ page }) => {
+  const host = previewFixture(`${origin}${base}`, true);
+  const remote = remoteFixture(undefined, `text(await tools.workspace_sources({}));
+    text(await tools.workspace_files({operation:"read",source:"documents",path:"workspace-config.json"}));
+    text(await tools.workspace_files({operation:"read",source:"github:repo",path:"README.md"}));
+    text(await tools.workspace_files({operation:"search",source:"github:repo",query:"Needle"}));
+    text(await tools.workspace_files({operation:"read",source:"s3:notes",path:"note.json"}));`);
+  remote.objects.set(`workspace/context/${host.workspace}/note.json`, { text: JSON.stringify({ note: 'Workspace S3 context note 🌴' }), version: 'context-version-1' });
+  const fixture = await nativeFixture(page, `${origin}${base}`, remote, host.host);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Read selected workspace context');
+    await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3', { timeout: 20000 });
+    await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
+    const saved = [...remote.objects.values()].map(object => JSON.parse(object.text)).reverse().find(checkpoint => checkpoint.phase === 'idle');
+    const result = JSON.stringify(saved.messages.filter((message: { role: string }) => message.role === 'toolResult').at(-1));
+    expect(result).toContain('Pinned repository context'); expect(result).toContain('Needle source line');
+    expect(result).toContain('manifestSnapshot'); expect(result).toContain('observedCommit');
+    expect(result).toContain('Workspace S3 context note'); expect(result).toContain('context-version-1'); expect(result).toContain('sha256');
+    expect(result).not.toMatch(/private-key|private-s3-secret|private-github-secret/);
+    expect(host.calls).toContain('/graphql');
+    await page.reload(); await expect(page.getByRole('button', { name: /^codemode/ })).toBeVisible();
+    await page.getByRole('button', { name: /^codemode/ }).click();
+    await expect(page.getByRole('log')).toContainText('Pinned repository context');
+    await expect(page.getByRole('log')).toContainText('Workspace S3 context note');
+    expect(remote.requests).toHaveLength(2);
+  } finally { fixture.dispose(); }
+});
+
 test('published JavaScript links to usable first-party source maps', async ({ page }) => {
   await page.goto(`${origin}${base}`);
   const urls = await page.locator('script[src]').evaluateAll(scripts => scripts.map(script => (script as HTMLScriptElement).src));

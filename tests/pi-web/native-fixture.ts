@@ -51,8 +51,12 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
       const prefix = url.searchParams.get('prefix') ?? '';
       return new Response(`<ListVersionsResult><IsTruncated>false</IsTruncated>${[...objects].filter(([key]) => key.startsWith(prefix)).map(([key, object]) => `<Version><Key>${key}</Key><VersionId>${object.version}</VersionId><Size>${Buffer.byteLength(object.text)}</Size></Version>`).join('')}</ListVersionsResult>`);
     }
+    if (url.searchParams.get('list-type') === '2') {
+      const prefix = url.searchParams.get('prefix') ?? '';
+      return new Response(`<ListBucketResult><IsTruncated>false</IsTruncated>${[...objects].filter(([key]) => key.startsWith(prefix)).map(([key, object]) => `<Contents><Key>${key}</Key><Size>${Buffer.byteLength(object.text)}</Size></Contents>`).join('')}</ListBucketResult>`);
+    }
     const object = objects.get(key);
-    if (!object || url.searchParams.get('versionId') !== object.version) return new Response('', { status: 404 });
+    if (!object || url.searchParams.has('versionId') && url.searchParams.get('versionId') !== object.version) return new Response('', { status: 404 });
     return new Response(object.text, { headers: { 'x-amz-version-id': object.version } });
   };
   return { objects, requests, fetcher, setFailSaves(value: boolean) { failSaves = value; } };
