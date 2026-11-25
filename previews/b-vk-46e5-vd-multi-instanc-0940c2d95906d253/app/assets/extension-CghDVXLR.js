@@ -1,0 +1,1 @@
+import{m as r}from"./index-BFE7Q5G_.js";function s(){return{request:e=>r(e),close(){}}}export{s as storageAdapter};

@@ -1,1 +1,0 @@
-function f(t){let e=0;for(let n of t){let r=n.codePointAt(0);e+=r<=127?1:r<=2047?2:r<=65535?3:4}return e}function a(t){if(typeof TextDecoder<"u")return new TextDecoder("utf-8",{fatal:!0}).decode(t);try{return decodeURIComponent(Array.from(t,e=>`%${e.toString(16).padStart(2,"0")}`).join("")).replace(/^\uFEFF/,"")}catch{throw new Error("Invalid UTF-8.")}}export{f as a,a as b};
