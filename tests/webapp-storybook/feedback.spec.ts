@@ -62,7 +62,7 @@ test('nearest nested target owns the menu; ordinary Copy does not enqueue; faile
   await expect(page.getByRole('menu')).toHaveCount(1);
   await page.getByRole('menuitem', { name: 'Copy', exact: true }).click();
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(quote);
-  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Comment on planning/product-brief.md', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Comment on Feature', exact: true }).click();
   const composer = page.getByRole('dialog', { name: 'Comment on Feature', exact: true });

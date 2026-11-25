@@ -33,7 +33,8 @@ export function useReviewSessionFeature({ scope, review, listing, service, refre
     } catch { /* Use the remote draft when local storage is unavailable. */ }
     const intake = [...remote.filter(item => item.kind === 'feature-comment' && !features.some(local => local.id === item.id)), ...features];
     if (intake.length) try { sessionStorage.setItem(intakeKey, JSON.stringify({ schemaVersion: 1, interactions: intake })); } catch { /* Keep the restored intake in memory. */ }
-    return createFeedbackQueue([...restored.filter(item => item.kind === 'content-comment'), ...intake], text => {
+    const submittedVersions = new Set(responsesFor(review, listing.artifacts).filter(item => item.value.reviewer === listing.reviewer).flatMap(item => item.value.comments.map(comment => `${comment.id}:${comment.version ?? 1}`)));
+    return createFeedbackQueue([...restored.filter(item => item.kind === 'content-comment' && !submittedVersions.has(`${item.id}:${item.version}`)), ...intake], text => {
       const content = restoreFeedbackDraft(text).filter(item => item.kind === 'content-comment');
       const restored = restoreFeedbackDraft(text).filter(item => item.kind === 'feature-comment');
       try { localStorage.setItem(commentKey, JSON.stringify({ schemaVersion: 1, interactions: content })); }
@@ -98,6 +99,7 @@ export function useReviewSessionFeature({ scope, review, listing, service, refre
       if (memberId && !value.forms.length) throw new Error('Enter an answer before submitting this form.');
       await validateReviewArtifact(review.request, value, contentsCache.read);
       const receipt = await service.save(scope, value, submit ? null : draftVersion);
+      if (submit) queue.acknowledge(value.comments);
       if (!mounted.current) return;
       updateListing(current => current ? { ...current, artifacts: [...current.artifacts.filter(item => item.pin.resource !== receipt.resource), { value, pin: { resource: receipt.resource, version_kind: 'git-blob', version: receipt.version, snapshot: receipt.snapshot }, dispatch: receipt.dispatch }] } : current);
       if (!submit) { setDraftVersion(receipt.version); setSaved(fingerprint); }

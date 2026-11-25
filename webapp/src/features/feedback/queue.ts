@@ -57,6 +57,10 @@ export function createFeedbackQueue(initial: readonly FeedbackComment[] = [], pe
       update({ items: state.items.map(item => item.id === id ? { ...item, comment, version: item.version + 1 } : item), message: '' }, true);
     },
     remove(id: string) { update({ items: state.items.filter(item => item.id !== id), message: '' }, true); },
+    acknowledge(comments: readonly { id: string; version?: number }[]) {
+      const versions = new Map(comments.map(item => [item.id, item.version ?? 1]));
+      update({ items: state.items.filter(item => item.kind !== 'content-comment' || versions.get(item.id) !== item.version), message: '' }, true);
+    },
     async copyAndClear(write: (text: string) => Promise<void>, kind?: FeedbackKind) {
       if (state.exporting || !state.items.length) return;
       const categories = new Set(state.items.map(item => item.kind));

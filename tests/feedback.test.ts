@@ -112,6 +112,19 @@ it('keeps comments usable in memory if tab draft storage fails', () => {
   expect(queue.getSnapshot().message).toContain('could not be saved');
 });
 
+it('acknowledges only submitted content versions, preserving in-flight edits, new comments and feature intake', () => {
+  let saved = '';
+  const queue = createFeedbackQueue([], value => { saved = value; });
+  queue.add('content-comment', 'Submitted unchanged', context);
+  queue.add('content-comment', 'Edited during submission', context);
+  queue.add('feature-comment', 'Separate intake', context);
+  const submitted = queue.getSnapshot().items;
+  queue.edit(submitted[1].id, 'New version must stay queued');
+  queue.add('content-comment', 'Added during submission', context);
+  queue.acknowledge(submitted);
+  expect(restoreFeedbackDraft(saved).map(item => item.comment)).toEqual(['New version must stay queued', 'Separate intake', 'Added during submission']);
+});
+
 it('copies document identity once and only the selected text and verbatim comments, retaining full internal anchors', async () => {
   let saved = '', copied = '';
   const queue = createFeedbackQueue([], value => { saved = value; });

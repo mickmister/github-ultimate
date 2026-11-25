@@ -9,6 +9,7 @@ for (const [surface, orientation, width, height] of cases) {
   test(`${surface} ${orientation}: production composer and queue`, async ({ page }) => {
     await page.setViewportSize({ width, height });
     await page.goto(`/iframe.html?id=web-app-feedback-surfaces--${surface}-${orientation}&viewMode=story`);
+    await expect(page.locator('.feedback-dock')).toHaveCount(0);
     await page.getByRole('button', { name: 'Comment on Pinned document', exact: true }).click();
     await page.getByRole('menuitem', { name: 'Comment on Content', exact: true }).click();
     await expect(page.locator('.feedback-composition')).toHaveAttribute('data-surface', surface);
@@ -42,7 +43,7 @@ test('captured selection, draft, caret, pinned context and queue failure survive
     expect(await page.getByLabel('Your comment').evaluate((node: HTMLTextAreaElement) => [node.selectionStart, node.selectionEnd])).toEqual([3, 8]);
   }
   await page.evaluate(() => { history.pushState({}, '', '#review'); dispatchEvent(new PopStateEvent('popstate')); });
-  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toHaveCount(1);
+  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'Comment on Review document', exact: true }).click();
   await page.getByRole('menuitem', { name: 'Comment on Feature', exact: true }).click();
   await page.getByLabel('Your comment').fill('Separate session queue');
@@ -93,5 +94,5 @@ test('keyboard menu retains category restrictions and selection-copy failure sur
   await expect(page.locator('.feedback-dock')).toContainText('Clipboard copy failed.');
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(page.locator('.feedback-dock')).toContainText('Clipboard copy failed.');
-  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Comments · 0', exact: true })).toHaveCount(0);
 });
