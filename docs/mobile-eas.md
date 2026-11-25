@@ -32,6 +32,18 @@ mobile test suite first, and uses the same repository Expo secrets as dispatch.
 Native dependency/patch changes still require a new compatible binary; publishing
 an update does not rebuild the installed native runtime.
 
+The inherited EAS build profile sets `OPENLINT_SKIP_NATIVE_BUILD=1` only for the
+cloud build environment. OpenLint is a CI policy tool; its npm installer otherwise
+tries to compile a missing platform binary with Cargo on the EAS Mac. The GitHub
+release job still installs/runs OpenLint, native types and tests before uploading.
+This does not skip application dependency/native compilation. Profile edits remain
+part of the runtime fingerprint; check the actual build/update runtime after edits.
+
+To investigate an existing cloud build without starting another binary, dispatch
+`mobile-build-eas.yml` with `inspect_build=<build UUID>`. The authenticated helper
+prints compact build metadata and selected errors from Expo-owned logs in place;
+it does not publish raw diagnostic bundles or signed log URLs.
+
 The workflow ref is the source being released. No automatic store submission
 is included. Build failure/publish failure fails the job; CLI diagnostics are
 not suppressed. Production builds are store-distribution artifacts, not store

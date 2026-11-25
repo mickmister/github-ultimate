@@ -2,6 +2,7 @@
   "cli": { "version": "27.7.2", "appVersionSource": "remote" },
   "build": {
     "base": {
+      "env": { "OPENLINT_SKIP_NATIVE_BUILD": "1" },
       "node": "22.23.0",
       "pnpm": "12.18.0",
       "autoIncrement": true

@@ -50,15 +50,18 @@ async function inspectBuild(id: string) {
   if (result.error) throw result.error;
   if (result.status !== 0) throw new Error('Could not inspect the existing EAS build.');
   const build = JSON.parse(result.stdout);
-  console.log(JSON.stringify({ id: build.id, status: build.status, error: build.error, runtimeVersion: build.runtimeVersion, source: build.gitCommitHash, app: build.app?.fullName, buildNumber: build.appBuildVersion }));
+  console.log(JSON.stringify({ id: build.id, status: build.status, error: build.error, runtimeVersion: build.runtimeVersion, source: build.gitCommitHash, app: build.project?.slug, owner: build.project?.ownerAccount?.name, buildNumber: build.appBuildVersion }));
   // Inspect Expo-owned logs in place; never publish raw bundles or signed log URLs.
   for (const url of build.logFiles ?? []) {
     const parsed = new URL(url);
     if (parsed.protocol !== 'https:') throw new Error('Invalid EAS log URL.');
     const response = await fetch(url, { signal: AbortSignal.timeout(20000) });
     if (!response.ok) throw new Error('Could not read EAS build diagnostics.');
-    const lines = (await response.text()).split('\n').filter(line => /error|failed|ERR_|unsupported/i.test(line));
-    if (lines.length) console.log(lines.slice(-20).join('\n').slice(-12000));
+    const lines = (await response.text()).split('\n').map(line => {
+      try { const item = JSON.parse(line); return `${item.phase}: ${item.msg ?? ''}`; } catch { return line; }
+    });
+    const selected = lines.filter((line, index) => /error|failed|ERR_|unsupported|openlint/i.test(line) || lines.slice(Math.max(0, index - 3), index).some(value => /error|failed|ERR_/i.test(value)));
+    if (selected.length) console.log(selected.slice(-60).join('\n').slice(-20000));
   }
 }
 

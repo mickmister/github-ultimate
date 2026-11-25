@@ -26,9 +26,9 @@ describe('manual EAS release boundary', () => {
   it('carries only public identity/entry into uploaded build profiles', () => {
     const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
     const prepared = configuredBuildProfiles(original, releasePlan(env));
-    expect(prepared.build.base.env).toEqual({ EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: env.EXPO_PUBLIC_ALOHAK_URL, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' });
+    expect(prepared.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1', EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: env.EXPO_PUBLIC_ALOHAK_URL, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' });
     expect(JSON.stringify(prepared)).not.toContain(env.EXPO_TOKEN);
-    expect(original.build.base.env).toBeUndefined();
+    expect(original.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1' });
     for (const profile of ['development', 'preview', 'production']) {
       expect(prepared.build[profile].channel).toBe(profile);
       expect(prepared.build[profile].environment).toBe(profile);
@@ -37,7 +37,7 @@ describe('manual EAS release boundary', () => {
   it.each([undefined, ''])('omits an unset optional deployment URL (%s) from uploaded build profiles', entry => {
     const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
     const prepared = configuredBuildProfiles(original, releasePlan({ ...env, EXPO_PUBLIC_ALOHAK_URL: entry }));
-    expect(prepared.build.base.env).toEqual({ EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' });
+    expect(prepared.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1', EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' });
   });
   it('requires an explicit binary flag for the credential pilot and rejects typos', () => {
     expect(releasePlan(env).publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS).toBe('0');
