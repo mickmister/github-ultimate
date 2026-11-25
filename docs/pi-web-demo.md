@@ -40,6 +40,53 @@ tab-memory-only adapter have been superseded. The production source is
    URLs without this explicit mode follow the latest conversation, using their
    checkpoint reference only as a fallback if no catalog entry exists.
 
+## Pi tool performance telemetry
+
+Each explicit Send or Continue collects one OpenTelemetry **OTLP/JSON trace** and
+uploads it after required conversation checkpoints finish. It uses the selected
+chat storage and its existing host-owned credentials/grants; no collector endpoint
+or browser-held S3 credentials are needed. Update the extension/native host as well
+as the hosted frontend: delivery uses the scoped `s3PiTelemetry` operation. Older
+hosts show **Not uploaded** without failing the saved conversation.
+
+Objects are append-only and separate from conversation discovery:
+
+```
+<connection-prefix>telemetry/pi-agent/<YYYY-MM-DD>/<conversation-UUID>/<trace-ID>-<upload-UUID>.otel.json
+```
+
+The OTLP `resourceSpans` envelope contains:
+
+- `pi.agent.invocation`: overall invocation wall time, conversation/branch UUIDs
+  and success/interrupted/error outcome. Every invocation has a new trace ID.
+- `pi.agent.tool`: `codemode` execution duration, provider tool-call ID and outcome.
+  It includes QuickJS startup/execution and awaited host work.
+- `pi.agent.capability`: nested `workspace_sources`, `workspace_files`, Beads and
+  workflow capability timings/outcomes, parented to their tool span. Caught
+  capability failures remain error spans even if the script recovers. A failed
+  sandbox result is also marked as an error without changing agent behavior.
+- Resource `service.name=github-ultimate-pi-web` and the built source SHA in
+  `service.version` for comparing performance across deployments.
+
+Times are Unix nanosecond strings; duration in milliseconds is
+`(endTimeUnixNano - startTimeUnixNano) / 1e6`. Parent durations include child work;
+do not sum them as exclusive time. Inputs, script text, outputs, prompt/reasoning,
+credentials, connection endpoints and error messages are not recorded.
+
+Capture is bounded to 256 tool/capability spans plus the invocation root and
+128 KiB per upload, with `pi.dropped_spans` reporting omitted spans. Incomplete
+capabilities still running after Stop are omitted rather than assigned fabricated
+completion times. Export is best-effort, once per invocation, outside Pi's tool
+and message barriers. An upload failure does not mark conversation data unsaved,
+replay a tool or trigger inference. Closing/reloading the page before export can
+lose that trace; there is no persistent telemetry outbox or automatic retry.
+Uploads share the existing bounded host transport with other S3 operations.
+
+**Settings → Connections** shows the current local invocation's export status,
+trace ID and saved object key (in its title). The status is local diagnostics,
+not part of the portable conversation checkpoint. Use the same private bucket
+access controls and lifecycle retention for these objects as other diagnostics.
+
 ## Workspace browsing and preview links
 
 Open Pi Web's workspace chooser, or choose a nugs workspace in Documents and follow its **Pi Web** link. The GitHub
@@ -80,8 +127,7 @@ under a deterministic metadata UUID in the same S3 checkpoint namespace. Moves d
 not rewrite transcript checkpoints, invalidate pinned history or let an older
 device's next reply undo a move. Reload and catalog refresh read the current
 association. This picker browses existing nugs workspaces; provisioning a new
-workspace from repositories remains pending, as do workspace file tools and
-archive/delete actions.
+workspace from repositories remains pending, as do archive/delete actions.
 
 The composer **Preview slots** menu reads `workspace-config.json` from the selected
 nugs document snapshot. Each repository defines named services with either a

@@ -7,7 +7,7 @@ export type ChatMessage = Extract<AgentMessage, { role: 'user' | 'assistant' | '
 export type ChatWorkspace = { repository: string; workspace: string };
 export type SavedChat = { sessionId: string; reference: string; label: string; updatedAt: string; messageCount: number; workspace?: ChatWorkspace };
 export type ChatCatalog = { chats: SavedChat[]; copied?: { storage: string; conversations: number }[] };
-export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: ChatMessage[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean };
+export type ChatSnapshot = { sessionId?: string; reference?: string; title: string; messages: ChatMessage[]; busy: boolean; dirty: boolean; phase: 'idle' | 'pending' | 'interrupted'; error?: string; streaming?: boolean; telemetry?: import('./pi-telemetry').PiTelemetryStatus };
 export interface ChatHandle {
   snapshot(): ChatSnapshot;
   subscribe(listener: () => void): () => void;

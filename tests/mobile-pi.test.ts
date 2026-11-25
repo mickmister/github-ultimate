@@ -8,6 +8,7 @@ import { mobilePiRequest } from '../src/mobile-pi-client';
 import { S3Connections, type S3ConnectionRecord } from '../src/s3-connections';
 import { InferenceConnections } from '../src/inference-connections';
 import { utf8Bytes } from '../src/utf8';
+import { PiTelemetry } from '../hosted/pi-telemetry';
 
 const s3: S3ConnectionRecord = { id: crypto.randomUUID(), revision: crypto.randomUUID(), name: 'S3', endpoint: 'https://s3.example/', bucket: 'chats', prefix: '', region: 'us-east-1', addressing: 'path', allowRead: true, allowUpload: true, allowOverwrite: false, accessKeyId: 'private-key', secretAccessKey: 'private-secret', sessionToken: 'private-token', hostedGrants: [{ origin: 'https://agent.example', subpath: '/pi-web/' }] };
 test.each(['GET', 'PUT'])('native SigV4 %s agrees with the existing WebCrypto signer, including encoded keys and versions', async method => {
@@ -47,4 +48,24 @@ test('native Pi chunks a large S3 response without changing the native frame lim
   const transferId = crypto.randomUUID(); await service.handle(source, { phase: 'begin', transferId, bytes: 10 }, () => current);
   current = false; service.clear();
   await expect(service.handle(source, { phase: 'chunk', transferId, index: 0, text: '1234567890' }, () => current)).rejects.toThrow('document changed');
+});
+
+test('native Pi transfers bounded OTLP traces to the scoped S3 broker and retains document grants', async () => {
+  const source = 'https://agent.example/pi-web/', record = structuredClone(s3), writes: Request[] = [];
+  const records = { async all() { return [record]; }, async get() { return record; }, async put() {}, async remove() {} };
+  const service = new MobilePi(new S3Connections(records, async input => { writes.push(input as Request); return new Response(null); }, undefined, undefined, undefined, async (_record, url, init) => new Request(url, init)), new InferenceConnections({ async all() { return []; }, async get() { return undefined; }, async put() {}, async remove() {} }));
+  const frames: number[] = [];
+  const client = { async request(_method: string, params: Record<string, unknown>) { frames.push(utf8Bytes(JSON.stringify(params))); return service.handle(source, params, () => true); } };
+  const sessionId = crypto.randomUUID(), trace = new PiTelemetry(sessionId, crypto.randomUUID());
+  for (let i = 0; i < 100; i++) await trace.measure('capability', 'workspace_files', async () => {});
+  const body = JSON.stringify(trace.data('success'));
+  expect(utf8Bytes(body)).toBeGreaterThan(16000);
+  const request = { operation: 's3PiTelemetry' as const, id: record.id, revision: record.revision, sessionId, base64: btoa(body) };
+  const receipt = await mobilePiRequest<{ key: string }>(client, request, 30000);
+  expect(receipt.key).toContain('/' + sessionId + '/'); expect(await writes[0].text()).toBe(body);
+  expect(Math.max(...frames)).toBeLessThan(16 * 1024);
+  record.hostedGrants = [];
+  await expect(mobilePiRequest(client, request, 30000)).rejects.toThrow('not approved');
+  expect(writes).toHaveLength(1);
+  await expect(service.hosted(source, { operation: 's3Upload', id: record.id, revision: record.revision, key: 'anything', base64: '' }, () => true)).rejects.toThrow('checkpoint');
 });

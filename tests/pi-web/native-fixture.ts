@@ -12,7 +12,7 @@ import type { PiBridge } from '../../hosted/pi-transport';
 export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: string, thinking?: string) {
   const objects = new Map<string, { text: string; version: string }>();
   const requests: { messages: { role: string; content: string }[]; reasoning_effort?: string }[] = [];
-  let failSaves = false;
+  let failSaves = false, failTelemetry = false;
   const fetcher: typeof fetch = async (input, init) => {
     const request = new Request(input, init), url = new URL(request.url);
     if (url.hostname === 'inference.example') {
@@ -44,6 +44,7 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
     if (r2 && (url.searchParams.has('versions') || url.searchParams.has('versionId'))) return new Response('R2 version operations are not implemented', { status: 501 });
     const key = decodeURIComponent(url.pathname.slice('/chats/'.length));
     if (request.method === 'PUT') {
+      if (failTelemetry && key.includes('/telemetry/pi-agent/')) return new Response('', { status: 503 });
       if (failSaves) return new Response('', { status: 503 });
       if (request.headers.has('If-None-Match') && !r2) return new Response('', { status: 501 });
       const version = crypto.randomUUID(); objects.set(key, { text: await request.text(), version });
@@ -61,7 +62,7 @@ export function remoteFixture(streamPause?: () => Promise<void>, toolCode?: stri
     if (!object || url.searchParams.has('versionId') && url.searchParams.get('versionId') !== object.version) return new Response('', { status: 404 });
     return new Response(object.text, { headers: { 'x-amz-version-id': object.version } });
   };
-  return { objects, requests, fetcher, setFailSaves(value: boolean) { failSaves = value; } };
+  return { objects, requests, fetcher, setFailSaves(value: boolean) { failSaves = value; }, setFailTelemetry(value: boolean) { failTelemetry = value; } };
 }
 export async function nativeFixture(page: Page, source: string, remote: ReturnType<typeof remoteFixture>, github?: MobileGitHub, location?: { endpoint: string; region: string }) {
   const previews = previewFixture(source);

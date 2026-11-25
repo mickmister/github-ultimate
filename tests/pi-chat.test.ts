@@ -1,4 +1,4 @@
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 import { BrowserChat, ChatStorage, chatStorageId, type ChatCheckpoint } from '../hosted/pi-chat';
 import type { PiBridge } from '../hosted/pi-transport';
 import type { PublicS3Connection } from '../src/s3-protocol';
@@ -58,6 +58,26 @@ test('chat durably journals the user before inference and restores with new devi
   await other.send('Continue');
   expect(f.requests[1].messages).toContainEqual({ role: 'assistant', content: 'Reply 1: Café 🌴' });
   expect((await otherStore.read(saved.session_id, other.snapshot().reference!)).messages).toHaveLength(4);
+});
+
+test('post-turn S3 telemetry neither blocks chat completion nor fails saved history, and each invocation gets a trace', async () => {
+  const f = fixture(), exports: any[] = [];
+  let reject!: (reason: Error) => void;
+  const bridge: PiBridge = async request => {
+    if (request.operation !== 's3PiTelemetry') return f.bridge(request);
+    exports.push(JSON.parse(Buffer.from(request.base64, 'base64').toString()));
+    if (exports.length === 1) return new Promise((_resolve, fail) => { reject = fail; });
+    return { key: `${f.storage.prefix}telemetry/pi-agent/trace.otel.json`, size: atob(request.base64).length } as never;
+  };
+  const store = new ChatStorage(bridge, f.storage), chat = new BrowserChat(store, f.inference, bridge);
+  await chat.send('Private prompt that must not enter telemetry');
+  expect(chat.snapshot()).toMatchObject({ busy: false, dirty: false, phase: 'idle', telemetry: { state: 'uploading' } });
+  expect(exports).toHaveLength(1); expect(JSON.stringify(exports)).not.toContain('Private prompt');
+  reject(Error('Private provider details')); await vi.waitFor(() => expect(chat.snapshot().telemetry?.state).toBe('failed'));
+  expect(chat.snapshot().error).toBeUndefined(); expect((await store.list()).chats).toHaveLength(1);
+  await chat.send('Next invocation'); await vi.waitFor(() => expect(chat.snapshot().telemetry?.state).toBe('saved'));
+  const traces = exports.map(data => data.resourceSpans[0].scopeSpans[0].spans[0].traceId);
+  expect(new Set(traces).size).toBe(2); expect(f.requests).toHaveLength(2);
 });
 
 function copiedStorageFixture(sameTimestamp = false) {

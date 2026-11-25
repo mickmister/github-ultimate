@@ -8,6 +8,7 @@ import { loadedDocument, matchesGrant, trustedSubpath, type HostedGrant } from '
 import { trustedOrigin } from './hosted-protocol';
 import { maxS3ObjectBytes, s3BucketURL, s3HostedSchema, s3Key, s3Prefix, s3SettingsSchema, s3ConfigurationSchema, backblaze, cloudflareR2, type S3Configuration, type PublicS3Connection, type S3Listing, type S3Object } from './s3-protocol';
 import type { CacheScope, WorkspaceCache } from './workspace-cache';
+import { maxPiTelemetryBytes, piTelemetrySchema } from './pi-telemetry-protocol';
 
 export type S3ConnectionRecord = S3Configuration & { id: string; revision: string; hostedGrants: HostedGrant[] };
 export interface S3ConnectionStore {
@@ -97,10 +98,23 @@ export class S3Connections {
       const record = approved.find(item => item.id === request.id);
       if (!record) throw new ConnectionError('S3 connection is not approved for the original document path.');
       if (record.revision !== request.revision) throw new ConnectionError('S3 configuration changed. Reconnect storage before reading or uploading; no fallback was used.');
-      const upload = request.operation === 's3Upload' || request.operation === 's3Checkpoint';
+      const upload = request.operation === 's3Upload' || request.operation === 's3Checkpoint' || request.operation === 's3PiTelemetry';
       if (upload ? !record.allowUpload : !record.allowRead) throw new ConnectionError('This S3 operation is not enabled for the connection.');
       const url = s3BucketURL(record);
       if (!await this.hasHostAccess(url.origin)) throw new ConnectionError('Browser host access to the S3 endpoint was revoked.');
+      if (request.operation === 's3PiTelemetry') {
+        if (record.allowOverwrite) throw new ConnectionError('Pi telemetry requires overwrites disabled.');
+        const bytes = Uint8Array.from(atob(request.base64), char => char.charCodeAt(0));
+        if (base64(bytes) !== request.base64 || bytes.length > maxPiTelemetryBytes) throw new ConnectionError('Invalid Pi telemetry bytes or exceeds 128 KiB.');
+        const data = piTelemetrySchema.parse(JSON.parse(utf8Text(bytes)));
+        const spans = data.resourceSpans[0].scopeSpans[0].spans, root = spans[0];
+        if (root.name !== 'pi.agent.invocation' || root.parentSpanId || !root.attributes.some(item => item.key === 'pi.conversation.id' && 'stringValue' in item.value && item.value.stringValue === request.sessionId) || spans.some(span => span.traceId !== root.traceId || BigInt(span.endTimeUnixNano) < BigInt(span.startTimeUnixNano))) throw new ConnectionError('Invalid Pi telemetry trace identity.');
+        const key = s3Key(`${record.prefix}telemetry/pi-agent/${new Date().toISOString().slice(0, 10)}/${request.sessionId}/${root.traceId}-${this.newId()}.otel.json`);
+        url.pathname += key.split('/').map(encodeURIComponent).join('/');
+        const response = await this.send(record, url, { method: 'PUT', body: bytes.buffer, headers: { 'Content-Type': 'application/json', ...(!backblaze(record.endpoint) ? { 'If-None-Match': '*' } : {}) } }, false, current);
+        await response.body?.cancel();
+        return { key, size: bytes.length };
+      }
       if (request.operation === 's3Checkpoint') {
         if (record.allowOverwrite || !record.allowRead) throw new ConnectionError('Checkpoints require reads/uploads enabled and overwrites disabled.');
         const bytes = Uint8Array.from(atob(request.base64), char => char.charCodeAt(0));

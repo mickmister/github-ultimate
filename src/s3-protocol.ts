@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { maxS3ObjectBytes } from './s3-limits';
+import { maxPiTelemetryBytes } from './pi-telemetry-protocol';
 export { maxS3ObjectBytes } from './s3-limits';
 const id = z.string().uuid();
 const revision = z.string().uuid();
@@ -11,6 +12,7 @@ export const s3HostedSchemas = [
   z.object({ operation: z.literal('s3Read'), id, revision, key, versionId: z.string().min(1).max(2000).optional(), cacheOnly: z.boolean().optional(), allowMissing: z.boolean().optional() }).strict(),
   z.object({ operation: z.literal('s3Upload'), id, revision, key, base64: z.string().max(Math.ceil(maxS3ObjectBytes / 3) * 4), contentType: z.string().min(1).max(200).regex(/^[\x20-\x7e]+$/).default('application/octet-stream') }).strict(),
   z.object({ operation: z.literal('s3Checkpoint'), id, revision, sessionId: z.string().uuid(), base64: z.string().max(Math.ceil(4 * 1024 * 1024 / 3) * 4) }).strict(),
+  z.object({ operation: z.literal('s3PiTelemetry'), id, revision, sessionId: z.string().uuid(), base64: z.string().max(Math.ceil(maxPiTelemetryBytes / 3) * 4) }).strict(),
 ] as const;
 export const s3HostedSchema = z.discriminatedUnion('operation', s3HostedSchemas);
 export type S3HostedRequest = z.infer<typeof s3HostedSchema>;

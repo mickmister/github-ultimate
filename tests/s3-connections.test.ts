@@ -5,6 +5,7 @@ import { indexedDB } from 'fake-indexeddb';
 import { IndexedWorkspaceCacheStore } from '../src/indexed-workspace-cache';
 import { CacheSettingsService } from '../src/cache-settings';
 import { WorkspaceCache } from '../src/workspace-cache';
+import { PiTelemetry } from '../hosted/pi-telemetry';
 
 class MemoryStore implements S3ConnectionStore {
   records = new Map<string, S3ConnectionRecord>();
@@ -44,6 +45,38 @@ async function connect() {
   await broker.handle({ operation: 'grantOrigin', id: record.id, origin, subpath: '/storage/' });
   return record;
 }
+test('Pi telemetry is bounded, append-only, session-bound and reauthorizes the original document', async () => {
+  const record = await connect(), sessionId = crypto.randomUUID();
+  const data = new PiTelemetry(sessionId, crypto.randomUUID()).data('success');
+  const request = { operation: 's3PiTelemetry', ...scope(record), sessionId, base64: btoa(JSON.stringify(data)) };
+  const receipt = await broker.handleHosted(documentURL, request) as { key: string; size: number };
+  expect(receipt.key).toMatch(/^workspace-a\/telemetry\/pi-agent\/\d{4}-\d{2}-\d{2}\//);
+  expect(JSON.parse(new TextDecoder().decode(objects.get(receipt.key)))).toEqual(data);
+  expect(calls.at(-1)!.headers.get('If-None-Match')).toBe('*');
+  expect(calls.at(-1)!.headers.get('Content-Type')).toBe('application/json');
+  await expect(broker.handleHosted(documentURL, { ...request, sessionId: crypto.randomUUID() })).rejects.toThrow('identity');
+  const bad = structuredClone(data); (bad.resourceSpans[0] as any).prompt = 'private data';
+  await expect(broker.handleHosted(documentURL, { ...request, base64: btoa(JSON.stringify(bad)) })).rejects.toThrow();
+  expect(() => broker.handleHosted(documentURL, { ...request, base64: 'A'.repeat(180000) })).toThrow();
+  await expect(broker.handleHosted(origin + '/sibling/', request)).rejects.toThrow('not approved');
+  await expect(broker.handleHosted(documentURL, { ...request, revision: crypto.randomUUID() })).rejects.toThrow('configuration changed');
+  hostAllowed = false; await expect(broker.handleHosted(documentURL, request)).rejects.toThrow('revoked');
+  expect(calls).toHaveLength(1);
+  hostAllowed = true;
+  await broker.handle({ operation: 'revokeOrigin', id: record.id, origin, subpath: '/storage/' });
+  await expect(broker.handleHosted(documentURL, request)).rejects.toThrow('not approved');
+});
+
+test.each(['https://s3.us-west-004.backblazeb2.com', 'https://account.r2.cloudflarestorage.com'])('Pi telemetry respects provider PUT behavior at %s', async endpoint => {
+  const record = await broker.handle({ operation: 'add', ...config, endpoint }) as PublicS3Connection;
+  await broker.handle({ operation: 'grantOrigin', id: record.id, origin, subpath: '/storage/' });
+  override = () => new Response(null);
+  const sessionId = crypto.randomUUID(), base64 = btoa(JSON.stringify(new PiTelemetry(sessionId, crypto.randomUUID()).data('success')));
+  await broker.handleHosted(documentURL, { operation: 's3PiTelemetry', ...scope(record), sessionId, base64 });
+  expect(calls[0].headers.has('If-None-Match')).toBe(endpoint.includes('cloudflarestorage'));
+  const updated = await broker.handle({ operation: 'update', id: record.id, ...config, endpoint, allowUpload: false }) as PublicS3Connection;
+  await expect(broker.handleHosted(documentURL, { operation: 's3PiTelemetry', ...scope(updated), sessionId, base64 })).rejects.toThrow('not enabled');
+});
 test('live polling returns typed missing only for opt-in 404 and rechecks publication without masking access failures', async () => {
   expect(await broker.handleHosted(documentURL, { operation: 's3Capabilities' })).toEqual({ protocolVersion: 1, capabilities: ['s3AllowMissing'] });
   expect(await broker.handleHosted(documentURL, { operation: 's3Connections' })).toEqual([]);

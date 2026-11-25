@@ -189,6 +189,14 @@ test('workspace context reads use real codemode and native Git/S3 brokers and su
     await page.getByRole('button', { name: 'Send', exact: true }).click();
     await expect(page.getByRole('status')).toHaveText('Saved to S3', { timeout: 20000 });
     await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
+    await expect.poll(() => [...remote.objects.keys()].filter(key => key.includes('/telemetry/pi-agent/')).length).toBe(1);
+    const trace = [...remote.objects].find(([key]) => key.includes('/telemetry/pi-agent/'))!;
+    const spans = JSON.parse(trace[1].text).resourceSpans[0].scopeSpans[0].spans;
+    expect(spans.map((span: { name: string }) => span.name)).toEqual(['pi.agent.invocation', 'pi.agent.tool', ...Array(5).fill('pi.agent.capability')]);
+    expect(spans.slice(2).every((span: { parentSpanId: string }) => span.parentSpanId === spans[1].spanId)).toBe(true);
+    expect(spans.slice(2).map((span: { attributes: { key: string; value: { stringValue: string } }[] }) => span.attributes.find(attribute => attribute.key === 'pi.capability.name')?.value.stringValue)).toEqual(['workspace_sources', ...Array(4).fill('workspace_files')]);
+    expect(spans.every((span: { status: { code: number }; startTimeUnixNano: string; endTimeUnixNano: string }) => span.status.code === 1 && BigInt(span.endTimeUnixNano) >= BigInt(span.startTimeUnixNano))).toBe(true);
+    expect(trace[1].text).not.toMatch(/private-key|private-s3-secret|Needle source line|Workspace S3 context note|Read selected workspace context/);
     const saved = [...remote.objects.values()].map(object => JSON.parse(object.text)).reverse().find(checkpoint => checkpoint.phase === 'idle');
     const result = JSON.stringify(saved.messages.filter((message: { role: string }) => message.role === 'toolResult').at(-1));
     expect(result).toContain('Pinned repository context'); expect(result).toContain('Needle source line');
@@ -201,6 +209,41 @@ test('workspace context reads use real codemode and native Git/S3 brokers and su
     await expect(page.getByRole('log')).toContainText('Pinned repository context');
     await expect(page.getByRole('log')).toContainText('Workspace S3 context note');
     expect(remote.requests).toHaveLength(2);
+  } finally { fixture.dispose(); }
+});
+
+test('failed codemode and nested capabilities produce error spans without exposing their payloads', async ({ page }) => {
+  const remote = remoteFixture(undefined, 'try { await tools.workspace_files({operation:"read",source:"github:missing",path:"private-input.txt"}); } catch {} throw Error("private-sandbox-details");');
+  const fixture = await nativeFixture(page, `${origin}${base}`, remote, undefined, { endpoint: 'https://fixture.r2.cloudflarestorage.com/', region: 'auto' });
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Private prompt'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await expect.poll(() => [...remote.objects.keys()].filter(key => key.includes('/telemetry/pi-agent/')).length).toBe(1);
+    const trace = [...remote.objects].find(([key]) => key.includes('/telemetry/pi-agent/'))!;
+    const spans = JSON.parse(trace[1].text).resourceSpans[0].scopeSpans[0].spans;
+    expect(spans.map((span: { status: { code: number } }) => span.status.code)).toEqual([1, 2, 2]);
+    expect(trace[1].text).not.toMatch(/Private prompt|private-input|private-sandbox|private-key|private-s3-secret/);
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Agent telemetry:' })).toContainText('Saved to S3');
+    const before = remote.objects.size; await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
+    expect(remote.objects.size).toBe(before); expect(remote.requests).toHaveLength(2);
+  } finally { fixture.dispose(); }
+});
+
+test('S3 telemetry upload failure leaves the conversation saved and tools are not replayed', async ({ page }) => {
+  const remote = remoteFixture(undefined, 'text("Run once")'); remote.setFailTelemetry(true);
+  const fixture = await nativeFixture(page, `${origin}${base}`, remote);
+  try {
+    await page.goto(fixture.url); await page.getByRole('button', { name: 'New conversation', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Message', exact: true }).fill('Run once'); await page.getByRole('button', { name: 'Send', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3');
+    await page.getByRole('button', { name: 'Settings', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Agent telemetry:' })).toContainText('Not uploaded');
+    await page.getByRole('button', { name: 'Close settings', exact: true }).click();
+    await expect(page.getByRole('status')).toHaveText('Saved to S3'); expect(remote.requests).toHaveLength(2);
+    await page.reload(); await expect(page.getByRole('log')).toContainText('Real Pi reply 2');
+    expect(remote.requests).toHaveLength(2); expect([...remote.objects.keys()].some(key => key.includes('/telemetry/pi-agent/'))).toBe(false);
   } finally { fixture.dispose(); }
 });
 
@@ -274,6 +317,14 @@ for (const action of ['stop', 'reload'] as const) test(`${action} during a tool 
     else await page.reload();
     await expect(page.getByRole('button', { name: 'Continue interrupted turn', exact: true })).toBeEnabled();
     expect(remote.requests).toHaveLength(1);
+    if (action === 'stop') {
+      await expect.poll(() => [...remote.objects.keys()].filter(key => key.includes('/telemetry/pi-agent/')).length).toBe(1);
+      const data = JSON.parse([...remote.objects].find(([key]) => key.includes('/telemetry/pi-agent/'))![1].text);
+      const spans = data.resourceSpans[0].scopeSpans[0].spans;
+      expect(spans[0].attributes).toContainEqual({ key: 'pi.outcome', value: { stringValue: 'interrupted' } });
+      expect(spans[0].attributes).toContainEqual({ key: 'pi.dropped_spans', value: { intValue: '1' } });
+      expect(spans[1].attributes).toContainEqual({ key: 'pi.outcome', value: { stringValue: 'cancelled' } });
+    }
     const checkpoints = [...remote.objects.values()].map(object => JSON.parse(object.text));
     expect(checkpoints.some(checkpoint => checkpoint.phase === 'pending' && checkpoint.messages?.at(-1)?.content?.some?.((block: { type: string }) => block.type === 'toolCall'))).toBe(true);
     release();
@@ -382,7 +433,7 @@ for (const [name, width, height] of [['phone portrait',390,844],['phone landscap
     expect(remote.objects.size).toBe(0); expect(new URL(page.url()).searchParams.has('session')).toBe(false);
     const input = page.getByRole('textbox', { name: 'Message', exact: true }); await input.fill('Hello from a real session'); await input.press('Enter');
     await expect(page.getByRole('status')).toHaveText('Saved to S3');
-    await expect.poll(() => JSON.parse([...remote.objects.values()].at(-1)!.text).messages.at(-1)).toMatchObject({ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Real Pi reply 1: Café 🌴' }] });
+    await expect.poll(() => [...remote.objects.values()].map(object => JSON.parse(object.text)).filter(value => value.profile === 'pi-web-chat-1').at(-1)?.messages.at(-1)).toMatchObject({ role: 'assistant', stopReason: 'stop', content: [{ type: 'text', text: 'Real Pi reply 1: Café 🌴' }] });
     await expect(page.getByRole('alert').filter({ hasText: /.+/ })).toHaveCount(0);
     await expect(page.getByRole('log')).toContainText('Real Pi reply 1: Café 🌴');
     await input.fill('Retain this unsent draft'); await page.setViewportSize({ width: height, height: width }); await expect(input).toHaveValue('Retain this unsent draft');
