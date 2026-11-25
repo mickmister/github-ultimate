@@ -76,6 +76,7 @@
   },
   "devDependencies": {
     "@ast-grep/cli": "0.45.3",
+    "@jridgewell/sourcemap-codec": "1.5.5",
     "@mickmister/openlint": "0.1.0",
     "@playwright/test": "^1.56.1",
     "@storybook/html-vite": "^10.6.6",
