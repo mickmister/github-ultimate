@@ -11,7 +11,7 @@ export function usePiConnections(grant?: MobileGrant) {
   const [storageName, setStorageName] = useState(''), [endpoint, setEndpoint] = useState(''), [bucket, setBucket] = useState(''), [prefix, setPrefix] = useState(''), [region, setRegion] = useState('us-east-1');
   const [virtualAddressing, setVirtualAddressing] = useState(false);
   const [accessKeyId, setAccessKeyId] = useState(''), [secretAccessKey, setSecretAccessKey] = useState(''), [sessionToken, setSessionToken] = useState('');
-  async function refresh() { setStorage(await pi.s3.handle({ operation: 'list' }) as PublicS3Connection[]); setInference(await pi.inference.handle({ operation: 'list' }) as PublicInferenceConnection[]); }
+  async function refresh() { setStorage(await pi.s3.handle({ operation: 'list' }) as PublicS3Connection[]); setInference((await pi.inference.handle({ operation: 'list' }) as PublicInferenceConnection[]).filter(item => item.provider !== 'chatgpt')); }
   useEffect(() => { void refresh().catch(() => setError('Unlock the device to load Pi connections.')); }, []);
   async function action(work: () => Promise<unknown>) {
     if (busy) return; setBusy(true); setError(''); pi.clear();

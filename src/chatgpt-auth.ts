@@ -2,6 +2,8 @@ import { z } from 'zod';
 import { boundedJSON } from './git-reads';
 import { ConnectionError } from './connections';
 import type { InferenceRecord, InferenceStore } from './inference-connections';
+import { utf8Text, utf8Encode, UTF8Decoder } from './utf8';
+import { base64Bytes } from './base64';
 
 // Codex device protocol, matching pinned Pi 1.5.2 auth/oauth/openai-codex.ts.
 // This is distinct from OSS dynamic-agent registration/public Responses OAuth.
@@ -24,13 +26,13 @@ export type ChatGPTSignIn = { verificationUrl: string; userCode: string; expires
  * verifiers and rotating credentials never enter hosted descriptors. No timers or
  * long polling live in the service worker; settings initiates one bounded poll. */
 export class ChatGPTAuthService {
-  constructor(private store: InferenceStore, private fetcher: typeof fetch, private hasHostAccess: (origin: string) => Promise<boolean>, private now = () => Date.now()) {}
+  constructor(private store: InferenceStore, private fetcher: typeof fetch, private hasHostAccess: (origin: string) => Promise<boolean>, private now = () => Date.now(), private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms)) {}
   async permission() {
     for (const origin of CHATGPT_ORIGINS) if (!await this.hasHostAccess(origin)) throw new ConnectionError('Grant ChatGPT browser access in extension settings first.');
   }
   private async send(url: string, init: RequestInit): Promise<Response> {
     await this.permission();
-    try { return await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(20000) }); }
+    try { return await this.fetcher(url, { ...init, credentials: 'omit', redirect: 'error', cache: 'no-store', signal: this.timeout(20000) }); }
     catch { throw new ConnectionError('ChatGPT could not be reached. Retry in connection settings.'); }
   }
   private async json(response: Response) {
@@ -80,7 +82,7 @@ export class ChatGPTAuthService {
     pending.exchanging = true; await this.store.put(record);
     // An uncertain code exchange is not replayed after restart.
     await this.exchange(record, new URLSearchParams({ grant_type: 'authorization_code', client_id: CLIENT_ID, code: parsed.data.authorization_code, code_verifier: parsed.data.code_verifier, redirect_uri: 'https://auth.openai.com/deviceauth/callback' }));
-    record.revision = crypto.randomUUID(); await this.store.put(record);
+    record.revision = this.newId(); await this.store.put(record);
     return null;
   }
   private async exchange(record: InferenceRecord, body: URLSearchParams) {
@@ -96,7 +98,7 @@ export class ChatGPTAuthService {
     try {
       // Routing metadata only, not a locally verified identity or trusted profile.
       const payload = parsed.data.access_token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-      const claims = JSON.parse(atob(payload));
+      const claims = JSON.parse(utf8Text(base64Bytes(payload + '='.repeat((4 - payload.length % 4) % 4))));
       accountId = z.string().regex(/^[\w-]{1,200}$/).parse(claims['https://api.openai.com/auth']?.chatgpt_account_id);
     } catch { throw new ConnectionError('ChatGPT credentials lack the required Codex account. Connect again.'); }
     if (body.get('grant_type') === 'refresh_token' && record.chatgpt?.accountId !== accountId) throw new ConnectionError('ChatGPT account changed during refresh. Reconnect explicitly.');
@@ -117,9 +119,11 @@ export class ChatGPTAuthService {
 /** Frame SSE before redaction so split network chunks cannot leak a secret.
  * Provider error diagnostics are mapped rather than copied into transcripts. */
 export function chatgptEventStream(body: ReadableStream<Uint8Array>, secrets: string[]): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder('utf-8', { fatal: true }), encoder = new TextEncoder();
+  const decoder = new UTF8Decoder(), reader = body.getReader();
   let buffer = '', bytes = 0;
-  const emit = (frame: string, controller: TransformStreamDefaultController<Uint8Array>) => {
+  let ended = false, released = false;
+  const release = () => { if (!released) { released = true; reader.releaseLock(); } };
+  const emit = (frame: string, controller: ReadableStreamDefaultController<Uint8Array>) => {
     let safe = frame;
     for (const secret of secrets) if (secret) safe = safe.replaceAll(secret, '[redacted]');
     const raw = safe.split('\n').filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n');
@@ -132,20 +136,33 @@ export function chatgptEventStream(body: ReadableStream<Uint8Array>, secrets: st
         safe = `data: ${JSON.stringify({ type: 'response.failed', response: { error: { message } } })}`;
       }
     }
-    controller.enqueue(encoder.encode(safe + '\n\n'));
+    controller.enqueue(utf8Encode(safe + '\n\n'));
   };
-  return body.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
-    transform(chunk, controller) {
-      bytes += chunk.byteLength;
-      if (bytes > 2 * 1024 * 1024) throw new ConnectionError('ChatGPT response exceeds 2 MiB.');
-      buffer += decoder.decode(chunk, { stream: true });
-      // Normalize CRLF only after a complete frame delimiter is present.
-      let match: RegExpExecArray | null;
-      while ((match = /\r?\n\r?\n/.exec(buffer))) {
-        const frame = buffer.slice(0, match.index).replaceAll('\r\n', '\n');
-        buffer = buffer.slice(match.index + match[0].length); emit(frame, controller);
+  // Expo supplies ReadableStream for fetch. Do not assume its Hermes runtime
+  // also supplies TransformStream, TextEncoder or browser text codecs.
+  return new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        while (true) {
+          const match = /\r?\n\r?\n/.exec(buffer);
+          if (match) {
+            const frame = buffer.slice(0, match.index).replaceAll('\r\n', '\n');
+            buffer = buffer.slice(match.index + match[0].length); emit(frame, controller); return;
+          }
+          if (ended) {
+            if (buffer.trim()) emit(buffer.replaceAll('\r\n', '\n'), controller);
+            buffer = ''; release(); controller.close(); return;
+          }
+          const part = await reader.read();
+          bytes += part.value?.byteLength ?? 0;
+          if (bytes > 2 * 1024 * 1024) throw new ConnectionError('ChatGPT response exceeds 2 MiB.');
+          ended = part.done;
+          buffer += decoder.decode(part.value, { stream: !ended });
+        }
+      } catch (error) {
+        await reader.cancel().catch(() => {}); release(); controller.error(error);
       }
     },
-    flush(controller) { buffer += decoder.decode(); if (buffer.trim()) emit(buffer.replaceAll('\r\n', '\n'), controller); },
-  }));
+    async cancel(reason) { try { await reader.cancel(reason); } finally { release(); } },
+  });
 }

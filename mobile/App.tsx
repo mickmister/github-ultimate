@@ -16,6 +16,7 @@ import { MobileSettingsStore, type MobileSettings } from '../src/mobile-settings
 import { MobileLifecycle } from '../src/mobile-lifecycle';
 import { pi } from './pi';
 import { PiConnections } from './PiConnections';
+import { ChatGPTConnections } from './ChatGPTConnections';
 
 export default function App() {
   const systemMode = useColorScheme();
@@ -142,6 +143,7 @@ export default function App() {
       {showDiagnostics && <><Text selectable>Mobile build commit: {String(Constants.expoConfig?.extra?.buildCommit ?? 'unavailable')}</Text><Text>Native document: {document?.state ?? 'not loaded'} {document?.documentURL}</Text></>}
       <GitHubConnections grant={grant} />
       <VdConnections grant={grant} />
+      <ChatGPTConnections grant={grant} />
       <PiConnections grant={grant} />
       <CacheSettings />
     </ScrollView>}

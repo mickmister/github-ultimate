@@ -8,14 +8,14 @@ import { MobilePi } from '../src/mobile-pi';
 import { S3Connections } from '../src/s3-connections';
 import { InferenceConnections } from '../src/inference-connections';
 import { s3ConfigurationSchema } from '../src/s3-protocol';
-import { inferenceConfigurationSchema } from '../src/inference-protocol';
+import { mobileInferenceRecordSchema, mobileInferenceSecretFields } from '../src/mobile-inference-record';
 import { mobileS3Sign } from '../src/mobile-s3-sign';
 
 const options = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
 const vault = { getItem: (key: string) => SecureStore.getItemAsync(key, options), setItem: (key: string, value: string) => SecureStore.setItemAsync(key, value, options), removeItem: (key: string) => SecureStore.deleteItemAsync(key, options) };
 const identity = { id: z.string().uuid(), revision: z.string().uuid(), hostedGrants: z.array(z.object({ origin: z.string(), subpath: z.string() }).strict()) };
 const s3Store = new MobilePiStore('s3', AsyncStorage, vault, randomUUID, s3ConfigurationSchema.extend(identity).strict(), ['accessKeyId', 'secretAccessKey', 'sessionToken']);
-const inferenceStore = new MobilePiStore('inference', AsyncStorage, vault, randomUUID, inferenceConfigurationSchema.extend(identity).strict(), ['url', 'headers']);
+const inferenceStore = new MobilePiStore('inference', AsyncStorage, vault, randomUUID, mobileInferenceRecordSchema, mobileInferenceSecretFields);
 const fetcher: typeof fetch = async (input, init) => {
   const request = new Request(input, init);
   return expoFetch(request.url, { ...init, method: request.method, headers: request.headers, body: ['GET', 'HEAD'].includes(request.method) ? undefined : await request.arrayBuffer(), signal: request.signal }) as unknown as Promise<Response>;

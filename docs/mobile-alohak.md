@@ -105,8 +105,10 @@ Apply the GitHub-enabled update, then configure the hosted **`app/`** HTTPS URL 
 
 Connection discovery, repository/probe/Git reads, workspace navigation preferences,
 explicit review draft saves, immutable response submission and exactly correlated
-workflow progress are available through this transport. S3, sign-in, grant changes,
-arbitrary fetch and token export are unavailable to page RPC.
+workflow progress are available through this transport. General S3 operations,
+sign-in, grant changes, arbitrary fetch and token export are unavailable to the
+GitHub page RPC. The separate bounded native Pi transport supports inference and
+Pi S3 conversation list/read/checkpoints, as described below.
 Private document bytes are intentionally visible to approved deployment scripts.
 
 Review writes use the shared reviewer identity, deployed-app/receiver pinned request/form validation,
@@ -144,6 +146,48 @@ restore automatically; GitHub credentials/grants persist separately. Verify
 restart, automatic expired-token rotation, **Refresh credentials**, revocation
 during a read, and disconnect/remove for one connection while another still
 works. These require physical-device proof, not just the fixture tests.
+
+## Native ChatGPT and Pi connections
+
+Native settings expose **Connect to ChatGPT** alongside the existing custom
+inference and S3 connection forms. Choose a connection name and model, connect,
+then open the system-browser verification page and enter the selectable code.
+Device-code login must be enabled for the ChatGPT account/workspace. Alohak polls
+only while settings are open in the foreground; pending login survives settings
+reopening and app restart. Backgrounding hides codes, including late responses.
+Use **Check ChatGPT sign-in** or **Retry ChatGPT settings** after a failure, or
+cancel/restart the sign-in. Interrupted token exchange/rotation requires explicit
+reconnection rather than replaying uncertain credentials.
+
+Each ChatGPT connection supports model changes, explicit hosted origin/directory
+grants, saved-grant revocation, reconnect, local disconnect and removal. Grant
+access independently for each connection; the current-deployment shortcut only
+fills the origin/directory fields. The hosted page receives public descriptors,
+never the settings/auth operations or credentials. Disconnect removes local
+credentials; upstream session revocation belongs in ChatGPT security settings.
+
+The provider is the pinned Pi Codex device protocol and fixed Codex Responses
+route, with no fallback to a different account, public API endpoint or billing
+provider. Model entry does not prove entitlement. Full ChatGPT auth, including
+pending codes and interrupted-exchange/rotation markers, joins private URLs and
+headers in SecureStore generation chunks. Existing custom endpoint records retain
+their identity, credentials and grants. Read/retry/navigation do not clear Pi
+operations; settings mutations invalidate pending transfers and active inference.
+
+The separate native Pi transport provides bounded inference open/read/cancel and
+S3 conversation list/read/checkpoint operations. Generic `s3Upload` remains
+unsupported; these controls do not imply a general native S3 file browser/upload
+transport. Existing S3 configuration editing/credential rotation and broader native
+settings parity are follow-up work.
+
+Automated coverage exercises the production secure record schema/store, auth and
+native Pi RPC without browser crypto/text codecs/TransformStream, and the actual
+settings hook/view with DOM native-control/AppState shims. Those UI rehearsals cover
+phone/tablet portrait/landscape, split-width resizing, background/resume, late
+responses, settings reopen, model changes, grants, cancel and local disconnect.
+They do not establish native layout, VoiceOver, keyboard/OS Back or installed iOS
+acceptance. Real ChatGPT sign-in, model eligibility, inference/tools and refresh
+still require an eligible account and installed-device verification.
 
 ## Finding the deployment URL
 
@@ -344,4 +388,5 @@ The signed/device round trip remains unaccepted. Unit tests cover secure-store
 restart/rotation/failure and policy checks; the browser native-RPC fixture reads
 a private document through the shared broker without exposing credentials.
 Neither launches the native WebView or proves actual GitHub authorization on a
-device. S3, mobile Dolt WASM viability and App Store acceptance remain separate.
+device. General S3 transport, mobile Dolt WASM viability and App Store acceptance
+remain separate; the bounded native Pi S3 path is implemented.

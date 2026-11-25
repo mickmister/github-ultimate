@@ -23,7 +23,7 @@ export class InferenceConnections {
   private tail: Promise<unknown> = Promise.resolve();
   private epoch = 0;
   private chatgpt: ChatGPTAuthService;
-  constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms), private combine = (signals: AbortSignal[]) => AbortSignal.any(signals)) { this.chatgpt = new ChatGPTAuthService(store, fetcher, hasHostAccess); }
+  constructor(private store: InferenceStore, private fetcher: typeof fetch = (...args) => fetch(...args), private hasHostAccess: (origin: string) => Promise<boolean> = async () => true, private newId: () => string = () => crypto.randomUUID(), private timeout = (ms: number) => AbortSignal.timeout(ms), private combine = (signals: AbortSignal[]) => AbortSignal.any(signals)) { this.chatgpt = new ChatGPTAuthService(store, fetcher, hasHostAccess, undefined, newId, timeout); }
   private serial<T>(work: () => Promise<T>) { const next = this.tail.catch(() => {}).then(work); this.tail = next; return next; }
   cancelActive() { for (const [id, job] of this.active) { job.controller.abort(); this.closeStream(id); } }
   private closeStream(id: string) {
