@@ -26,7 +26,7 @@ describe('manual EAS release boundary', () => {
   it('carries only public identity/entry into uploaded build profiles', () => {
     const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
     const prepared = configuredBuildProfiles(original, releasePlan(env));
-    expect(prepared.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1', EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: env.EXPO_PUBLIC_ALOHAK_URL, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' });
+    expect(prepared.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1', EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: 'example', EXPO_PUBLIC_ALOHAK_URL: env.EXPO_PUBLIC_ALOHAK_URL });
     expect(JSON.stringify(prepared)).not.toContain(env.EXPO_TOKEN);
     expect(original.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1' });
     for (const profile of ['development', 'preview', 'production']) {
@@ -37,26 +37,15 @@ describe('manual EAS release boundary', () => {
   it.each([undefined, ''])('omits an unset optional deployment URL (%s) from uploaded build profiles', entry => {
     const original = JSON.parse(readFileSync(new URL('../mobile/eas.json', import.meta.url), 'utf8'));
     const prepared = configuredBuildProfiles(original, releasePlan({ ...env, EXPO_PUBLIC_ALOHAK_URL: entry }));
-    expect(prepared.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1', EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' });
-  });
-  it('requires an explicit binary flag for the credential pilot and rejects typos', () => {
-    expect(releasePlan(env).publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS).toBe('0');
-    expect(releasePlan({ ...env, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '1' }).publicEnv.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS).toBe('1');
-    expect(() => releasePlan({ ...env, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: 'true' })).toThrow();
+    expect(prepared.build.base.env).toEqual({ OPENLINT_SKIP_NATIVE_BUILD: '1', EXPO_PROJECT_ID: env.EXPO_PROJECT_ID, EXPO_OWNER: env.EXPO_OWNER });
   });
   it.each(['android', 'ios'])('fingerprints the actual %s native adapter without an Expo account', platform => {
     const fingerprint = JSON.parse(execFileSync('pnpm', ['--dir', 'mobile', 'exec', 'expo-updates', 'fingerprint:generate', '--platform', platform, '--workflow', 'managed'], {
       cwd: new URL('..', import.meta.url), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' },
     }));
     const patch = fingerprint.sources.find((source: { filePath?: string }) => source.filePath === '../patches/react-native-webview@13.15.0.patch');
     expect(patch?.hash).toMatch(/^[a-f\d]{40}$/);
     expect(fingerprint.sources.some((source: { filePath?: string }) => source.filePath?.includes('react-native-webview@13.15.0_patch_hash='))).toBe(true);
     expect(fingerprint.hash).toMatch(/^[a-f\d]{40}$/);
-    const enabled = JSON.parse(execFileSync('pnpm', ['--dir', 'mobile', 'exec', 'expo-updates', 'fingerprint:generate', '--platform', platform, '--workflow', 'managed'], {
-      cwd: new URL('..', import.meta.url), encoding: 'utf8', maxBuffer: 4 * 1024 * 1024,
-      env: { ...process.env, EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '1' },
-    }));
-    expect(enabled.hash).toBe(fingerprint.hash);
   }, 60000);
 });

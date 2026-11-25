@@ -98,13 +98,12 @@ test('a recovered reference cannot overwrite a host-owned receipt with the same 
 });
 
 test('native GitHub bridge forwards the same workflow interface and retains host authority checks', async () => {
-  const f = fixture(), native = new MobileGitHub(f.broker, () => true);
+  const f = fixture(), native = new MobileGitHub(f.broker);
   expect(await native.hosted(f.page, { operation: 'discover' }, () => true)).toMatchObject({ capabilities: expect.arrayContaining(['workflowCatalog', 'workflowStart', 'workflowStatus']) });
   const receipt: any = await native.hosted(f.page, f.request, () => true);
   expect(await native.hosted(f.page, { operation: 'workflowCatalog', workspace: 'workspace' }, () => true)).toMatchObject({ connections: [{ executions: [receipt] }] });
   f.runs.push(f.run());
   expect(await native.hosted(f.page, { operation: 'workflowStatus', ...f.scope, executionReference: receipt.executionReference }, () => true)).toMatchObject({ runId: 42 });
   await expect(native.hosted(f.page, f.request, () => false)).rejects.toThrow('changed');
-  await expect(new MobileGitHub(f.broker, () => false).hosted(f.page, f.request, () => true)).rejects.toThrow('disabled');
   expect(f.writes()).toBe(1);
 });

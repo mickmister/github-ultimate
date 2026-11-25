@@ -47,5 +47,5 @@ export function previewFixture(source: string, contextFiles = false) {
     throw Error(`Unexpected fixture route ${url.pathname}`);
    };
    const connections = new Connections(store, fetcher);
-   return { host: new MobileGitHub(connections, () => true), record, fetcher, navigation, branch, workspace, calls, update() { generation++; file('documents/workspace-config.json', config('Updated Storybook')); }, remove() { generation++; files.delete('documents/workspace-config.json'); } };
+   return { host: new MobileGitHub(connections), record, fetcher, navigation, branch, workspace, calls, update() { generation++; file('documents/workspace-config.json', config('Updated Storybook')); }, remove() { generation++; files.delete('documents/workspace-config.json'); } };
 }

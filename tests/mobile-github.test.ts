@@ -15,7 +15,7 @@ function storage() {
   const secure = { async getItem(key: string) { if (failVault) throw new Error('locked'); return secrets.get(key) ?? null; }, async setItem(key: string, value: string) { if (failVault) throw new Error('locked'); secrets.set(key, value); }, async removeItem(key: string) { secrets.delete(key); } };
   return { metadata, secrets, store: new MobileConnectionStore(plain, secure, () => crypto.randomUUID()), restart: () => new MobileConnectionStore(plain, secure, () => crypto.randomUUID()), failMetadata: (value: boolean) => { failMetadata = value; }, failVault: (value: boolean) => { failVault = value; } };
 }
-function github(store: MobileConnectionStore, enabled = () => true) {
+function github(store: MobileConnectionStore) {
   let clock = 1000;
   const calls: { url: string; init: RequestInit }[] = [];
   let before: ((url: string) => Promise<void>) | undefined;
@@ -31,7 +31,7 @@ function github(store: MobileConnectionStore, enabled = () => true) {
     if (url.endsWith('/graphql')) return Response.json({ data: { viewer: { login: 'owner' } } });
     throw new Error('Unexpected fixture route');
   }, () => clock);
-  const host = new MobileGitHub(engine, enabled);
+  const host = new MobileGitHub(engine);
   const broker = new MobileFixtureBroker(undefined, host); broker.activate(context);
   const call = (params: object, native = context) => broker.handleAsync(native, JSON.stringify({ jsonrpc: '2.0', id: 'test_1', method: 'github.request', params }));
   return { engine, host, broker, call, calls, time: (value: number) => { clock = value; }, before: (value: typeof before) => { before = value; } };
@@ -154,10 +154,13 @@ describe('scoped native GitHub bridge', () => {
     expect((app.calls.find(call => call.url.includes('/repositories?'))!.init.headers as Record<string, string>).Authorization).toBe('Bearer ghu_rotated');
     expect((await disk.restart().get(id))?.tokens?.refreshToken).toBe('ghr_rotated'); expect(disk.secrets.size).toBe(1);
   });
-  it('keeps the credential feature disabled by default without making network requests', async () => {
-    const disk = storage(); await disk.store.put(record()); const app = github(disk.store, () => false);
-    expect((await app.call({ operation: 'connections' })).error?.message).toContain('disabled');
-    await expect(app.host.settings({ operation: 'start', id })).rejects.toThrow('disabled');
+  it('makes native GitHub available without release configuration while requiring explicit grants', async () => {
+    const disk = storage(); await disk.store.put({ ...record(), hostedGrants: [] }); const app = github(disk.store);
+    expect(await app.host.settings({ operation: 'list' })).toMatchObject([{ id }]);
+    expect((await app.call({ operation: 'connections' })).error?.message).toContain('no approved connections');
+    await app.host.settings({ operation: 'grantOrigin', id, ...grantForEntry(entry) });
+    expect((await app.call({ operation: 'discover' })).result).toHaveProperty('capabilities', expect.arrayContaining(['connections']));
+    expect((await app.call({ operation: 'connections' })).result).toMatchObject([{ id }]);
     await app.host.settings({ operation: 'disconnect', id });
     expect(app.calls).toHaveLength(0); expect(disk.secrets.size).toBe(0);
   });

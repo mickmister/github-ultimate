@@ -34,16 +34,15 @@ test('hosted app metadata also uses the actual checkout instead of a stale GITHU
   expect((await import('../webapp/build-metadata')).uiBuild).toBe('a'.repeat(40));
 });
 
-test('JS metadata and GitHub switch preserve native fingerprints while native config remains hashed', () => {
+test('bundle provenance preserves native fingerprints while native config remains hashed', () => {
   const config = createRequire(import.meta.url)('../mobile/fingerprint.config.js');
   const source = { type: 'contents', id: 'expoConfig' };
-  const baseline = JSON.stringify({ extra: { eas: { projectId: 'project' }, entryURL: 'https://example.test/', githubConnectionsEnabled: false }, plugins: ['expo-secure-store'] });
+  const baseline = JSON.stringify({ extra: { eas: { projectId: 'project' }, entryURL: 'https://example.test/' }, plugins: ['expo-secure-store'] });
   const withCommit = (commit: string) => JSON.stringify({ extra: { buildCommit: commit, ...JSON.parse(baseline).extra }, plugins: ['expo-secure-store'] });
   expect(config.fileHookTransform(source, withCommit('a'.repeat(40)))).toBe(baseline);
   expect(config.fileHookTransform(source, withCommit('b'.repeat(40)))).toBe(baseline);
   expect(config.fileHookTransform(source, baseline)).toBe(baseline);
-  const changed = JSON.parse(withCommit('a'.repeat(40))); changed.extra.githubConnectionsEnabled = true;
-  expect(config.fileHookTransform(source, JSON.stringify(changed))).toBe(baseline);
+  const changed = JSON.parse(withCommit('a'.repeat(40)));
   changed.plugins.push('native-plugin');
   expect(config.fileHookTransform(source, JSON.stringify(changed))).not.toBe(baseline);
   expect(JSON.parse(config.fileHookTransform(source, JSON.stringify(changed))).plugins).toContain('native-plugin');
@@ -52,28 +51,18 @@ test('JS metadata and GitHub switch preserve native fingerprints while native co
   expect(config.extraSources).toContainEqual(expect.objectContaining({ filePath: '../patches/react-native-webview@13.15.0.patch' }));
 });
 
-test('GitHub-enabled OTA config retains the enabled value even though fingerprinting normalizes it', async () => {
-  vi.stubEnv('EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS', '1');
+test('mobile release metadata contains provenance and deployment without optional capability switches', async () => {
   vi.mocked(execFileSync).mockReturnValue('a'.repeat(40));
   const { default: config } = await import('../mobile/app.config');
-  expect(config.extra?.githubConnectionsEnabled).toBe(true);
-  const fingerprint = createRequire(import.meta.url)('../mobile/fingerprint.config.js');
-  const hashed = JSON.parse(fingerprint.fileHookTransform({ type: 'contents', id: 'expoConfig' }, JSON.stringify(config)));
-  expect(hashed.extra.githubConnectionsEnabled).toBe(false);
-  expect(config.extra?.githubConnectionsEnabled).toBe(true);
+  expect(Object.keys(config.extra!).sort()).toEqual(['buildCommit', 'eas', 'entryURL']);
 });
 
-test('EAS profile fingerprint preserves the installed baseline across streamed release-flag changes', () => {
+test('EAS profile fingerprint hashes actual profile bytes without rewriting release configuration', () => {
   const config = createRequire(import.meta.url)('../mobile/fingerprint.config.js');
-  const baseline = { build: { base: { env: { EXPO_PROJECT_ID: 'project', EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS: '0' } }, preview: { distribution: 'internal' } } };
-  const enabled = structuredClone(baseline); enabled.build.base.env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS = '1';
-  const text = JSON.stringify(enabled, null, 2) + '\n';
+  const text = JSON.stringify({ build: { base: { env: { EXPO_PROJECT_ID: 'project' } }, preview: { distribution: 'internal' } } });
   const source = { type: 'file', filePath: 'eas.json' };
-  expect(config.fileHookTransform(source, Buffer.from(text.slice(0, 30)), false)).toBeNull();
-  expect(config.fileHookTransform(source, Buffer.from(text.slice(30)), false)).toBeNull();
-  expect(config.fileHookTransform(source, null, true)).toBe(JSON.stringify(baseline, null, 2) + '\n');
-  expect(enabled.build.base.env.EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS).toBe('1');
-  enabled.build.base.env.EXPO_PROJECT_ID = 'another-project';
-  config.fileHookTransform(source, JSON.stringify(enabled, null, 2) + '\n', false);
-  expect(config.fileHookTransform(source, null, true)).not.toBe(JSON.stringify(baseline, null, 2) + '\n');
+  const first = Buffer.from(text.slice(0, 30)), rest = Buffer.from(text.slice(30));
+  expect(config.fileHookTransform(source, first, false)).toBe(first);
+  expect(config.fileHookTransform(source, rest, false)).toBe(rest);
+  expect(config.fileHookTransform(source, null, true)).toBeNull();
 });

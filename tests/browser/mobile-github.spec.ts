@@ -33,7 +33,7 @@ test('hosted app reads a private document over Alohak RPC without extension fall
     if (url.endsWith('/blobs/' + manifestSha)) return Response.json({ sha: manifestSha, size: Buffer.byteLength(manifest), encoding: 'base64', content: Buffer.from(manifest).toString('base64') });
     throw new Error(`Unexpected fixture route ${url}`);
   });
-  const github = new MobileGitHub(engine, () => true);
+  const github = new MobileGitHub(engine);
   const pageData = new Map<string, string>();
   const broker = new MobileFixtureBroker(new AsyncPageKVStore({ async getItem(key) { return pageData.get(key) ?? null; }, async setItem(key, value) { pageData.set(key, value); } }), github);
   broker.approveStorage(grantForEntry(entry));

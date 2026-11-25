@@ -13,11 +13,12 @@ branch when mobile-shell inputs change:
 ## Automatic preview updates
 
 Pushes to any branch publish an **iOS** update to the **preview**
-channel/environment with **GitHub connections enabled** for the personal testing
+channel/environment for the personal testing
 pilot. The update message defaults to the source SHA. All branches share this
 preview channel; its latest successful publication is the preview update.
 Production and Android releases remain explicit dispatch
-choices; the manual GitHub-connections flag still defaults to `0`.
+choices. GitHub App connections are always available in every build and update;
+there is no feature flag or dispatch option to disable them.
 
 The path filter covers `mobile/`, shared `src/` and `hosted/` services, native
 patches, root dependency manifests/lockfile, `.npmrc`, and the release helper and
@@ -64,16 +65,14 @@ the same project. Configure these repository settings:
 | `EXPO_OWNER` | GitHub Actions secret | Expo account/organization owning the project |
 | `EXPO_PUBLIC_ALOHAK_URL` | Optional GitHub Actions secret | Public HTTPS entry URL to prefill native settings; does not grant access |
 
-Dispatch input `github_connections` defaults to `0` and supplies the public
-`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS` build/update flag. The user authorized `1`
-for mobile testing previews while outstanding isolation checks remain open
-(`task-3vt.39.6.16`). This replaces the former optional repository secret for that
-public flag and makes each release's setting explicit. The JS-only switch is
-normalized to its original disabled baseline only when calculating native
-compatibility; published manifests keep the selected true/false value.
+GitHub App connections have no environment/configuration switch. Every profile
+includes native sign-in and scoped connection operations. Users still explicitly
+choose an App, sign in, select an installation and grant each deployment access.
+Removing the old release metadata and fingerprint normalization changes the native
+runtime fingerprint; install a matching preview binary for this migration.
 
 The TypeScript release helper prints compact platform/update/group/runtime/source
-references and the selected GitHub flag into the job summary and log. Raw EAS
+references into the job summary and log. Raw EAS
 receipts remain ephemeral rather than being uploaded as Actions artifacts. Retain
 the compact references in the owning Bead/nugs release document; Expo owns the
 canonical build/update records.

@@ -3,7 +3,7 @@ import { AppState, Linking, StyleSheet } from 'react-native';
 import { Button, Text, TextInput, View } from './Theme';
 import type { ConnectionRequest, Installation, PublicConnection, Repository } from '../src/connections';
 import type { MobileGrant } from '../src/mobile-protocol';
-import { github, githubEnabled } from './github';
+import { github } from './github';
 
 export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
   const [connections, setConnections] = useState<PublicConnection[]>([]);
@@ -26,7 +26,7 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
     finally { try { await reload(); } catch { setError('Native connection storage is unavailable. Unlock the device and retry.'); } setBusy(false); }
   }
   useEffect(() => {
-    if (!active || busy || error || !githubEnabled) return;
+    if (!active || busy || error) return;
     const pending = connections.filter(record => record.pending).sort((a, b) => a.pending!.nextPollAt - b.pending!.nextPollAt)[0];
     if (!pending) return;
     const timer = setTimeout(() => { void run({ operation: 'poll', id: pending.id }); }, Math.max(1000, pending.pending!.nextPollAt - Date.now()));
@@ -35,11 +35,10 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
   const action = (request: ConnectionRequest, receive?: (result: unknown) => void) => () => { void run(request, receive); };
   return <View style={styles.section}>
     <Text accessibilityRole="header">GitHub App connections</Text>
-    {!githubEnabled && <Text>GitHub connections are disabled in this release. Apply the GitHub-enabled preview update to sign in.</Text>}
     <TextInput accessibilityLabel="Connection name" placeholder="Connection name" value={name} onChangeText={setName} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App ID" placeholder="GitHub App ID" keyboardType="number-pad" value={appId} onChangeText={setAppId} style={styles.input} />
     <TextInput accessibilityLabel="GitHub App client ID" placeholder="GitHub App client ID" autoCapitalize="none" autoCorrect={false} value={clientId} onChangeText={setClientId} style={styles.input} />
-    <Button title="Add GitHub connection" disabled={busy || !githubEnabled || !name.trim() || !/^\d+$/.test(appId) || !clientId.trim()} onPress={action({ operation: 'add', name: name.trim(), appId: Number(appId), clientId: clientId.trim() }, () => { setName(''); setAppId(''); setClientId(''); })} />
+    <Button title="Add GitHub connection" disabled={busy || !name.trim() || !/^\d+$/.test(appId) || !clientId.trim()} onPress={action({ operation: 'add', name: name.trim(), appId: Number(appId), clientId: clientId.trim() }, () => { setName(''); setAppId(''); setClientId(''); })} />
     <Button title={setupHelp ? 'Hide App setup help' : 'App setup help'} onPress={() => setSetupHelp(value => !value)} />
     {setupHelp && <Text>The App must enable device flow and expiring user tokens, and be installed on the repositories you use. Reading needs Contents read; saving drafts and responses needs Contents read and write. Workflow delivery needs Actions write on the trusted source repository. No App private key or client secret is needed. Tokens and device codes stay in native secure storage. Each connection needs a separate deployment grant.</Text>}
     <Button title="Manage GitHub installations" onPress={() => { void Linking.openURL('https://github.com/settings/installations').catch(() => setError('Could not open the system browser.')); }} />
@@ -48,24 +47,24 @@ export default function GitHubConnections({ grant }: { grant?: MobileGrant }) {
     {connections.map(connection => <View key={connection.id} style={styles.connection}>
       <Text accessibilityRole="header">{connection.name} · App {connection.appId}</Text>
       <Text>{connection.connected ? `Signed in${connection.user ? ` as ${connection.user.login}` : ''}` : 'Not signed in'}</Text>
-      {!connection.connected && <Button title="Start GitHub sign-in" disabled={busy || !githubEnabled} onPress={action({ operation: 'start', id: connection.id })} />}
+      {!connection.connected && <Button title="Start GitHub sign-in" disabled={busy} onPress={action({ operation: 'start', id: connection.id })} />}
       {connection.pending && <>
         <Text selectable>GitHub code: {connection.pending.userCode}</Text>
         <Text>Expires {new Date(connection.pending.expiresAt).toLocaleTimeString()}. Waiting while Alohak is in the foreground.</Text>
         <Button title="Open GitHub verification" onPress={() => { void Linking.openURL('https://github.com/login/device').catch(() => setError('Could not open the system browser.')); }} />
-        <Button title="Check sign-in" disabled={busy || !githubEnabled} onPress={action({ operation: 'poll', id: connection.id })} />
+        <Button title="Check sign-in" disabled={busy} onPress={action({ operation: 'poll', id: connection.id })} />
       </>}
       {connection.connected && <>
-        <Button title="Load installations" disabled={busy || !githubEnabled} onPress={action({ operation: 'installations', id: connection.id }, value => setInstallations(current => ({ ...current, [connection.id]: value as Installation[] })))} />
+        <Button title="Load installations" disabled={busy} onPress={action({ operation: 'installations', id: connection.id }, value => setInstallations(current => ({ ...current, [connection.id]: value as Installation[] })))} />
         {installations[connection.id]?.length === 0 && <Text>No installations found for this App and user. Install it on GitHub, then load again.</Text>}
-        {installations[connection.id]?.map(installation => <Button key={installation.id} title={`Use ${installation.account.login} (${installation.id})`} disabled={busy || !githubEnabled} onPress={action({ operation: 'selectInstallation', id: connection.id, installationId: installation.id }, () => setRepositories(current => ({ ...current, [connection.id]: [] })))} />)}
+        {installations[connection.id]?.map(installation => <Button key={installation.id} title={`Use ${installation.account.login} (${installation.id})`} disabled={busy} onPress={action({ operation: 'selectInstallation', id: connection.id, installationId: installation.id }, () => setRepositories(current => ({ ...current, [connection.id]: [] })))} />)}
         <Text>Selected installation: {connection.installation?.account ?? 'none'}</Text>
         {connection.installation && <>
-          <Button title="List repositories" disabled={busy || !githubEnabled} onPress={action({ operation: 'repositories', id: connection.id }, value => setRepositories(current => ({ ...current, [connection.id]: value as Repository[] })))} />
+          <Button title="List repositories" disabled={busy} onPress={action({ operation: 'repositories', id: connection.id }, value => setRepositories(current => ({ ...current, [connection.id]: value as Repository[] })))} />
           {repositories[connection.id] && <Text>{repositories[connection.id].length} repositories: {repositories[connection.id].slice(0, 20).map(repo => repo.full_name).join(', ')}</Text>}
-          {grant && <><Text>Approve current deployment: {grant.origin}{grant.subpath}. This allows repository reads and review draft/submission operations through this connection, within its installed permissions.</Text><Button title="Grant this deployment GitHub access" disabled={busy || !githubEnabled} onPress={action({ operation: 'grantOrigin', id: connection.id, ...grant })} /></>}
+          {grant && <><Text>Approve current deployment: {grant.origin}{grant.subpath}. This allows repository reads and review draft/submission operations through this connection, within its installed permissions.</Text><Button title="Grant this deployment GitHub access" disabled={busy} onPress={action({ operation: 'grantOrigin', id: connection.id, ...grant })} /></>}
         </>}
-        <Button title="Refresh credentials" disabled={busy || !githubEnabled} onPress={action({ operation: 'refresh', id: connection.id })} />
+        <Button title="Refresh credentials" disabled={busy} onPress={action({ operation: 'refresh', id: connection.id })} />
         {connection.expiresAt && <Text>Access token expires {new Date(connection.expiresAt).toLocaleString()}</Text>}
       </>}
       {connection.hostedGrants.map(approved => <View key={approved.origin + approved.subpath}><Text>{approved.origin}{approved.subpath}</Text><Button title="Revoke GitHub deployment access" disabled={busy} onPress={action({ operation: 'revokeOrigin', id: connection.id, ...approved })} /></View>)}

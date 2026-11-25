@@ -99,12 +99,12 @@ or malformed page messages in those probes.
 The response authorizes CI first, then internal EAS preview builds for both
 platforms only after the relevant CI runs pass. Preserve exact source/run/build
 IDs. Register one `vibe-agent callback` per turn when waiting on hosted work.
-EAS dispatch exposes `github_connections`, default `0`, so testing does not
-depend on an unknown repository-secret flag. No store submission or production
-OTA rollout is part of migration.
+GitHub App connections are always available, with no EAS dispatch or environment
+switch. No store submission or production OTA rollout is part of migration.
 
 Implementation completion and device acceptance are separate: source/automated
 parity can finish while `task-3vt.39.6.3` awaits physical-device evidence. GitHub
-sign-in remains default-off. Neither a native compile nor a mocked browser bridge
+sign-in is always available and still requires explicit connection/deployment grants.
+Neither a native compile nor a mocked browser bridge
 establishes actual WebView isolation, device-flow authorization or restart/refresh
 behavior with real credentials.

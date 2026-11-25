@@ -268,7 +268,7 @@ test('authenticated broker routes a saved process-less response through VD and d
     return Response.json(await f.git.read({ operation, prefix: route.slice('matching-refs/'.length), oid: route.split('/')[1]?.split('?')[0] } as any));
   };
   const broker = new Connections({ all: async () => [githubRecord], get: async () => githubRecord, put: async () => {}, remove: async () => {} }, fetcher, undefined, undefined, undefined, undefined, undefined, vd);
-  const host = new MobileGitHub(broker, () => true);
+  const host = new MobileGitHub(broker);
   const result = await host.hosted('https://review.test/app/', f.input(), () => true) as ReviewReceipt;
   expect(result.dispatch).toMatchObject({ kind: 'vk', state: 'dispatched', process_id: scope.id });
   expect(posts).toHaveLength(1);
@@ -297,7 +297,7 @@ function mobileFixture() {
   // Pause in the storage await inside api(), after its caller's authority check.
   const all = store.all;
   store.all = async () => { if (beforeMutation && f.git.mutations.length === 1) { const pause = beforeMutation; beforeMutation = undefined; await pause(); } return all(); };
-  const host = new MobileGitHub(engine, () => true);
+  const host = new MobileGitHub(engine);
   const broker = new MobileFixtureBroker(undefined, host);
   const context = { documentId: 'review-document', documentURL: 'https://review.test/app/', isMainFrame: true };
   broker.activate(context);

@@ -1,4 +1,3 @@
-import Constants from 'expo-constants';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
 import { randomUUID } from 'expo-crypto';
@@ -13,7 +12,6 @@ import { WorkspaceCache } from '../src/workspace-cache';
 import { VdConnections } from '../src/vd-connections';
 import { MobileVdStore } from '../src/mobile-vd-store';
 
-export const githubEnabled = Constants.expoConfig?.extra?.githubConnectionsEnabled === true;
 const options = { keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY };
 const store = new MobileConnectionStore(AsyncStorage, {
   getItem: key => SecureStore.getItemAsync(key, options),
@@ -33,4 +31,4 @@ export const vd = new VdConnections(new MobileVdStore(AsyncStorage, {
   setItem: (key, value) => SecureStore.setItemAsync(key, value, options),
   removeItem: key => SecureStore.deleteItemAsync(key, options),
 }, randomUUID), fetcher, undefined, randomUUID);
-export const github = new MobileGitHub(new Connections(store, fetcher, Date.now, randomUUID, timeout, workspaceCache, undefined, vd), () => githubEnabled);
+export const github = new MobileGitHub(new Connections(store, fetcher, Date.now, randomUUID, timeout, workspaceCache, undefined, vd));

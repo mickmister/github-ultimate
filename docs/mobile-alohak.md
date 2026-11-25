@@ -8,8 +8,8 @@ extension retains its existing protocol and behavior.
 The shell implements `alohak.discover`, `fixture.echo` and independently
 approved `kv.snapshot/set/remove/clear` page-data operations. Optional native
 GitHub App device flow, private reads and explicit review draft/submission operations
-reuse the extension's connection engine. The release switch defaults off; the user
-has authorized GitHub-enabled testing previews while isolation testing continues.
+reuse the extension's connection engine. GitHub App connections are always
+available; each connection still requires explicit sign-in and deployment grants.
 No managed auth backend is required. Eventual store
 distribution is intended, with a personal device pilot first.
 
@@ -69,16 +69,13 @@ isolate hostile scripts/service workers from one another.
 
 ## Native GitHub App connections
 
-The user explicitly authorized GitHub-enabled testing previews while remaining
-isolation testing continues (`task-3vt.39.6.16`). Publish those previews with
-`EXPO_PUBLIC_ALOHAK_GITHUB_CONNECTIONS=1`; dispatch remains default-off unless
-explicitly selected. Incomplete isolation checks remain open under
-`task-3vt.39.6.3`, not falsely accepted or used to block this authorized testing release.
-Native settings still allow listing, disconnecting, removing and revoking
-existing connections when the feature is disabled. The flag is public release
-configuration, not an authorization secret or substitute for native checks.
+GitHub App connections are always available, with no build/update flag or disabled
+release mode. The user explicitly requested removal of that switch. Incomplete
+device isolation checks remain open under `task-3vt.39.6.3`; capability availability
+does not establish physical-device acceptance. Connection permissions and native
+document lifetime continue to control which operations an approved page may use.
 
-Apply the GitHub-enabled update, then configure the hosted **`app/`** HTTPS URL as the deployment:
+Configure the hosted **`app/`** HTTPS URL as the deployment:
 
 1. In **GitHub App connections**, enter a connection name, public **GitHub App
    ID** and **client ID**, then **Add GitHub connection**. Users choose their
@@ -269,13 +266,11 @@ identity. This view uses native checks:
   remote page fails. Native back navigation, download/file-picker integration
   and full offline persistence are not claimed by M1.
 
-The displayed `extra.buildCommit` and JS-only `extra.githubConnectionsEnabled`
-switch do not change native APIs. Fingerprinting removes the display field and
-normalizes the switch to the original disabled baseline for native compatibility.
-The same switch in the generated EAS build profile is normalized for hashing too.
-The actual OTA manifest retains the selected switch value; the runtime broker
-still enforces it. All other configuration, native dependencies and explicit
-WebView patch bytes remain hashed.
+The displayed `extra.buildCommit` does not change native APIs and is omitted from
+fingerprinting. All other configuration, native dependencies and explicit WebView
+patch bytes remain hashed. Removing the former GitHub feature-switch metadata and
+fingerprint normalization changes compatibility, so this migration needs a matching
+native binary. Later releases have no GitHub enable/disable option.
 
 The UA marker suppresses handoff UI and selects the native transport before
 bridge initialization; it is not an authorization signal. Neither an injected nonce nor page-side checks
