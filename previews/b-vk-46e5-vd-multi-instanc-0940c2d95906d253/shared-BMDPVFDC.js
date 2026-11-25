@@ -1,1 +1,0 @@
-import{b as r}from"./shared-B4GN6F2J.js";import"./shared-KWHEP4YS.js";import"./shared-YVTSQZP7.js";import"./shared-UR3T3575.js";function v(){let e=new r;return{request:t=>{let{operation:o,...a}=t;return e.request({kvSnapshot:"kv.snapshot",kvSet:"kv.set",kvRemove:"kv.remove",kvClear:"kv.clear"}[o],a)},close:()=>e.close()}}export{v as storageAdapter};
