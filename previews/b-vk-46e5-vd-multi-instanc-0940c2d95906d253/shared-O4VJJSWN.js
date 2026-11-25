@@ -1,1 +1,0 @@
-import{a as r}from"./shared-MQTPDKJ4.js";import"./shared-B4GN6F2J.js";import"./shared-KWHEP4YS.js";import"./shared-YVTSQZP7.js";import"./shared-WWWE3TBE.js";function s(){return{request:e=>r(e),close(){}}}export{s as storageAdapter};
